@@ -1,88 +1,103 @@
-# moxsh · 项目总览
+# moxsh
 
-> 一个**全面兼容 Termux 生态**、**性能更强**、**全应用液态玻璃（glassmorphism）UI**、**面向国内优化**、**云端 CI 出 APK** 的终端应用。  
-> 核心原则：**运行架构 100% 自研（clean-room，不沿用 Termux 任何代码），但产物仍兼容 termux-packages 官方仓库**。
+moxsh 是一款 Android 终端应用：装上就有完整的 Linux 命令行环境，不需要 root，不需要任何配置。
 
+它全面兼容 Termux 生态——Termux 官方源的软件包可以直接安装运行。同时 moxsh 是一套 100% 自研的实现，没有使用 Termux 的任何代码，因此在性能和界面上有更大的发挥空间：整个应用采用液态玻璃（liquid glass）设计，内核与包管理用 Rust 编写，并内置 AI 助手与插件商店。
 
+## 它是怎么工作的
 
----
+moxsh 不是虚拟机，也不是模拟器。
 
-## 本仓库交付物
+终端部分由 Rust 内核直接驱动：应用启动命令行程序（`execve`），并把标准输入输出接到屏幕上，这一点和桌面 Linux 上的终端是一样的。由于 Android 不允许应用往 `/bin`、`/usr` 这类系统目录写文件，moxsh 把所有软件安装在自己的私有目录里（称为 *prefix*，对应环境变量 `$PREFIX`），并把路径处理对齐 Termux 的约定——这就是 Termux 软件包能直接运行的原因。
 
-| 路径                                        | 内容                                                     |
-| ----------------------------------------- | ------------------------------------------------------ |
-| `moxsh/`                                  | **可编译工程（13 模块，M1–M5 完成）+ 云端 CI**（详见 `moxsh/README.md`） |
-| `.github/workflows/build.yml`             | GitHub Actions：push 即构建并上传 APK                         |
-| `docs/architecture.md`                    | 架构白皮书 v0.5（含 18 项已拍定决策）                                |
-| `docs/roadmap.md`                         | **开发路线图**（M1–M5 ✅，权威进度清单）                              |
-| `docs/commands.md`                        | Termux 命令体系盘点（来自源码）                                    |
-| `docs/plugins-rewrite.md`                 | 6 插件重写方案（含代码片段，X11 递延）                                 |
-| `research/termux-plugins-shortcomings.md` | 插件缺点调研（12 条，带来源）                                       |
-| `research/build-pitfalls.md`              | 构建踩坑（48 条，带来源）                                         |
-| `clone.sh`                                | 本地拉取 Termux 官方参考源码的脚本（仅参考，非 moxsh 代码）                  |
-| `README.en.md`                            | **英文版 README**（与本文同步）                                  |
-| `docs/PUSH_GUIDE.md`                      | **中文一步步推送指南**（首次推 GitHub 用）                            |
-| `push_to_github.sh`                       | 一键建仓 + 推送脚本（在你本机/已连 GitHub 的终端运行）                      |
+软件包来自 Termux 官方仓库（`apt`/`pkg` 双协议兼容），全部用 Android NDK 交叉编译，原生运行，没有仿真开销。想在隔离环境里玩整个发行版（Ubuntu、Debian、Kali、Alpine），可以用内置的 PRoot 引擎一键安装。
 
-> **关于 `termux-src/`**：它是 Termux 官方源码的**本地参考克隆**，仅用于研究，**不纳入本仓库**（见 `.gitignore`），moxsh **不复制**其中任何代码。需要对照阅读时本地执行 `bash clone.sh` 即可。
+界面采用液态玻璃设计：实时模糊、半透明层级、可拖拽的悬浮窗。高版本安卓使用实时渲染模糊，低版本自动回退到静态效果，不需要手动设置。
 
----
+## 能用它做什么
 
-## 18 项已拍定决策
+- 学习 Linux 命令行和 Shell 脚本
+- 用 Python、Node.js、Rust、C/C++ 写程序
+- 通过 SSH 连接远程服务器，或把手机当跳板
+- 一键安装 Ubuntu / Debian / Kali / Alpine 发行版
+- 用 AI 助手解释报错、写脚本、管理环境（支持 DeepSeek、智谱、通义、Kimi 等）
+- 安装插件：悬浮窗终端、主题、系统监控等，也可以自己写
 
-1. **兼容层级**：直接吃 termux-packages 官方仓库，现有 `.deb` 能装能跑
-2. **包管理器**：双协议自研（我们新格式 + 兼容 apt/deb 协议）
-3. **运行环境**：100% 自研、完全自定义；实现对齐 termux-packages 磁盘/ABI 契约
-4. **终端内核**：纯自研（clean-room），可参考 libvterm/st 思路，代码全自己写
-5. **minSdk 28**（安卓 9）
-6. **X11 本期不做**
-7. **插件双体系**：① Termux 兼容宿主（原插件能用）② moxsh 原生玻璃插件（独立签名、不互通、带图形界面）
-8. **玻璃默认**：按设备性能自动（API31+ 实时模糊；低版本静态回退），设置可手动开/关
-9. **语言栈**：多语言混合——Kotlin/Compose(UI) + **Rust(内核全包)** + **NEON 汇编(热路径)** + **C/C++(仅 JNI 桥接)**
-10. **Rust 覆盖**：终端内核 + 包管理解析/验签 + IPC 加固 + 兼容 shim + 加密安全模块
-11. **构建编排**：cargo-ndk 预构建（Gradle `preBuild` 调 `cargo ndk` 产出 `libmoxshcore.so`；CI 装 Rust 工具链 + cargo-ndk）
-12. **PRoot 路线**：自研 Rust 引擎（ptrace 路径翻译）+ 融合上游 proot 6.x 行为，不抄其代码
-13. **图形化范围**：四件套全做（发行版管理器/图形包管理器/资源监控/小白引导）；小白基本不碰命令行
-14. **预置发行版**：Ubuntu / Debian / Kali / Alpine + 自定义 rootfs tar
-15. **包格式**：插件与 AI 技能统一 .mox 格式（签名+元数据+权限声明），外来格式兼容
-16. **商店范围**：全链路（浏览/一键安装/卸载/启停/更新 + 本地上传 + 云端接口 + 内置目录兜底）
-17. **售卖预留**：manifest 含 author/price/purchased 字段；支付与抽成后续接入
-18. **AI 接入**：OpenAI 兼容 + 国内预置（DeepSeek/智谱/通义/Kimi）+ 本地小模型预留（M7）；高危操作玻璃确认卡
+## 安装
 
----
+### 系统要求
 
-## 怎么拿到 APK
+- Android 9.0 或更高
+- arm64-v8a 设备
+- 约 300 MB 可用空间（含首装引导包）
 
-沙箱环境**无 Android SDK**，无法在本机编译 APK。工程已配好**云端 CI**：
+### 获取 APK
 
-1. 把本仓库推到 GitHub
-2. 在仓库 **Settings → Secrets** 配置签名：`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`（可选；不配则用 debug 签名出包）
-3. push 到 `main`/`dev` → Actions 自动构建 `assembleRelease` 并上传 APK 产物
+本仓库通过 GitHub Actions 自动构建：
 
-本地编译：用 Android Studio 打开 `moxsh/`（或 `gradle wrapper` 后 `./gradlew assembleDebug`），需 Android SDK(34)+NDK 26.1.10909125。
+1. 打开仓库的 [Actions](../../actions) 页面，选择最近一次成功的构建
+2. 在页面底部的 Artifacts 里下载 APK 并安装
 
----
+发布版本会同时放到 [Releases](../../releases) 页面。安装时如系统提示"未知来源"，允许即可。
 
-## 阶段路线（详见 `docs/roadmap.md`，权威进度清单）
+## 快速上手
 
-| 阶段 | 目标                                                                  | 状态     |
-| -- | ------------------------------------------------------------------- | ------ |
-| M1 | 工程脚手架 + CI + 玻璃外壳 + 自研运行环境骨架                                        | ✅      |
-| M2 | Rust 终端内核（PTY/VT 解析/回滚）+ NEON 热路径 + 会话引擎                            | ✅      |
-| M3 | 玻璃 UI 主体 + 真实终端渲染 + 7 插件（float/styling/api/boot/tasker/widget/core） | ✅      |
-| M4 | PRoot 引擎 + 图形化管理四件套 + .mox 商店 + AI Agent（18 决策全落地）                  | ✅      |
-| M5 | Bootstrap 首装流水线 + 回滚 mmap 兜底 + Rust 单测补全（33 个）                      | ✅      |
-| M6 | 首个可安装 APK（推 GitHub → Actions 出包 → 真机联调）                             | ⏳ 待推仓库 |
-| M7 | 性能打磨（120Hz/glyph atlas/syscall 热路径）+ 本地小模型 + 支付抽成                   | ⏳      |
+第一次启动 moxsh 会自动下载并安装基础系统（引导包），完成后直接进入终端。
 
----
+更新软件源和包：
 
-## 踩坑经验（本次会话积累）
+```bash
+pkg update && pkg upgrade
+```
 
-- **GitHub 直连被沙箱网络层阻断**：壳内 `git clone` 全部 TLS 失败；改用 `ghproxy.net` 前缀（`https://ghproxy.net/https://github.com/...`）成功克隆 Termux 全量源码。
-- **默认 shell 是 zsh**：`for x in $var` 不自动分词，整串当单参数；写脚本用 `bash -c` 或显式数组。
-- **Compose 玻璃组件放错模块**：玻璃 UI 原在 `:app`，但插件要用且 app 又依赖插件 → 循环依赖。已抽到独立 `:ui` 模块。
-- **库模块引用 app 的 style**：库模块 manifest 引用 `@style/Theme.Moxsh.Glass` 需在合并后解析；统一把主题放到 `:ui` 模块。
-- **RenderEffect 需 API31+**：实时模糊用 `Build.VERSION.SDK_INT >= 31` 守卫，低版本回退静态半透明（minSdk 28 必须处理）。
-- **CI 不用 `./gradlew`**：沙箱无法生成 wrapper jar，改用 `gradle/actions/setup-gradle` 直接装 gradle 跑 `gradle assembleRelease`。
-- **Rust 经 cargo-ndk 出 .so**：`terminal-core` 不用 `externalNativeBuild`，而是在 `preBuild` 调 `cargo ndk` 产出 `libmoxshcore.so` 进 `jniLibs`；`build.rs` 用 `cc` crate 把 `bridge.cpp` 与 `neon.s` 经 NDK clang 链入同一 cdylib。CI 需装 Rust 工具链 + `cargo install cargo-ndk` 并设 `ANDROID_NDK_HOME`。
+安装软件（和 Termux 用法完全一致）：
+
+```bash
+pkg install python
+pkg install nodejs
+pkg install openssh
+```
+
+常用操作：
+
+```bash
+# 允许访问手机存储（照片、下载等）
+termux-setup-storage
+
+# 连接远程服务器
+ssh user@host
+
+# 查看当前 prefix 路径
+echo $PREFIX
+```
+
+首次安装某个包之前先 `pkg update` 一次，可以避免找不到包的问题。
+
+## 插件
+
+moxsh 的插件、AI 技能、主题、发行版镜像统一使用 `.mox` 包格式，通过内置商店安装，也支持把 `.mox` 文件放到下载目录离线安装。
+
+为 moxsh 编写和发布插件的方法见 [docs/plugins.md](docs/plugins.md)。
+
+同时 moxsh 兼容 Termux 插件宿主（Termux:API、Termux:Widget 等原插件可用）；外来 zip 格式的插件包会在导入时自动转换。
+
+## 和 Termux 是什么关系
+
+- **软件包层面**：直接兼容。Termux 官方源的 `.deb` 包能装能跑，命令用法一致。
+- **代码层面**：零复用。moxsh 的终端内核、包管理器、运行环境、PRoot 引擎全部从零自研（Rust/Kotlin），不包含 Termux 的任何代码，也不依赖修改 Termux 源码。
+- **插件层面**：双体系。Termux 兼容宿主让原有插件继续可用；moxsh 原生插件（`.mox`）独立签名、带玻璃图形界面。
+
+## 文档
+
+- [架构白皮书](docs/architecture.md) —— 设计与实现原理
+- [插件开发指南](docs/plugins.md) —— 编写、打包、签名、上架
+- [命令体系](docs/commands.md) —— 支持的命令清单
+- [开发路线图](docs/roadmap.md) —— 进度与规划
+
+## 参与进来
+
+发现 bug 或想要新功能，欢迎提 [Issue](../../issues)；想贡献代码直接提 Pull Request。
+
+## 许可证
+
+[GPL-3.0](LICENSE)
