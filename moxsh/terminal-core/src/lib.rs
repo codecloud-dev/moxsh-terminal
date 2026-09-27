@@ -5,6 +5,9 @@
 //! 调用 NEON 汇编（见 [`arch`]）。C/C++ 只保留最小 JNI 桥接。
 
 #![allow(clippy::missing_safety_doc)]
+// unsafe 审计强化：unsafe fn 内的每一个 unsafe 操作必须显式包裹 unsafe 块，
+// 使"哪些行在做不安全操作"一目了然（FFI 边界可读性/可审计性）。
+#![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod arch;
 pub mod compat;
@@ -42,6 +45,8 @@ use session::TerminalSession;
 /// # Safety
 /// `p` 必须指向合法以 NUL 结尾的字符串，或为 null。
 unsafe fn read_opt_cstr(p: *const c_char) -> Option<String> {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if p.is_null() {
         return None;
     }
@@ -50,12 +55,15 @@ unsafe fn read_opt_cstr(p: *const c_char) -> Option<String> {
         .ok()
         .map(|s| s.to_string())
 }
+}
 
 /// 把字符串写入调用方缓冲（截断防护）。
 ///
 /// # Safety
 /// `out` 指向至少 `cap` 字节可写内存（可 null，此时仅探测所需长度）。
 unsafe fn write_cstr_buf(out: *mut c_char, cap: usize, s: &str) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let need = s.len() + 1; // 含 NUL
     if out.is_null() || cap < need {
         return 0; // 0 = 缓冲不足，Kotlin 扩容重试
@@ -64,6 +72,7 @@ unsafe fn write_cstr_buf(out: *mut c_char, cap: usize, s: &str) -> c_int {
     slice[..s.len()].copy_from_slice(s.as_bytes());
     slice[s.len()] = 0;
     need as c_int
+}
 }
 
 /// 安装发行版：`id` 为预置 id（ubuntu/debian/kali/alpine）或自定义容器名。
@@ -78,6 +87,8 @@ pub unsafe extern "C" fn moxsh_proot_install(
     moxsh_root: *const c_char,
     cache_tar: *const c_char,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let (Some(id), Some(root)) = (read_opt_cstr(id), read_opt_cstr(moxsh_root)) else {
         return -1;
     };
@@ -98,6 +109,7 @@ pub unsafe extern "C" fn moxsh_proot_install(
     };
     r.map(|_| 0).unwrap_or_else(|e| e.to_code())
 }
+}
 
 /// 删除发行版。
 ///
@@ -105,6 +117,8 @@ pub unsafe extern "C" fn moxsh_proot_install(
 /// `id`/`moxsh_root` 必须指向合法 NUL 结尾 UTF-8 字符串。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_proot_remove(id: *const c_char, moxsh_root: *const c_char) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let (Some(id), Some(root)) = (read_opt_cstr(id), read_opt_cstr(moxsh_root)) else {
         return -1;
     };
@@ -112,6 +126,7 @@ pub unsafe extern "C" fn moxsh_proot_remove(id: *const c_char, moxsh_root: *cons
         .remove(&id)
         .map(|_| 0)
         .unwrap_or_else(|e| e.to_code())
+}
 }
 
 /// 生成发行版登录命令行（proot 完整调用）写入 `out_buf`（容量 `cap`）。
@@ -126,6 +141,8 @@ pub unsafe extern "C" fn moxsh_proot_login(
     out_buf: *mut c_char,
     cap: usize,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let (Some(id), Some(root)) = (read_opt_cstr(id), read_opt_cstr(moxsh_root)) else {
         return -1;
     };
@@ -133,6 +150,7 @@ pub unsafe extern "C" fn moxsh_proot_login(
         Ok(cmd) => write_cstr_buf(out_buf, cap, &cmd),
         Err(e) => e.to_code(),
     }
+}
 }
 
 /// 列出已安装发行版，写入 `out_buf`（行分隔协议：每行 `id|initialized|rootfs`）。
@@ -145,6 +163,8 @@ pub unsafe extern "C" fn moxsh_proot_list_installed(
     out_buf: *mut c_char,
     cap: usize,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let Some(root) = read_opt_cstr(moxsh_root) else {
         return -1;
     };
@@ -159,6 +179,7 @@ pub unsafe extern "C" fn moxsh_proot_list_installed(
         .collect();
     write_cstr_buf(out_buf, cap, text.trim_end_matches('\n'))
 }
+}
 
 /// 备份发行版 rootfs 到 `out_tar`（tar.gz）。
 ///
@@ -170,6 +191,8 @@ pub unsafe extern "C" fn moxsh_proot_backup(
     moxsh_root: *const c_char,
     out_tar: *const c_char,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let (Some(id), Some(root), Some(out)) = (
         read_opt_cstr(id),
         read_opt_cstr(moxsh_root),
@@ -182,6 +205,7 @@ pub unsafe extern "C" fn moxsh_proot_backup(
         .map(|_| 0)
         .unwrap_or_else(|e| e.to_code())
 }
+}
 
 /// 从备份 tar.gz 恢复发行版（覆盖已有 rootfs）。
 ///
@@ -193,6 +217,8 @@ pub unsafe extern "C" fn moxsh_proot_restore(
     moxsh_root: *const c_char,
     tar_path: *const c_char,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let (Some(id), Some(root), Some(tar)) = (
         read_opt_cstr(id),
         read_opt_cstr(moxsh_root),
@@ -204,6 +230,7 @@ pub unsafe extern "C" fn moxsh_proot_restore(
         .restore(&id, std::path::Path::new(&tar))
         .map(|_| 0)
         .unwrap_or_else(|e| e.to_code())
+}
 }
 
 /// 路径翻译自检：运行内置用例，返回通过数。
@@ -226,6 +253,8 @@ pub unsafe extern "C" fn moxsh_open_pty(
     cols: c_int,
     rows: c_int,
 ) -> *mut TerminalSession {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let Ok(cmd) = std::ffi::CStr::from_ptr(cmd).to_str() else {
         return std::ptr::null_mut();
     };
@@ -233,6 +262,7 @@ pub unsafe extern "C" fn moxsh_open_pty(
         Ok(s) => Box::into_raw(Box::new(s)),
         Err(_) => std::ptr::null_mut(),
     }
+}
 }
 
 /// 从 PTY 读取至多 `len` 字节到 `buf`，并喂给 VT 解析器更新屏幕状态。
@@ -246,6 +276,8 @@ pub unsafe extern "C" fn moxsh_pump(
     buf: *mut u8,
     len: usize,
 ) -> isize {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if sess.is_null() || buf.is_null() {
         return -1;
     }
@@ -254,6 +286,7 @@ pub unsafe extern "C" fn moxsh_pump(
         Ok(n) => n as isize,
         Err(_) => -1,
     }
+}
 }
 
 /// 向 PTY 写入 `len` 字节（通常是从键盘/IME 来的输入或控制序列）。
@@ -266,6 +299,8 @@ pub unsafe extern "C" fn moxsh_write(
     buf: *const u8,
     len: usize,
 ) -> isize {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if sess.is_null() || buf.is_null() {
         return -1;
     }
@@ -274,6 +309,7 @@ pub unsafe extern "C" fn moxsh_write(
         Ok(n) => n as isize,
         Err(_) => -1,
     }
+}
 }
 
 /// 更新窗口尺寸（SIGWINCH 由内部处理）。
@@ -286,6 +322,8 @@ pub unsafe extern "C" fn moxsh_resize(
     cols: c_int,
     rows: c_int,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if sess.is_null() {
         return -1;
     }
@@ -294,6 +332,7 @@ pub unsafe extern "C" fn moxsh_resize(
         Err(_) => -1,
     }
 }
+}
 
 /// 释放会话（关闭 PTY、回收子进程、释放缓冲）。
 ///
@@ -301,9 +340,12 @@ pub unsafe extern "C" fn moxsh_resize(
 /// `sess` 必须来自 [`moxsh_open_pty`] 且未被释放；调用后指针失效。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_close(sess: *mut TerminalSession) {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if !sess.is_null() {
         drop(Box::from_raw(sess));
     }
+}
 }
 
 /// 返回屏幕可见行数。
@@ -312,10 +354,13 @@ pub unsafe extern "C" fn moxsh_close(sess: *mut TerminalSession) {
 /// `sess` 必须有效。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_screen_rows(sess: *mut TerminalSession) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if sess.is_null() {
         return 0;
     }
     (*sess).rows() as c_int
+}
 }
 
 /// 返回屏幕列数。
@@ -324,10 +369,13 @@ pub unsafe extern "C" fn moxsh_screen_rows(sess: *mut TerminalSession) -> c_int 
 /// `sess` 必须有效。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_screen_cols(sess: *mut TerminalSession) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if sess.is_null() {
         return 0;
     }
     (*sess).cols() as c_int
+}
 }
 
 /// 返回总行数（可见 + 历史回滚）。
@@ -336,10 +384,13 @@ pub unsafe extern "C" fn moxsh_screen_cols(sess: *mut TerminalSession) -> c_int 
 /// `sess` 必须有效。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_total_rows(sess: *mut TerminalSession) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if sess.is_null() {
         return 0;
     }
     (*sess).total_rows() as c_int
+}
 }
 
 /// 把绝对行 [start_row, start_row+count) 的单元格复制到 `buf`
@@ -355,6 +406,8 @@ pub unsafe extern "C" fn moxsh_copy_cells(
     buf: *mut u8,
     buflen: usize,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if sess.is_null() || buf.is_null() {
         return -1;
     }
@@ -363,6 +416,7 @@ pub unsafe extern "C" fn moxsh_copy_cells(
     // 返回实际能覆盖的行数（用于 Kotlin 端边界判断）
     let stride = (*sess).cols() * 16;
     ((buflen / stride) as c_int).min(count)
+}
 }
 
 // ============ M4：.mox 包 C-ABI（D15，见 moxpkg.rs 模块头规范） ============
@@ -385,6 +439,8 @@ pub unsafe extern "C" fn moxsh_mox_open(
     path: *const c_char,
     out_handle: *mut *mut moxpkg::MoxPackage,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     let Some(path) = read_opt_cstr(path) else {
         return -1;
     };
@@ -399,6 +455,7 @@ pub unsafe extern "C" fn moxsh_mox_open(
         Err(e) => e.to_code(),
     }
 }
+}
 
 /// 验签（HMAC-SHA256(secret, manifest 原始字节)，复用 crypto.rs）。
 /// 返回 0=通过 / -5=签名不符 / 负错误码（-4 非 .mox 等）。
@@ -410,6 +467,8 @@ pub unsafe extern "C" fn moxsh_mox_verify(
     handle: *mut moxpkg::MoxPackage,
     secret: *const c_char,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if handle.is_null() {
         return -1;
     }
@@ -422,6 +481,7 @@ pub unsafe extern "C" fn moxsh_mox_verify(
         Err(e) => e.to_code(),
     }
 }
+}
 
 /// 解包到 `out_dir`（manifest.json / signature / payload/**，白名单外条目跳过）。
 ///
@@ -432,6 +492,8 @@ pub unsafe extern "C" fn moxsh_mox_extract(
     handle: *mut moxpkg::MoxPackage,
     out_dir: *const c_char,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if handle.is_null() {
         return -1;
     }
@@ -442,6 +504,7 @@ pub unsafe extern "C" fn moxsh_mox_extract(
         .extract_to(std::path::Path::new(&out_dir))
         .map(|_| 0)
         .unwrap_or_else(|e| e.to_code())
+}
 }
 
 /// 列出包内条目到 `out_buf`（行分隔协议：每行 `name|size_bytes`）。
@@ -455,6 +518,8 @@ pub unsafe extern "C" fn moxsh_mox_list(
     out_buf: *mut c_char,
     cap: usize,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if handle.is_null() {
         return -1;
     }
@@ -464,6 +529,7 @@ pub unsafe extern "C" fn moxsh_mox_list(
         .map(|e| format!("{}|{}\n", e.name, e.size))
         .collect();
     write_cstr_buf(out_buf, cap, text.trim_end_matches('\n'))
+}
 }
 
 /// 把 manifest.json 原文写入 `out_buf`（Kotlin 侧自行 JSON 解析，平台自带 org.json）。
@@ -476,6 +542,8 @@ pub unsafe extern "C" fn moxsh_mox_manifest(
     out_buf: *mut c_char,
     cap: usize,
 ) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if handle.is_null() {
         return -1;
     }
@@ -486,6 +554,7 @@ pub unsafe extern "C" fn moxsh_mox_manifest(
         .map_or_else(String::new, |b| String::from_utf8_lossy(&b).into_owned());
     write_cstr_buf(out_buf, cap, &json)
 }
+}
 
 /// 释放句柄（照 moxsh_close 模式；调用后指针失效，重复释放为未定义行为）。
 ///
@@ -493,9 +562,12 @@ pub unsafe extern "C" fn moxsh_mox_manifest(
 /// `handle` 必须来自 [`moxsh_mox_open`] 且未被释放过。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_mox_close(handle: *mut moxpkg::MoxPackage) {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
     if !handle.is_null() {
         drop(Box::from_raw(handle));
     }
+}
 }
 
 #[cfg(test)]

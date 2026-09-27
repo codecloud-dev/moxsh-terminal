@@ -130,3 +130,124 @@ pub fn nonce_hex() -> String {
         .map(|x| format!("{:02x}", x))
         .collect::<String>()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    // ===== SHA-256 NIST FIPS 180-2 / 标准测试向量 =====
+
+    #[test]
+    fn sha256_empty() {
+        assert_eq!(
+            hex(&sha256(b"")),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn sha256_abc() {
+        assert_eq!(
+            hex(&sha256(b"abc")),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn sha256_448bit_single_block_boundary() {
+        // 56 字节（448-bit）：padding 恰好占满一个额外块，验证块边界处理
+        assert_eq!(
+            hex(&sha256(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")),
+            "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+        );
+    }
+
+    #[test]
+    fn sha256_896bit_multi_block() {
+        // 112 字节（896-bit）双块消息
+        let m = concat!(
+            "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno",
+            "ijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
+        );
+        assert_eq!(
+            hex(&sha256(m.as_bytes())),
+            "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
+        );
+    }
+
+    #[test]
+    fn sha256_million_a() {
+        // 百万 'a'：验证长输入的多块累计正确性
+        assert_eq!(
+            hex(&sha256(&vec![b'a'; 1_000_000])),
+            "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+        );
+    }
+
+    #[test]
+    fn sha256_55byte_padding_edge() {
+        // 55 字节：0x80 恰好是最后可用 padding 字节（55+1+8=64，单块收尾）
+        let m = b"0123456789012345678901234567890123456789012345678901234";
+        assert_eq!(m.len(), 55);
+        assert_eq!(
+            hex(&sha256(m)),
+            "f34d5a0f80c0cbf84c8c0b90218c22637abd199965249da736a20143c8c9c9d9"
+        );
+    }
+
+    // ===== HMAC-SHA256 RFC 4231 测试向量 =====
+
+    #[test]
+    fn hmac_rfc4231_case1() {
+        let mac = hmac_sha256(&[0x0bu8; 20], b"Hi There");
+        assert_eq!(
+            hex(&mac),
+            "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+        );
+    }
+
+    #[test]
+    fn hmac_rfc4231_case2() {
+        let mac = hmac_sha256(b"Jefe", b"what do ya want for nothing?");
+        assert_eq!(
+            hex(&mac),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+    }
+
+    #[test]
+    fn hmac_rfc4231_case3() {
+        let mac = hmac_sha256(&[0xaau8; 20], &[0xddu8; 50]);
+        assert_eq!(
+            hex(&mac),
+            "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe"
+        );
+    }
+
+    #[test]
+    fn hmac_rfc4231_case6_oversize_key() {
+        // 131 字节 key：验证 key > 64 走 sha256(key) 再填充的分支
+        let mac = hmac_sha256(
+            &[0xaau8; 131],
+            b"Test Using Larger Than Block-Size Key - Hash Key First",
+        );
+        assert_eq!(
+            hex(&mac),
+            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+        );
+    }
+
+    #[test]
+    fn random_bytes_smoke() {
+        let mut a = [0u8; 32];
+        assert!(random_bytes(&mut a));
+        let mut b = [0u8; 32];
+        assert!(random_bytes(&mut b));
+        // 连续两次取随机数完全相同的概率可忽略
+        assert_ne!(a, b);
+    }
+}

@@ -165,15 +165,19 @@ impl Pty {
 
 /// 在继承的 environ 基础上追加 `extra`（形如 `KEY=VALUE`），返回 null 结尾数组。
 unsafe fn build_environ(extra: &CString) -> Vec<*const c_char> {
-    let mut vec: Vec<*const c_char> = Vec::new();
-    let mut p = environ;
-    while !(*p).is_null() {
-        vec.push(*p);
-        p = p.add(1);
+    // SAFETY：遍历 C 运行时的全局 environ 表（只读），直到 NUL 终止项；
+    // 调用方契约见函数 # Safety 说明（进程环境在单线程启动期访问）。
+    unsafe {
+        let mut vec: Vec<*const c_char> = Vec::new();
+        let mut p = environ;
+        while !(*p).is_null() {
+            vec.push(*p);
+            p = p.add(1);
+        }
+        vec.push(extra.as_ptr());
+        vec.push(std::ptr::null());
+        vec
     }
-    vec.push(extra.as_ptr());
-    vec.push(std::ptr::null());
-    vec
 }
 
 impl Drop for Pty {
@@ -184,9 +188,33 @@ impl Drop for Pty {
             }
             if self.pid > 0 {
                 libc::kill(self.pid, libc::SIGTERM);
-                // 给一点时间优雅退出
+                // P1 修复：绝不在 Drop 里无限阻塞。
+                // waitpid(..., 0) 在子进程忽略 SIGTERM（或卡在不可中断态）时会永久挂起，
+                // 导致会话销毁卡死（UI ANR 风险）。改为 WNOHANG 轮询 + 超时升级 SIGKILL。
                 let mut status: c_int = 0;
-                libc::waitpid(self.pid, &mut status as *mut c_int, 0);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+                loop {
+                    // 0 = 仍在运行；pid = 已收割；-1 = 错误（如 ECHILD 已被收割）——均不等待
+                    let r = libc::waitpid(self.pid, &mut status as *mut c_int, libc::WNOHANG);
+                    if r != 0 {
+                        break;
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        // 优雅期结束，升级强杀。SIGKILL 后用 WNOHANG 短轮询收割；
+                        // 极端不可中断态下放弃收割（僵尸由内核在进程退出时回收，优于挂死 UI）。
+                        libc::kill(self.pid, libc::SIGKILL);
+                        let hard_deadline =
+                            std::time::Instant::now() + std::time::Duration::from_millis(100);
+                        while std::time::Instant::now() < hard_deadline {
+                            if libc::waitpid(self.pid, &mut status as *mut c_int, libc::WNOHANG) != 0 {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                        }
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
             }
         }
     }

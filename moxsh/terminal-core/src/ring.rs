@@ -152,6 +152,34 @@ mod tests {
         } // 此处 drop
         assert!(!path.exists(), "drop 后落盘文件应被清理");
     }
+
+    /// P0 回归：mmap 扩容必须保留既有历史（旧映射数据整体迁移到新映射）。
+    #[test]
+    fn overflow_buffer_grow_preserves_history() {
+        let path = std::env::temp_dir().join("moxsh-ring-test-grow");
+        let mut b = OverflowBuffer::new(1024 * 1024, path).unwrap(); // mem_cap = 1 MiB
+        let seed: Vec<u8> = (0..1_200_000u32).map(|i| (i % 251) as u8).collect();
+        b.push(&seed).unwrap(); // 触发首次落盘（1.2 MB > 1 MiB）
+        assert!(b.spilled());
+        // 连续追加触发两次扩容（1.2→2.4→4.8 MB），全程历史不得丢失
+        for round in 0..2u32 {
+            let more: Vec<u8> = (0..1_400_000u32)
+                .map(|i| ((i + round * 7) % 251) as u8)
+                .collect();
+            b.push(&more).unwrap();
+        }
+        assert_eq!(b.total_len(), 1_200_000 + 1_400_000 * 2);
+        let mut head = [0u8; 64];
+        assert_eq!(b.read_at(0, &mut head).unwrap(), 64);
+        assert_eq!(&head, &seed[..64], "扩容后开头历史丢失");
+        let mut tail = [0u8; 64];
+        let end = b.total_len();
+        assert_eq!(b.read_at(end - 64, &mut tail).unwrap(), 64);
+        let expect_tail: Vec<u8> = (1_399_936u32..1_400_000u32)
+            .map(|i| ((i + 7) % 251) as u8)
+            .collect();
+        assert_eq!(&tail, &expect_tail[..], "扩容后尾部数据丢失");
+    }
 }
 
 /// 内存 + 落盘二级字节缓冲（回滚兜底，M5）。
@@ -220,12 +248,18 @@ impl OverflowBuffer {
 
         if self.map.is_some() {
             let end = self.written + data.len();
-            // 2) mmap 空间不足：先建新映射，再换旧映射（同样规避借用冲突）。
-            //    Android 无 mremap，用"新建映射 + munmap 旧映射"替代，扩容是低频事件，代价可接受。
+            // 2) mmap 空间不足：先建新映射，再迁移旧数据、换旧映射（同样规避借用冲突）。
+            //    Android 无 mremap，用"新建映射 + 搬数据 + munmap 旧映射"替代，
+            //    扩容是低频事件，代价可接受。
             if end > self.map.as_ref().unwrap().len {
                 let new_area = self.create_map((end * 2).max(1024 * 1024))?;
+                let new_ptr = new_area.ptr;
+                let new_len = new_area.len;
                 let old = self.map.replace(new_area).unwrap();
                 unsafe {
+                    // P0 修复：必须先把旧映射的已写数据整体搬进新映射再 munmap，
+                    // 否则每次扩容都会把此前全部历史清零（新映射内容是零页）。
+                    std::ptr::copy_nonoverlapping(old.ptr, new_ptr, self.written.min(new_len));
                     libc::munmap(old.ptr as *mut libc::c_void, old.len);
                 }
                 // 旧 fd（old.file）随 old 离开作用域自动关闭
@@ -274,7 +308,9 @@ impl OverflowBuffer {
             .read(true)
             .write(true)
             .create(true)
-            .truncate(true)
+            // 禁止 truncate：扩容复用同一落盘文件，truncate 会把旧映射数据清零（P0）。
+            // 大小交给下面的 set_len：新建时从 0 扩展（零填充），扩容时只增长不清零。
+            .truncate(false)
             .open(&self.path)?;
         file.set_len(len as u64)?;
         let ptr = unsafe {
