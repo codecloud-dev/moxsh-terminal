@@ -50,5 +50,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":shared"))
+    // 注意：不得依赖 :shared——shared 依赖本模块，加入会形成循环依赖
+    // （Gradle: Circular dependency between :shared and :terminal-core）。
 }
