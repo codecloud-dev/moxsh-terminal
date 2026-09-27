@@ -47,7 +47,7 @@ object MoxPackage {
     /** 验签：0=通过，-5=签名不符，其他负数=错误码（见 moxpkg.rs 错误码表）。 */
     private external fun nativeVerify(handle: Long, secret: String): Int
 
-    /** 解包到 outDir（manifest.json/signature/payload/**），成功返回 true。 */
+    /** 解包到 outDir（manifest.json/signature/payload 目录递归展开），成功返回 true。 */
     private external fun nativeExtract(handle: Long, outDir: String): Boolean
 
     /** 列出条目，每行格式 `name|size_bytes`。 */

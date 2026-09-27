@@ -158,7 +158,7 @@ object CompatShim {
     fun requiresHost(command: String): Boolean = classify(command) == TermuxTarget.Api
 
     /** 返回全部已知 termux 命令名（用于自动补全 / 帮助）。 */
-    fun knownCommands(): List<String> = API_COMMANDS + TOOL_COMMANDS
+    fun knownCommands(): List<String> = (API_COMMANDS + TOOL_COMMANDS).toList()
 
     /**
      * 建立自研 rootfs 的目录骨架与 loader/env 配置（已实现，M3 缺口收尾）。
