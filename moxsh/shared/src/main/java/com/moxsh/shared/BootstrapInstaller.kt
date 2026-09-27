@@ -591,6 +591,13 @@ object BootstrapState {
     val state: StateFlow<State> = _state
 
     /**
+     * 运行环境就绪钩子（插件宿主等下游在装配时设置）。
+     * 方向设计：shared 不感知 plugin 层，由 plugin 侧注册回调，避免循环依赖。
+     */
+    @Volatile
+    var onReady: (() -> Unit)? = null
+
+    /**
      * 一键就绪流水线：已就绪直接 Ready；否则安装 bootstrap → 建立 $PREFIX 布局。
      * 幂等：并发调用时后到者直接等待当前状态（简化处理：Application 只启动一次）。
      */
@@ -599,6 +606,7 @@ object BootstrapState {
         if (BootstrapInstaller.isReady(ctx)) {
             CompatShim.ensurePrefixLayout()
             _state.value = State.Ready
+            onReady?.invoke()
             return
         }
         try {
@@ -607,6 +615,7 @@ object BootstrapState {
             }
             CompatShim.ensurePrefixLayout()
             _state.value = State.Ready
+            onReady?.invoke()
         } catch (e: BootstrapInstaller.BootstrapException) {
             _state.value = State.Failed(e.message ?: "安装失败")
         } catch (e: Exception) {

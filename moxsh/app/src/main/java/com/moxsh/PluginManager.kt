@@ -4,10 +4,12 @@ import android.content.Context
 import com.moxsh.plugin.boot.BootPluginContract
 import com.moxsh.plugin.core.DemoGlassPlugin
 import com.moxsh.plugin.core.MoxshIpcClient
+import com.moxsh.plugin.core.PluginEvent
 import com.moxsh.plugin.core.PluginHost
 import com.moxsh.plugin.float.floating.FloatGlassPluginContract
 import com.moxsh.plugin.styling.StylePluginContract
 import com.moxsh.plugin.widget.WidgetPluginContract
+import com.moxsh.shared.BootstrapState
 import com.moxsh.shared.ExecutionEngine
 
 /**
@@ -43,6 +45,9 @@ object PluginManager {
         StylePluginContract.register(h)
         BootPluginContract.register(h)
         WidgetPluginContract.register(h)
+
+        // 运行环境就绪 → 发布 BootCompleted（插件经 PluginApi.events 感知）
+        BootstrapState.onReady = { h.events.publish(PluginEvent.BootCompleted()) }
 
         instance = h
     }

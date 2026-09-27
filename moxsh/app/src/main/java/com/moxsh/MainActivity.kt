@@ -105,6 +105,8 @@ fun MoxshRoot() {
         // 管理器入口（D13）：控制是否整屏切到发行版管理器。
         // 简单状态切换即可；页面多了可换 Navigation-Compose（导航图见 architecture.md §6）。
         var showManager by remember { mutableStateOf(false) }
+        // 插件面板入口（D5 体系②）：整屏渲染已注册原生玻璃插件卡片。
+        var showPlugins by remember { mutableStateOf(false) }
 
         // ---- 多会话标签 ----
         var tabs by remember { mutableStateOf(listOf<TermTab>()) }
@@ -174,6 +176,9 @@ fun MoxshRoot() {
                 },
                 onOpenPackageManager = null, // 四件套互相跳转走插件面板；此处留空即不显示入口
             )
+        } else if (showPlugins) {
+            // ---- 插件面板（D5 体系②）：内置玻璃插件卡片入口 ----
+            PluginPanelScreen(onBack = { showPlugins = false })
         } else {
             // imePadding：输入法弹起自动避让（架构 §6"玻璃层不阻挡触摸与 IME"）
             Box(
@@ -232,6 +237,9 @@ fun MoxshRoot() {
                             }
                         }
                         Spacer(Modifier.width(8.dp))
+                        // 插件面板入口（D5 体系②）：玻璃小按钮 → 已注册插件卡片
+                        GlassIconButton("✦") { showPlugins = true }
+                        Spacer(Modifier.width(6.dp))
                         // 管理器入口（D13）：玻璃小按钮 → 发行版管理器
                         GlassIconButton("☰") { showManager = true }
                         Spacer(Modifier.width(6.dp))
