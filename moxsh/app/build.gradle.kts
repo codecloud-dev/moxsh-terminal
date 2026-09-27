@@ -12,14 +12,34 @@ android {
         minSdk = 28
         targetSdk = 34
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.5.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            // CI 注入（workflow 的 KEYSTORE_* 环境变量 + Secrets）；本地不存在时保持空，
+            // release 回退 debug 签名保证任何人 clone 后都能直接出可安装的包。
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            val ksPass = System.getenv("KEYSTORE_PASSWORD")
+            val alias = System.getenv("KEY_ALIAS")
+            val keyPass = System.getenv("KEY_PASSWORD")
+            if (!ksPath.isNullOrBlank() && file(ksPath).exists()) {
+                storeFile = file(ksPath)
+                storePassword = ksPass
+                keyAlias = alias
+                keyPassword = keyPass
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // 本地/CI 用 debug 签名即可；正式发布在 CI 注入 release 签名
-            signingConfig = signingConfigs.getByName("debug")
+            // 有正式 keystore（CI）用 release 签名；否则回退 debug 签名
+            signingConfig = if (signingConfigs.getByName("release").storeFile != null)
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug")
         }
     }
 

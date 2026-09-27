@@ -74,7 +74,7 @@ fun GlassBackdrop(performantBlur: Boolean, modifier: Modifier = Modifier) {
                     )
                 )
             )
-            .then(glassBlur(performantBlur, 30f))
+            .glassBlur(performantBlur, 30f)
     )
 }
 
