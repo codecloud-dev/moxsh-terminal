@@ -121,11 +121,11 @@ impl DirtyTracker {
         }
         let mut dirty = vec![false; n];
         let mut new_hash = Vec::with_capacity(n);
-        for r in 0..n {
+        for (r, d) in dirty.iter_mut().enumerate() {
             let h = hash_row(r);
             new_hash.push(h);
             // 全脏短路；否则显式标脏与 hash-diff 取并集。
-            dirty[r] = self.all || self.rows[r] || self.last_frame_hash[r] != h;
+            *d = self.all || self.rows[r] || self.last_frame_hash[r] != h;
         }
         self.last_frame_hash = new_hash;
         self.rows = vec![false; n];

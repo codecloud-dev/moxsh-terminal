@@ -84,7 +84,6 @@ pub struct OverflowBuffer {
 }
 
 struct MmapArea {
-    file: std::fs::File,
     ptr: *mut u8,
     len: usize,
 }
@@ -209,8 +208,9 @@ impl OverflowBuffer {
         if ptr == libc::MAP_FAILED {
             return Err(io::Error::last_os_error());
         }
+        // POSIX 语义：MAP_SHARED 建立后映射独立于 fd 存续，关闭 fd 释放句柄。
+        drop(file);
         Ok(MmapArea {
-            file,
             ptr: ptr as *mut u8,
             len,
         })

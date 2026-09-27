@@ -81,7 +81,7 @@ fn cmd_install(mgr: &DistroManager, args: &[&str]) -> String {
             cache = it.next().map(PathBuf::from);
         }
     }
-    let mut progress: Box<dyn FnMut(&str, u64, u64)> = Box::new(|msg, done, total| {
+    let mut progress: crate::ProgressCallback = Box::new(|msg, done, total| {
         let _ = (msg, done, total); // 文本 CLI 简化：完成时统一输出
     });
     match mgr.install(&spec, cache.as_deref(), &mut progress) {

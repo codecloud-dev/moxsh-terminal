@@ -575,10 +575,11 @@ pub fn extract_tar(archive: &Path, dest: &Path) -> ProotResult<()> {
             let et = e.header().entry_type();
             if et.is_symlink() || et.is_hard_link() {
                 let link_path = e.path().map_err(ProotError::Io)?.to_path_buf();
-                if !link_path.is_absolute() && link_path.components().all(|c| match c {
-                    std::path::Component::Normal(_) | std::path::Component::CurDir => true,
-                    _ => false,
-                }) {
+                if !link_path.is_absolute()
+                    && link_path
+                        .components()
+                        .all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir))
+                {
                     let target = e.link_name().map_err(ProotError::Io)?.unwrap_or_default();
                     let escape = if target.is_absolute() {
                         true

@@ -108,7 +108,7 @@ impl Pty {
                 libc::execve(
                     arg_ptrs[0],
                     arg_ptrs.as_ptr(),
-                    env.as_ptr() as *const *const c_char,
+                    env.as_ptr(),
                 );
                 libc::_exit(127);
             }

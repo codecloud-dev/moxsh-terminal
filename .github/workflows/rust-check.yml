@@ -2,7 +2,7 @@ name: Rust 检查（内核质量门）
 
 # terminal-core（Rust 内核）的快速质量门：
 #   - 单元测试（含 SHA-256 NIST 向量、P0/P1 回归）
-#   - clippy 静态检查（当前为警告级：存量 31 条风格警告待清理，清零后升 -D warnings）
+#   - clippy 静态检查（-D warnings 严格模式：存量警告已清零，新增警告即失败）
 #   - cargo audit 依赖漏洞扫描
 #   - Android 目标（aarch64）交叉编译检查——PR 与主分支均执行，
 #     确保内核改动不破坏 NDK 构建（完整 APK 构建见 build.yml）
@@ -49,7 +49,7 @@ jobs:
           workspaces: moxsh/terminal-core
       - name: cargo clippy
         working-directory: moxsh/terminal-core
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets -- -D warnings
 
   audit:
     name: 依赖漏洞扫描
