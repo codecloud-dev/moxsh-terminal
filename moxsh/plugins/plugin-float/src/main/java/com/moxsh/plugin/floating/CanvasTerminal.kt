@@ -5,6 +5,7 @@ import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.nativeCanvas
 import com.moxsh.core.TerminalCore
 import kotlinx.coroutines.delay
 import java.nio.ByteBuffer
