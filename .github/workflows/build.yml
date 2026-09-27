@@ -55,10 +55,10 @@ jobs:
         run: cargo install cargo-ndk --version "^4"
 
       - name: Setup Gradle 8.9 (含缓存)
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
-          gradle-home-cache-cleanup: on-success
+          cache-cleanup: on-success
 
       # 国内网络优化：优先走腾讯/阿里镜像（无网络时也兼容 google/mavenCentral）
       - name: Setup Gradle mirror (domestic)
