@@ -164,8 +164,11 @@ object ExecutionEngine {
      */
     fun startPump(id: Long, onUpdate: (Int) -> Unit) {
         if (!sessions.containsKey(id)) return
-        stopPump(id)
-        val job = pumpScope.launch {
+        // P2 修复：check-then-act 原子化——UI 泵与 Service 兜底泵并发启动时，
+        // 旧实现可能让两个泵同时消费同一 PTY（输出被瓜分）。
+        // compute 内完成"停旧 + 登记新"，同 id 泵互斥由 ConcurrentHashMap 锁保证。
+        // 泵自然结束（EOF/错误/取消）时的登记清理由下次 startPump 的 compute 覆盖。
+        val newJob = pumpScope.launch {
             // isActive: 本协程是否被取消（stopPump 触发）；sessions 含 id: 会话是否仍存活。
             while (isActive && sessions.containsKey(id)) {
                 val n = pump(id)
@@ -178,7 +181,7 @@ object ExecutionEngine {
                 delay(PUMP_INTERVAL_MS)
             }
         }
-        pumpJobs[id] = job
+        pumpJobs.compute(id) { _, old -> old?.cancel(); newJob }
     }
 
     /** 停止指定会话的泵循环（若正在跑）。 */

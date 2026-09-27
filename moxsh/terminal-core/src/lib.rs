@@ -52,11 +52,21 @@ pub const MOXSH_ERR_PANIC: c_int = -99;
 /// 安装/恢复等长任务的进度回调：参数为 (消息, 已完成字节, 总字节)。
 pub(crate) type ProgressCallback = Box<dyn FnMut(&str, u64, u64)>;
 
-fn ffi_guard<F: FnOnce() -> c_int + std::panic::UnwindSafe>(f: F) -> c_int {
+/// FFI panic 屏障（通用版）：捕获闭包 unwind 并折叠为 `on_panic` 兜底值。
+/// 兜底值语义由各入口自行约定（错误码/空指针/-1/单元）。
+fn ffi_guard_ex<T, F>(f: F, on_panic: T) -> T
+where
+    F: FnOnce() -> T + std::panic::UnwindSafe,
+{
     match std::panic::catch_unwind(f) {
-        Ok(code) => code,
-        Err(_) => MOXSH_ERR_PANIC,
+        Ok(v) => v,
+        Err(_) => on_panic,
     }
+}
+
+/// 返回 `c_int` 错误码的入口统一用本包装：异常折叠为 -99。
+fn ffi_guard<F: FnOnce() -> c_int + std::panic::UnwindSafe>(f: F) -> c_int {
+    ffi_guard_ex(f, MOXSH_ERR_PANIC)
 }
 
 /// 读取 C 字符串为 Rust &str（非法 UTF-8 / null 返回 None）。
@@ -138,6 +148,12 @@ pub unsafe extern "C" fn moxsh_proot_install(
 /// `id`/`moxsh_root` 必须指向合法 NUL 结尾 UTF-8 字符串。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_proot_remove(id: *const c_char, moxsh_root: *const c_char) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_proot_remove_impl(id, moxsh_root) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_proot_remove_impl(id: *const c_char, moxsh_root: *const c_char) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     let (Some(id), Some(root)) = (read_opt_cstr(id), read_opt_cstr(moxsh_root)) else {
@@ -162,6 +178,17 @@ pub unsafe extern "C" fn moxsh_proot_login(
     out_buf: *mut c_char,
     cap: usize,
 ) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_proot_login_impl(id, moxsh_root, out_buf, cap) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_proot_login_impl(
+    id: *const c_char,
+    moxsh_root: *const c_char,
+    out_buf: *mut c_char,
+    cap: usize,
+) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     let (Some(id), Some(root)) = (read_opt_cstr(id), read_opt_cstr(moxsh_root)) else {
@@ -180,6 +207,16 @@ pub unsafe extern "C" fn moxsh_proot_login(
 /// `moxsh_root` 指向合法字符串；`out_buf` 指向至少 `cap` 字节可写内存。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_proot_list_installed(
+    moxsh_root: *const c_char,
+    out_buf: *mut c_char,
+    cap: usize,
+) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_proot_list_installed_impl(moxsh_root, out_buf, cap) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_proot_list_installed_impl(
     moxsh_root: *const c_char,
     out_buf: *mut c_char,
     cap: usize,
@@ -208,6 +245,16 @@ pub unsafe extern "C" fn moxsh_proot_list_installed(
 /// `id`/`moxsh_root`/`out_tar` 必须指向合法 NUL 结尾 UTF-8 字符串。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_proot_backup(
+    id: *const c_char,
+    moxsh_root: *const c_char,
+    out_tar: *const c_char,
+) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_proot_backup_impl(id, moxsh_root, out_tar) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_proot_backup_impl(
     id: *const c_char,
     moxsh_root: *const c_char,
     out_tar: *const c_char,
@@ -276,6 +323,16 @@ pub unsafe extern "C" fn moxsh_open_pty(
     cols: c_int,
     rows: c_int,
 ) -> *mut TerminalSession {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 空指针。
+    ffi_guard_ex(move || unsafe { moxsh_open_pty_impl(cmd, cols, rows) }, std::ptr::null_mut())
+}
+
+unsafe extern "C" fn moxsh_open_pty_impl(
+    cmd: *const c_char,
+    cols: c_int,
+    rows: c_int,
+) -> *mut TerminalSession {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     // P1 修复：cmd 判空（null 直接 CStr::from_ptr 是 UB）；尺寸钳制——
@@ -306,6 +363,16 @@ pub unsafe extern "C" fn moxsh_pump(
     buf: *mut u8,
     len: usize,
 ) -> isize {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -1。
+    ffi_guard_ex(move || unsafe { moxsh_pump_impl(sess, buf, len) }, -1)
+}
+
+unsafe extern "C" fn moxsh_pump_impl(
+    sess: *mut TerminalSession,
+    buf: *mut u8,
+    len: usize,
+) -> isize {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if sess.is_null() || buf.is_null() {
@@ -328,6 +395,16 @@ pub unsafe extern "C" fn moxsh_pump(
 /// `sess` 必须有效；`buf` 指向至少 `len` 字节。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_write(
+    sess: *mut TerminalSession,
+    buf: *const u8,
+    len: usize,
+) -> isize {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -1。
+    ffi_guard_ex(move || unsafe { moxsh_write_impl(sess, buf, len) }, -1)
+}
+
+unsafe extern "C" fn moxsh_write_impl(
     sess: *mut TerminalSession,
     buf: *const u8,
     len: usize,
@@ -355,6 +432,16 @@ pub unsafe extern "C" fn moxsh_resize(
     cols: c_int,
     rows: c_int,
 ) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_resize_impl(sess, cols, rows) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_resize_impl(
+    sess: *mut TerminalSession,
+    cols: c_int,
+    rows: c_int,
+) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if sess.is_null() {
@@ -373,6 +460,12 @@ pub unsafe extern "C" fn moxsh_resize(
 /// `sess` 必须来自 [`moxsh_open_pty`] 且未被释放；调用后指针失效。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_close(sess: *mut TerminalSession) {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 静默（资源回收留待进程退出）。
+    ffi_guard_ex(move || unsafe { moxsh_close_impl(sess) }, ())
+}
+
+unsafe extern "C" fn moxsh_close_impl(sess: *mut TerminalSession) {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if !sess.is_null() {
@@ -387,6 +480,12 @@ pub unsafe extern "C" fn moxsh_close(sess: *mut TerminalSession) {
 /// `sess` 必须有效。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_screen_rows(sess: *mut TerminalSession) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_screen_rows_impl(sess) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_screen_rows_impl(sess: *mut TerminalSession) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if sess.is_null() {
@@ -402,6 +501,12 @@ pub unsafe extern "C" fn moxsh_screen_rows(sess: *mut TerminalSession) -> c_int 
 /// `sess` 必须有效。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_screen_cols(sess: *mut TerminalSession) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_screen_cols_impl(sess) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_screen_cols_impl(sess: *mut TerminalSession) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if sess.is_null() {
@@ -417,6 +522,12 @@ pub unsafe extern "C" fn moxsh_screen_cols(sess: *mut TerminalSession) -> c_int 
 /// `sess` 必须有效。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_total_rows(sess: *mut TerminalSession) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_total_rows_impl(sess) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_total_rows_impl(sess: *mut TerminalSession) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if sess.is_null() {
@@ -433,6 +544,18 @@ pub unsafe extern "C" fn moxsh_total_rows(sess: *mut TerminalSession) -> c_int {
 /// `sess` 必须有效；`buf` 指向至少 `buflen` 字节。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_copy_cells(
+    sess: *mut TerminalSession,
+    start_row: c_int,
+    count: c_int,
+    buf: *mut u8,
+    buflen: usize,
+) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_copy_cells_impl(sess, start_row, count, buf, buflen) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_copy_cells_impl(
     sess: *mut TerminalSession,
     start_row: c_int,
     count: c_int,
@@ -472,6 +595,15 @@ pub unsafe extern "C" fn moxsh_mox_open(
     path: *const c_char,
     out_handle: *mut *mut moxpkg::MoxPackage,
 ) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_mox_open_impl(path, out_handle) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_mox_open_impl(
+    path: *const c_char,
+    out_handle: *mut *mut moxpkg::MoxPackage,
+) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     let Some(path) = read_opt_cstr(path) else {
@@ -497,6 +629,15 @@ pub unsafe extern "C" fn moxsh_mox_open(
 /// `handle` 必须来自 [`moxsh_mox_open`] 且未释放；`secret` 指向合法字符串。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_mox_verify(
+    handle: *mut moxpkg::MoxPackage,
+    secret: *const c_char,
+) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_mox_verify_impl(handle, secret) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_mox_verify_impl(
     handle: *mut moxpkg::MoxPackage,
     secret: *const c_char,
 ) -> c_int {
@@ -554,6 +695,16 @@ pub unsafe extern "C" fn moxsh_mox_list(
     out_buf: *mut c_char,
     cap: usize,
 ) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_mox_list_impl(handle, out_buf, cap) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_mox_list_impl(
+    handle: *mut moxpkg::MoxPackage,
+    out_buf: *mut c_char,
+    cap: usize,
+) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if handle.is_null() {
@@ -578,6 +729,16 @@ pub unsafe extern "C" fn moxsh_mox_manifest(
     out_buf: *mut c_char,
     cap: usize,
 ) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_mox_manifest_impl(handle, out_buf, cap) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_mox_manifest_impl(
+    handle: *mut moxpkg::MoxPackage,
+    out_buf: *mut c_char,
+    cap: usize,
+) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if handle.is_null() {
@@ -598,6 +759,12 @@ pub unsafe extern "C" fn moxsh_mox_manifest(
 /// `handle` 必须来自 [`moxsh_mox_open`] 且未被释放过。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_mox_close(handle: *mut moxpkg::MoxPackage) {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind（extern "C" 边界 unwind 是 UB/abort），
+    // 异常折叠为 静默（资源回收留待进程退出）。
+    ffi_guard_ex(move || unsafe { moxsh_mox_close_impl(handle) }, ())
+}
+
+unsafe extern "C" fn moxsh_mox_close_impl(handle: *mut moxpkg::MoxPackage) {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
     if !handle.is_null() {

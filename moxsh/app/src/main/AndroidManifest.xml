@@ -10,7 +10,7 @@
 
     <application
         android:name=".MoxshApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="moxsh"
         android:supportsRtl="true"
         android:theme="@style/Theme.Moxsh.Glass">

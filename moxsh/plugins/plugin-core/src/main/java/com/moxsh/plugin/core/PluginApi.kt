@@ -297,6 +297,10 @@ class PluginApi internal constructor(
         }
 
         private fun request(method: String, url: String, body: ByteArray?, headers: Map<String, String>): HttpResponse {
+            // P2 修复：仅允许 http/https——file:// 会走 FileURLConnection，
+            // 持有 network 权限的插件可借此读取应用私有文件，绕过权限隔离。
+            val proto = url.substringBefore("://").lowercase()
+            require(proto == "http" || proto == "https") { "net 仅支持 http/https，拒绝 $proto" }
             val conn = URL(url).openConnection() as HttpURLConnection
             conn.requestMethod = method
             conn.connectTimeout = 15_000

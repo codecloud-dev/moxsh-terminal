@@ -15,6 +15,7 @@ import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -597,11 +598,22 @@ object BootstrapState {
     @Volatile
     var onReady: (() -> Unit)? = null
 
+    /** begin 互斥锁：重试按钮连点 / Application 自启并发时防止双份安装交错写盘。 */
+    private val beginMutex = kotlinx.coroutines.sync.Mutex()
+
     /**
      * 一键就绪流水线：已就绪直接 Ready；否则安装 bootstrap → 建立 $PREFIX 布局。
      * 幂等：并发调用时后到者直接等待当前状态（简化处理：Application 只启动一次）。
      */
     suspend fun begin(ctx: Context) {
+        if (_state.value is State.Ready) return
+        // P2 修复：互斥——同刻只允许一个安装流水线（重试与自启并发）
+        beginMutex.withLock {
+            beginLocked(ctx)
+        }
+    }
+
+    private suspend fun beginLocked(ctx: Context) {
         if (_state.value is State.Ready) return
         if (BootstrapInstaller.isReady(ctx)) {
             CompatShim.ensurePrefixLayout()
