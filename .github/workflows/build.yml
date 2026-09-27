@@ -52,7 +52,12 @@ jobs:
             moxsh/terminal-core/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('moxsh/terminal-core/Cargo.lock') }}
       - name: Install cargo-ndk
-        run: cargo install cargo-ndk --version "^4"
+        run: |
+          if command -v cargo-ndk >/dev/null 2>&1; then
+            echo "cargo-ndk 已存在，跳过安装"
+          else
+            cargo install cargo-ndk --version "^4" --locked
+          fi
 
       - name: Setup Gradle 8.9 (含缓存)
         uses: gradle/actions/setup-gradle@v4
