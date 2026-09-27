@@ -1,0 +1,92 @@
+name: Rust 检查（内核质量门）
+
+# terminal-core（Rust 内核）的快速质量门：
+#   - 单元测试（含 SHA-256 NIST 向量、P0/P1 回归）
+#   - clippy 静态检查（当前为警告级：存量 31 条风格警告待清理，清零后升 -D warnings）
+#   - cargo audit 依赖漏洞扫描
+#   - Android 目标（aarch64）交叉编译检查——PR 与主分支均执行，
+#     确保内核改动不破坏 NDK 构建（完整 APK 构建见 build.yml）
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "moxsh/terminal-core/**"
+      - "moxsh/rust-toolchain.toml"
+      - ".github/workflows/rust-check.yml"
+  pull_request:
+    paths:
+      - "moxsh/terminal-core/**"
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 测试（host target）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装工具链（跟随 rust-toolchain.toml 钉死 1.86.0）
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: moxsh/terminal-core
+      - name: cargo test
+        working-directory: moxsh/terminal-core
+        run: cargo test --lib
+
+  clippy:
+    name: Clippy 静态检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: moxsh/terminal-core
+      - name: cargo clippy
+        working-directory: moxsh/terminal-core
+        run: cargo clippy --all-targets
+
+  audit:
+    name: 依赖漏洞扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+      - name: 安装 cargo-audit
+        run: cargo install cargo-audit --locked
+        # 安装慢可换 taiki-e/install-action@v2 加速二进制拉取
+      - name: cargo audit
+        working-directory: moxsh/terminal-core
+        run: cargo audit
+
+  ndk-cross:
+    name: Android aarch64 交叉编译检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: moxsh/terminal-core
+      - name: cargo check --target aarch64-linux-android
+        working-directory: moxsh/terminal-core
+        run: cargo check --lib --target aarch64-linux-android
+        env:
+          # check 阶段不链接，无需真实 NDK 工具链；提供占位 AR/CC 防构建脚本探测失败
+          AR_aarch64_linux_android: llvm-ar
+          CC_aarch64_linux_android: clang
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: clang
+
+# 覆盖率说明：tarpaulin 官方 docker 镜像在 GitHub Actions 里拉取慢且与 cdylib 目标
+# 兼容性一般，暂以「测试全绿 + clippy + audit」作为合并门槛；llvm-cov 覆盖率
+# 报告作为后续任务接入（见 roadmap）。

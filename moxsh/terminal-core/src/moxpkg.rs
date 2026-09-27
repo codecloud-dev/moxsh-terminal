@@ -677,6 +677,56 @@ mod tests {
         let _ = fs::remove_dir_all(std::env::temp_dir().join(format!("moxsh-mox-file-{}", std::process::id())));
     }
 
+    // P1 回归：payload 内符号链接条目（target 指向包外）必须被防御性跳过，
+    // 不落地、也不成为解压后目录树里的逃逸入口。
+    #[test]
+    fn test_extract_skips_symlink_escape() {
+        // 手工构造含恶意 symlink 的 .mox：build_tar 只写普通文件，
+        // 这里直接用 tar::Builder 的 append_link 造 "payload/evil -> 逃逸目标"。
+        let manifest = sample_manifest();
+        let mac = hmac_sha256(SECRET, manifest.as_bytes());
+        let hex: String = mac.iter().map(|b| format!("{:02x}", b)).collect();
+        let mut builder = tar::Builder::new(Vec::new());
+        for (name, data) in [
+            (ENTRY_MANIFEST, manifest.as_bytes().to_vec()),
+            (ENTRY_SIGNATURE, hex.into_bytes()),
+            ("payload/ok.bin", b"good".to_vec()),
+        ] {
+            let mut h = tar::Header::new_gnu();
+            h.set_size(data.len() as u64);
+            h.set_mode(0o644);
+            h.set_cksum();
+            builder.append_data(&mut h, name, data.as_slice()).unwrap();
+        }
+        // 恶意符号链接：target 用 .. 逃逸 out_dir（模拟恶意插件包）。
+        // 必须显式 set_size(0)：GNU symlink 的 size 字段若为空格，tar-rs 解析报错。
+        let mut h = tar::Header::new_gnu();
+        h.set_size(0);
+        h.set_mode(0o777);
+        // append_link 不会设置 entry_type（tar-rs 0.4.46 实证），必须显式声明 Symlink
+        h.set_entry_type(tar::EntryType::Symlink);
+        builder
+            .append_link(&mut h, "payload/evil", "../../../../etc/passwd")
+            .unwrap();
+        let bytes = builder.into_inner().unwrap();
+
+        let pkg = MoxPackage::open_from_bytes_for_test(&bytes).unwrap();
+        let out = tmp_dir("extract-symlink");
+        pkg.extract_to(&out).unwrap();
+        assert!(out.join("payload/ok.bin").is_file(), "正常 payload 文件应解压");
+        // 注意断言用 symlink_metadata（不跟随链接）：exists() 会 follow target，
+        // 在真实系统上逃逸链接可能"存在"（指向 /etc/passwd）而误判。
+        assert!(
+            out.join("payload/evil").symlink_metadata().is_err(),
+            "符号链接条目必须被防御性跳过（防逃逸写入口）"
+        );
+        let _ = fs::remove_dir_all(&out);
+        let _ = fs::remove_dir_all(std::env::temp_dir().join(format!(
+            "moxsh-mox-file-{}",
+            std::process::id()
+        )));
+    }
+
     // 7. 缺 manifest.json → NotAMox；缺必填字段 / 非法 type → BadManifest。
     #[test]
     fn test_missing_or_bad_manifest() {
