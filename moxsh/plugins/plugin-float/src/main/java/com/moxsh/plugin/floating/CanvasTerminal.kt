@@ -1,4 +1,4 @@
-package com.moxsh.plugin.float
+package com.moxsh.plugin.floating
 
 import android.graphics.Color
 import android.graphics.Paint

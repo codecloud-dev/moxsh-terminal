@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.moxsh.plugin.float"
+    namespace = "com.moxsh.plugin.floating"
     compileSdk = 34
 
     defaultConfig { minSdk = 28 }

@@ -1,4 +1,4 @@
-package com.moxsh.plugin.float
+package com.moxsh.plugin.floating
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
