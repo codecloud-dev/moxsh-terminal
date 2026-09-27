@@ -90,7 +90,7 @@ pub fn next_codepoint(buf: &[u8], pos: &mut usize) -> Option<u32> {
         1 => true,
         2 => code >= 0x80,
         3 => code >= 0x800 && !(0xd800..=0xdfff).contains(&code),
-        4 => code >= 0x1_0000 && code <= 0x10_ffff,
+        4 => (0x1_0000..=0x10_ffff).contains(&code),
         _ => false,
     };
     if !valid {
