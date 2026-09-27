@@ -45,7 +45,11 @@ impl Parser {
     }
 
     fn push_param(&mut self) {
-        self.params.push(self.cur_param);
+        // P1 修复：参数个数上限 32（VT 兼容上限），超出丢弃——防 `ESC[;;;;...` 把
+        // params Vec 撑到无界（每字节 4B 内存）。
+        if self.params.len() < 32 {
+            self.params.push(self.cur_param);
+        }
         self.cur_param = 0;
     }
 
@@ -199,7 +203,12 @@ impl Parser {
     fn csi_param(&mut self, screen: &mut Screen, b: u8) {
         match b {
             b'0'..=b'9' => {
-                self.cur_param = self.cur_param * 10 + (b - b'0') as u32;
+                // P1 修复：saturating + 上限钳制，防 u32 回绕与天文数字参数
+                self.cur_param = self
+                    .cur_param
+                    .saturating_mul(10)
+                    .saturating_add((b - b'0') as u32)
+                    .min(65_535);
             }
             b';' => {
                 self.push_param();
@@ -237,12 +246,18 @@ impl Parser {
             b'J' => screen.erase_in_display(n0),
             b'K' => screen.erase_in_line(n0),
             b'L' => {
-                for _ in 0..n0.max(1) {
+                // P1 修复：滚动次数钳制到行数（等价语义：一次滚 N 行 == 多次滚 1 行直到 N 行），
+                // 防恶意大参数触发天文数字次全网格拷贝。
+                let n = n0.max(1).min(screen.rows as u32);
+                for _ in 0..n {
                     screen.scroll_down(1);
                 }
             }
             b'M' => {
-                for _ in 0..n0.max(1) {
+                // P1 修复：滚动次数钳制到行数（等价语义：一次滚 N 行 == 多次滚 1 行直到 N 行），
+                // 防恶意大参数触发天文数字次全网格拷贝。
+                let n = n0.max(1).min(screen.rows as u32);
+                for _ in 0..n {
                     screen.scroll_up(1);
                 }
             }
@@ -271,12 +286,18 @@ impl Parser {
                 screen.mark(y);
             }
             b'S' => {
-                for _ in 0..n0.max(1) {
+                // P1 修复：滚动次数钳制到行数（等价语义：一次滚 N 行 == 多次滚 1 行直到 N 行），
+                // 防恶意大参数触发天文数字次全网格拷贝。
+                let n = n0.max(1).min(screen.rows as u32);
+                for _ in 0..n {
                     screen.scroll_up(1);
                 }
             }
             b'T' => {
-                for _ in 0..n0.max(1) {
+                // P1 修复：滚动次数钳制到行数（等价语义：一次滚 N 行 == 多次滚 1 行直到 N 行），
+                // 防恶意大参数触发天文数字次全网格拷贝。
+                let n = n0.max(1).min(screen.rows as u32);
+                for _ in 0..n {
                     screen.scroll_down(1);
                 }
             }
@@ -321,7 +342,11 @@ impl Parser {
             }
             self.state = State::Ground;
         } else if b >= 0x20 {
-            self.osc_buf.push(b as char);
+            // P2 修复：OSC 缓冲上限 4KiB，超出进入静默丢弃态（仍消费字节直到终止符），
+            // 防无终止符的无限 OSC 流把 String 撑到 OOM。
+            if self.osc_buf.len() < 4096 {
+                self.osc_buf.push(b as char);
+            }
         }
     }
 }

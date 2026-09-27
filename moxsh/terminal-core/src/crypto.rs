@@ -112,20 +112,42 @@ pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
 
 /// 用系统随机数填充 `buf`（libc getrandom）。失败返回 false。
 pub fn random_bytes(buf: &mut [u8]) -> bool {
-    unsafe {
-        let r = libc::getrandom(
-            buf.as_mut_ptr() as *mut libc::c_void,
-            buf.len(),
-            0,
-        );
-        r == buf.len() as libc::ssize_t
+    // P1 修复：getrandom 允许短读且可被信号打断（EINTR），必须循环读满；
+    // 一次调用读不满就返回 false 会让 nonce 退化为固定全零（挑战熵归零）。
+    let mut off = 0usize;
+    while off < buf.len() {
+        let n = unsafe {
+            libc::getrandom(
+                buf[off..].as_mut_ptr() as *mut libc::c_void,
+                buf.len() - off,
+                0,
+            )
+        };
+        if n < 0 {
+            if unsafe { *libc::__errno_location() } == libc::EINTR {
+                continue;
+            }
+            return fill_from_urandom(&mut buf[off..]);
+        }
+        off += n as usize;
     }
+    true
+}
+
+/// /dev/urandom 兜底（getrandom 不可用时；Android 恒有此节点）。
+fn fill_from_urandom(buf: &mut [u8]) -> bool {
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| std::io::Read::read_exact(&mut f, buf))
+        .is_ok()
 }
 
 /// 生成 16 字节十六进制 nonce 字符串。
 pub fn nonce_hex() -> String {
     let mut b = [0u8; 16];
-    random_bytes(&mut b);
+    if !random_bytes(&mut b) {
+        // 理论上不可达（getrandom + urandom 双保险）；宁可短 nonce 也绝不固定全零。
+        return String::new();
+    }
     b.iter()
         .map(|x| format!("{:02x}", x))
         .collect::<String>()

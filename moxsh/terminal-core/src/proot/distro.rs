@@ -149,6 +149,25 @@ impl DistroManager {
         self.root.join("containers")
     }
 
+    /// 发行版 id 白名单校验（P1 修复）：id 来自外部字符串（C-ABI/CLI/云端清单），
+    /// 直接拼路径会造成 remove 任意目录删除 / install 任意位置创建。
+    /// 规则：1..=64 长度，仅字母数字与 `._-`，不得以 `.` 开头（防 `..` 与隐藏目录）。
+    pub fn valid_id(id: &str) -> bool {
+        !id.is_empty()
+            && id.len() <= 64
+            && !id.starts_with('.')
+            && id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+    }
+
+    /// 校验失败统一错误。
+    fn check_id(&self, id: &str) -> ProotResult<()> {
+        if Self::valid_id(id) {
+            Ok(())
+        } else {
+            Err(ProotError::InvalidArg("id".to_string()))
+        }
+    }
+
     /// 单容器 rootfs 路径。
     pub fn distro_rootfs(&self, id: &str) -> PathBuf {
         self.containers_dir().join(id).join("rootfs")
@@ -238,6 +257,7 @@ impl DistroManager {
         tar_cache: Option<&Path>,
         cb: ProgressCb,
     ) -> ProotResult<()> {
+        self.check_id(spec.id)?; // P1：id 路径白名单
         let rootfs = self.distro_rootfs(spec.id);
         if rootfs.is_dir() {
             return Err(ProotError::DistroAlreadyInstalled(spec.id.to_string()));
@@ -295,6 +315,7 @@ impl DistroManager {
         sha256_opt: Option<&str>,
         cb: ProgressCb,
     ) -> ProotResult<()> {
+        self.check_id(id)?; // P1：id 路径白名单
         let rootfs = self.distro_rootfs(id);
         if rootfs.is_dir() {
             return Err(ProotError::DistroAlreadyInstalled(id.to_string()));
@@ -329,6 +350,7 @@ impl DistroManager {
 
     /// 删除发行版（先删标记再删目录，防呆：不存在报 DistroNotInstalled）。
     pub fn remove(&self, id: &str) -> ProotResult<()> {
+        self.check_id(id)?; // P1：防 "../../xxx" 任意目录删除
         let dir = self.containers_dir().join(id);
         if !dir.is_dir() {
             return Err(ProotError::DistroNotInstalled(id.to_string()));
@@ -339,6 +361,7 @@ impl DistroManager {
 
     /// 备份：把 rootfs 打包为 tar.gz（`<id>/rootfs` 顶级目录，恢复时可校验布局）。
     pub fn backup(&self, id: &str, out_tar: &Path) -> ProotResult<()> {
+        self.check_id(id)?; // P1：id 路径白名单
         let rootfs = self.distro_rootfs(id);
         if !rootfs.is_dir() {
             return Err(ProotError::DistroNotInstalled(id.to_string()));
@@ -354,6 +377,7 @@ impl DistroManager {
 
     /// 恢复：从备份 tar.gz 还原到指定 id 的 rootfs（覆盖已有）。
     pub fn restore(&self, id: &str, tar_path: &Path) -> ProotResult<()> {
+        self.check_id(id)?; // P1：id 路径白名单
         let rootfs = self.distro_rootfs(id);
         if rootfs.is_dir() {
             fs::remove_dir_all(&rootfs)?;
@@ -367,6 +391,7 @@ impl DistroManager {
     /// 生成登录命令行（完整 proot 调用，供 PTY 层直接执行；
     /// 对齐 proot-distro `login --get-proot-cmd` 的输出形态）。
     pub fn login_cmd(&self, id: &str) -> ProotResult<String> {
+        self.check_id(id)?; // P1：id 路径白名单
         let rootfs = self.distro_rootfs(id);
         if !rootfs.is_dir() {
             return Err(ProotError::DistroNotInstalled(id.to_string()));
@@ -535,10 +560,43 @@ pub fn extract_tar(archive: &Path, dest: &Path) -> ProotResult<()> {
     if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
         let f = fs::File::open(archive)?;
         let mut ar = tar::Archive::new(GzDecoder::new(f));
-        // 安全：拒绝绝对路径与 .. 逃逸（tar crate 默认 sets_path_prefix 会拒绝，
-        // 这里显式关掉 preserve_permissions 之类需要特权的选项）。
         ar.set_preserve_permissions(false);
-        ar.unpack(dest).map_err(|e| ProotError::ExtractFailed(format!("{}: {}", name, e)))?;
+        // P1 修复（符号链接写穿）：rootfs 需要合法相对链接（bin/sh -> dash 等），
+        // 不能像 .mox 一样全跳过；改为逐条目解包并校验链接 target：
+        //   - 绝对 target 一律拒绝（合法 rootfs 链接均为相对）；
+        //   - 相对 target 按组件级推演（处理 ..），解析结果必须仍落在 dest 内。
+        // 这样"链接 + 后续经链接写文件"也无法越过 dest 边界。
+        let dest_abs = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+        for entry in ar
+            .entries()
+            .map_err(|e| ProotError::ExtractFailed(format!("{}: {}", name, e)))?
+        {
+            let mut e = entry.map_err(ProotError::Io)?;
+            let et = e.header().entry_type();
+            if et.is_symlink() || et.is_hard_link() {
+                let link_path = e.path().map_err(ProotError::Io)?.to_path_buf();
+                if !link_path.is_absolute() && link_path.components().all(|c| match c {
+                    std::path::Component::Normal(_) | std::path::Component::CurDir => true,
+                    _ => false,
+                }) {
+                    let target = e.link_name().map_err(ProotError::Io)?.unwrap_or_default();
+                    let escape = if target.is_absolute() {
+                        true
+                    } else {
+                        let parent = link_path.parent().unwrap_or(std::path::Path::new(""));
+                        let resolved = resolve_under(dest, parent, &target);
+                        !resolved.starts_with(&dest_abs)
+                    };
+                    if escape {
+                        continue; // 逃逸链接：防御性跳过
+                    }
+                } else {
+                    continue; // 链接自身路径非法（绝对/含 ..）：跳过
+                }
+            }
+            e.unpack_in(dest)
+                .map_err(|err| ProotError::ExtractFailed(format!("{}: {}", name, err)))?;
+        }
         Ok(())
     } else if lower.ends_with(".tar.xz") || lower.ends_with(".tar.zst") || lower.ends_with(".txz") {
         let st = Command::new("tar")
@@ -559,7 +617,9 @@ pub fn extract_tar(archive: &Path, dest: &Path) -> ProotResult<()> {
             Ok(f) => {
                 let mut ar = tar::Archive::new(GzDecoder::new(f));
                 ar.set_preserve_permissions(false);
-                match ar.unpack(dest) {
+                let _ = ar.entries(); // 探测：仅消费错误（下方统一走 extract_tar_gz_checked）
+                let f2 = fs::File::open(archive)?;
+                match extract_tar_gz_checked(f2, dest) {
                     Ok(()) => Ok(()),
                     Err(_) => {
                         let st = Command::new("tar")
@@ -678,4 +738,60 @@ deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef  other-rootfs.t
             assert_eq!(fetch_expected_sha256(&spec), None);
         }
     }
+}
+
+
+/// 组件级路径推演：从 `base` 出发依次应用 `parent` 与 `rel` 的组件（处理 ..），
+/// 不触碰文件系统（解压前的纯推演）。
+fn resolve_under(base: &Path, parent: &Path, rel: &Path) -> std::path::PathBuf {
+    let mut cur = base.to_path_buf();
+    for c in parent.components() {
+        if let std::path::Component::Normal(p) = c {
+            cur.push(p);
+        }
+    }
+    for c in rel.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                cur.pop();
+            }
+            std::path::Component::Normal(p) => cur.push(p),
+            std::path::Component::CurDir => {}
+            _ => {}
+        }
+    }
+    cur
+}
+
+/// tar.gz 逐条目校验解压（symlink target 逃逸防护，见 extract_tar 注释）。
+fn extract_tar_gz_checked(f: fs::File, dest: &Path) -> ProotResult<()> {
+    let mut ar = tar::Archive::new(GzDecoder::new(f));
+    ar.set_preserve_permissions(false);
+    let dest_abs = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+    for entry in ar.entries().map_err(ProotError::Io)? {
+        let mut e = entry.map_err(ProotError::Io)?;
+        let et = e.header().entry_type();
+        if et.is_symlink() || et.is_hard_link() {
+            let link_path = e.path().map_err(ProotError::Io)?.to_path_buf();
+            let ok_path = !link_path.is_absolute()
+                && link_path
+                    .components()
+                    .all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir));
+            if !ok_path {
+                continue;
+            }
+            let target = e.link_name().map_err(ProotError::Io)?.unwrap_or_default();
+            let escape = if target.is_absolute() {
+                true
+            } else {
+                let parent = link_path.parent().unwrap_or(std::path::Path::new(""));
+                !resolve_under(dest, parent, &target).starts_with(&dest_abs)
+            };
+            if escape {
+                continue;
+            }
+        }
+        e.unpack_in(dest).map_err(|err| ProotError::ExtractFailed(format!("{}", err)))?;
+    }
+    Ok(())
 }

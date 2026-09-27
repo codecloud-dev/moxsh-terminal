@@ -272,7 +272,10 @@ impl Screen {
             self.cursor_x = x + w;
             if self.cursor_x >= self.cols && self.auto_wrap {
                 self.pending_wrap = true;
-                self.cursor_x = self.cols;
+                // P0 修复：pending_wrap 态光标停在最后一列（而非 cols）。
+                // 推到 cols 会让 EL1/ED1/DCH 等"以 cursor_x 为端点"的序列越界 panic
+                // （panic 穿越 extern "C" 直接 abort App）；换行动作由 pending_wrap 分支处理。
+                self.cursor_x = self.cols.saturating_sub(1);
             }
         }
     }
@@ -350,7 +353,12 @@ impl Screen {
             }
             1 => {
                 for r in 0..self.rows {
-                    let end = if r == self.cursor_y { self.cursor_x + 1 } else { self.cols };
+                    // 防御：终点钳制到 cols，防 cursor_x 越界写穿行尾
+                    let end = if r == self.cursor_y {
+                        (self.cursor_x + 1).min(self.cols)
+                    } else {
+                        self.cols
+                    };
                     for c in 0..end {
                         *self.cell_at_mut(r, c) = Cell::default();
                     }
@@ -378,7 +386,9 @@ impl Screen {
                 }
             }
             1 => {
-                for c in 0..=self.cursor_x {
+                // 防御：cursor_x 理论上不应 >= cols（P0 已修），此处钳制兜底
+                let end = self.cursor_x.min(self.cols.saturating_sub(1));
+                for c in 0..=end {
                     *self.cell_at_mut(y, c) = Cell::default();
                 }
             }
@@ -412,8 +422,9 @@ impl Screen {
     }
 
     pub fn restore_cursor(&mut self) {
-        self.cursor_x = self.saved_x;
-        self.cursor_y = self.saved_y;
+        // 双保险：恢复时再钳制一次（防外部直接改 saved_* 或历史状态残留）
+        self.cursor_x = self.saved_x.min(self.cols.saturating_sub(1));
+        self.cursor_y = self.saved_y.min(self.rows.saturating_sub(1));
         self.pending_wrap = false;
     }
 
@@ -491,8 +502,13 @@ impl Screen {
         self.rows = rows;
         self.scroll_top = 0;
         self.scroll_bottom = rows - 1;
-        self.cursor_x = self.cursor_x.min(cols - 1);
-        self.cursor_y = self.cursor_y.min(rows - 1);
+        self.cursor_x = self.cursor_x.min(cols.saturating_sub(1));
+        self.cursor_y = self.cursor_y.min(rows.saturating_sub(1));
+        // P1 修复：save/restore 的光标同样要随 resize 钳制，
+        // 否则 ESC7 → 缩小 → ESC8 恢复出越界光标，后续写格 panic。
+        self.saved_x = self.saved_x.min(cols.saturating_sub(1));
+        self.saved_y = self.saved_y.min(rows.saturating_sub(1));
+        self.pending_wrap = false;
         self.dirty.clear();
     }
 
@@ -624,7 +640,9 @@ mod tests {
         for c in ['A', 'B', 'C', 'D'] {
             s.put_char(c as u32);
         }
-        assert_eq!(s.cursor_x, 4); // 行满停在行尾（pending_wrap）
+        // P0 修复后语义：行满光标停在最后一列 + pending_wrap=true（不再推到 cols 越界）
+        assert_eq!(s.cursor_x, 3);
+        assert!(s.pending_wrap);
         s.put_char('E' as u32); // 回绕
         assert_eq!(s.cell_at(0, 0).code, 'A' as u32);
         assert_eq!(s.cell_at(1, 0).code, 'E' as u32);

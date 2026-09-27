@@ -279,10 +279,17 @@ pub unsafe extern "C" fn moxsh_open_pty(
 ) -> *mut TerminalSession {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
+    // P1 修复：cmd 判空（null 直接 CStr::from_ptr 是 UB）；尺寸钳制——
+    // cols/rows 为 0 会引发 Screen 内部 rows-1 下溢/除零，负数 as u32 会爆分配。
+    if cmd.is_null() {
+        return std::ptr::null_mut();
+    }
     let Ok(cmd) = std::ffi::CStr::from_ptr(cmd).to_str() else {
         return std::ptr::null_mut();
     };
-    match TerminalSession::spawn(cmd, cols as u32, rows as u32) {
+    let cols = cols.clamp(2, 500) as u32;
+    let rows = rows.clamp(1, 200) as u32;
+    match TerminalSession::spawn(cmd, cols, rows) {
         Ok(s) => Box::into_raw(Box::new(s)),
         Err(_) => std::ptr::null_mut(),
     }
