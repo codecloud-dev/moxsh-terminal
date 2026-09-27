@@ -3,28 +3,28 @@
 > 一个**全面兼容 Termux 生态**、**性能更强**、**全应用液态玻璃（glassmorphism）UI**、**面向国内优化**、**云端 CI 出 APK** 的终端应用。  
 > 核心原则：**运行架构 100% 自研（clean-room，不沿用 Termux 任何代码），但产物仍兼容 termux-packages 官方仓库**。
 
+
+
 ---
 
 ## 本仓库交付物
 
-| 路径                                        | 内容                                        |
-| ----------------------------------------- | ----------------------------------------- |
+| 路径                                        | 内容                                                     |
+| ----------------------------------------- | ------------------------------------------------------ |
 | `moxsh/`                                  | **可编译工程（13 模块，M1–M5 完成）+ 云端 CI**（详见 `moxsh/README.md`） |
-| `.github/workflows/build.yml`             | GitHub Actions：push 即构建并上传 APK            |
-| `docs/architecture.md`                    | 架构白皮书 v0.5（含 18 项已拍定决策）                   |
-| `docs/roadmap.md`                         | **开发路线图**（M1–M5 ✅，权威进度清单）                 |
-| `docs/commands.md`                        | Termux 命令体系盘点（来自源码）                       |
-| `docs/plugins-rewrite.md`                 | 6 插件重写方案（含代码片段，X11 递延）                    |
-| `research/termux-plugins-shortcomings.md` | 插件缺点调研（12 条，带来源）                          |
-| `research/build-pitfalls.md`              | 构建踩坑（48 条，带来源）                            |
-| `clone.sh`                                | 本地拉取 Termux 官方参考源码的脚本（仅参考，非 moxsh 代码）   |
-| `README.en.md`                            | **英文版 README**（与本文同步）                        |
-| `docs/PUSH_GUIDE.md`                       | **中文一步步推送指南**（首次推 GitHub 用）               |
-| `push_to_github.sh`                        | 一键建仓 + 推送脚本（在你本机/已连 GitHub 的终端运行）       |
+| `.github/workflows/build.yml`             | GitHub Actions：push 即构建并上传 APK                         |
+| `docs/architecture.md`                    | 架构白皮书 v0.5（含 18 项已拍定决策）                                |
+| `docs/roadmap.md`                         | **开发路线图**（M1–M5 ✅，权威进度清单）                              |
+| `docs/commands.md`                        | Termux 命令体系盘点（来自源码）                                    |
+| `docs/plugins-rewrite.md`                 | 6 插件重写方案（含代码片段，X11 递延）                                 |
+| `research/termux-plugins-shortcomings.md` | 插件缺点调研（12 条，带来源）                                       |
+| `research/build-pitfalls.md`              | 构建踩坑（48 条，带来源）                                         |
+| `clone.sh`                                | 本地拉取 Termux 官方参考源码的脚本（仅参考，非 moxsh 代码）                  |
+| `README.en.md`                            | **英文版 README**（与本文同步）                                  |
+| `docs/PUSH_GUIDE.md`                      | **中文一步步推送指南**（首次推 GitHub 用）                            |
+| `push_to_github.sh`                       | 一键建仓 + 推送脚本（在你本机/已连 GitHub 的终端运行）                      |
 
 > **关于 `termux-src/`**：它是 Termux 官方源码的**本地参考克隆**，仅用于研究，**不纳入本仓库**（见 `.gitignore`），moxsh **不复制**其中任何代码。需要对照阅读时本地执行 `bash clone.sh` 即可。
-
-
 
 ---
 
@@ -65,15 +65,15 @@
 
 ## 阶段路线（详见 `docs/roadmap.md`，权威进度清单）
 
-| 阶段 | 目标                                               | 状态 |
-| -- | ------------------------------------------------ | -- |
-| M1 | 工程脚手架 + CI + 玻璃外壳 + 自研运行环境骨架                     | ✅ |
-| M2 | Rust 终端内核（PTY/VT 解析/回滚）+ NEON 热路径 + 会话引擎          | ✅ |
-| M3 | 玻璃 UI 主体 + 真实终端渲染 + 7 插件（float/styling/api/boot/tasker/widget/core） | ✅ |
-| M4 | PRoot 引擎 + 图形化管理四件套 + .mox 商店 + AI Agent（18 决策全落地） | ✅ |
-| M5 | Bootstrap 首装流水线 + 回滚 mmap 兜底 + Rust 单测补全（33 个）    | ✅ |
-| M6 | 首个可安装 APK（推 GitHub → Actions 出包 → 真机联调）           | ⏳ 待推仓库 |
-| M7 | 性能打磨（120Hz/glyph atlas/syscall 热路径）+ 本地小模型 + 支付抽成 | ⏳ |
+| 阶段 | 目标                                                                  | 状态     |
+| -- | ------------------------------------------------------------------- | ------ |
+| M1 | 工程脚手架 + CI + 玻璃外壳 + 自研运行环境骨架                                        | ✅      |
+| M2 | Rust 终端内核（PTY/VT 解析/回滚）+ NEON 热路径 + 会话引擎                            | ✅      |
+| M3 | 玻璃 UI 主体 + 真实终端渲染 + 7 插件（float/styling/api/boot/tasker/widget/core） | ✅      |
+| M4 | PRoot 引擎 + 图形化管理四件套 + .mox 商店 + AI Agent（18 决策全落地）                  | ✅      |
+| M5 | Bootstrap 首装流水线 + 回滚 mmap 兜底 + Rust 单测补全（33 个）                      | ✅      |
+| M6 | 首个可安装 APK（推 GitHub → Actions 出包 → 真机联调）                             | ⏳ 待推仓库 |
+| M7 | 性能打磨（120Hz/glyph atlas/syscall 热路径）+ 本地小模型 + 支付抽成                   | ⏳      |
 
 ---
 
