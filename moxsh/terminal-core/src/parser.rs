@@ -79,6 +79,9 @@ impl Parser {
     }
 
     fn ground(&mut self, screen: &mut Screen, b: u8) {
+        if b == 0x7f {
+            return; // P3：DEL 不写入格子（0x7f 是删除而非可见字符）
+        }
         match b {
             0x1b => self.state = State::Escape,
             0x0d => {

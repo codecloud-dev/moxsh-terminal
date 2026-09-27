@@ -84,6 +84,18 @@ pub fn next_codepoint(buf: &[u8], pos: &mut usize) -> Option<u32> {
         code = (code << 6) | (b as u32 & 0x3f);
     }
     *pos += len;
+    // P3 修复：拒绝 overlong 编码、UTF-16 代理区、超界码点——
+    // 非法序列统一按 1 字节消费并返回 U+FFFD（替换符），防乱码直写 Cell。
+    let valid = match len {
+        1 => true,
+        2 => code >= 0x80,
+        3 => code >= 0x800 && !(0xd800..=0xdfff).contains(&code),
+        4 => code >= 0x1_0000 && code <= 0x10_ffff,
+        _ => false,
+    };
+    if !valid {
+        return Some(0xfffd);
+    }
     Some(code)
 }
 

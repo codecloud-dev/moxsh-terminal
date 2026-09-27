@@ -47,7 +47,9 @@ impl<T> RingBuffer<T> {
     }
 
     /// 按逻辑索引（0=最老）取项。
+    /// P3：越界直接断言（契约编码进实现，调用方误用即 panic 而非 UB）。
     pub fn get(&self, idx: usize) -> &T {
+        assert!(idx < self.len, "ring index {idx} out of range (len={})", self.len);
         let i = if self.len < self.cap {
             idx
         } else {
