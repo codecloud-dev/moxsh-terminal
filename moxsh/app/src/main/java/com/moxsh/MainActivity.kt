@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.wrapContentSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -299,7 +300,7 @@ fun MoxshRoot() {
                         ) {
                             when (val s = bootState) {
                                 is BootstrapState.State.Running -> Column(
-                                    Modifier.align(Alignment.Center).padding(20.dp),
+                                    Modifier.fillMaxWidth().wrapContentSize(Alignment.Center).padding(20.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
                                     Text("正在准备运行环境", color = GlassTokens.onGlass)
@@ -312,7 +313,7 @@ fun MoxshRoot() {
                                     Text(s.message, color = GlassTokens.onGlassDim)
                                 }
                                 is BootstrapState.State.Failed -> Column(
-                                    Modifier.align(Alignment.Center).padding(20.dp),
+                                    Modifier.fillMaxWidth().wrapContentSize(Alignment.Center).padding(20.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
                                     Text("运行环境安装失败", color = GlassTokens.onGlass)

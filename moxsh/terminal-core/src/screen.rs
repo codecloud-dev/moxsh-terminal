@@ -33,13 +33,110 @@ impl Cell {
 }
 
 /// 近似 wcwidth：返回字符占据的列宽（0/1/2）。
-/// 覆盖常见全角/CJK/emoji 范围，足够终端显示使用。
+///
+/// P2 修复：补齐零宽/组合字符（返回 0，中文乱位主因之一）、
+/// Unicode 13+ 常用 emoji 宽字符（EAW=W）、CJK 扩展 B~F、肤色修饰符。
+/// 范围表依据 Unicode EastAsianWidth（W/F 集合的常用子集），按 lo 升序排列。
+fn in_ranges(c: u32, ranges: &[(u32, u32)]) -> bool {
+    ranges
+        .binary_search_by(|&(lo, hi)| {
+            if c < lo {
+                std::cmp::Ordering::Greater
+            } else if c > hi {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
+/// 零宽集合：组合附加符号、变体选择符（emoji 序列必需）、零宽控制符、肤色修饰符。
+const ZERO_WIDTH_RANGES: &[(u32, u32)] = &[
+    (0x0300, 0x036f),
+    (0x0483, 0x0489),
+    (0x0591, 0x05bd),
+    (0x0610, 0x061a),
+    (0x064b, 0x065f),
+    (0x0670, 0x0670),
+    (0x06d6, 0x06dc),
+    (0x0900, 0x0902),
+    (0x093a, 0x093a),
+    (0x093c, 0x093c),
+    (0x0941, 0x0948),
+    (0x094d, 0x094d),
+    (0x0e31, 0x0e31),
+    (0x0e34, 0x0e3a),
+    (0x0e47, 0x0e4e),
+    (0x1ab0, 0x1aff),
+    (0x1dc0, 0x1dff),
+    (0x200b, 0x200f),
+    (0x202a, 0x202e),
+    (0x2060, 0x2064),
+    (0x20d0, 0x20f0),
+    (0xfe00, 0xfe0f),
+    (0xfe20, 0xfe2f),
+    (0xfeff, 0xfeff),
+    (0x1f3fb, 0x1f3ff),
+    (0xe0100, 0xe01ef),
+];
+
+/// 宽字符补充集合：常用 emoji（EAW=W）、CJK 扩展、西夏文、注音变体等。
+const WIDE_EXTRA_RANGES: &[(u32, u32)] = &[
+    (0x16fe0, 0x16fe4),
+    (0x17000, 0x187f7),
+    (0x18800, 0x18cd5),
+    (0x1b000, 0x1b2fb),
+    (0x231a, 0x231b),
+    (0x2329, 0x232a),
+    (0x23e9, 0x23ec),
+    (0x23f0, 0x23f0),
+    (0x23f3, 0x23f3),
+    (0x25fd, 0x25fe),
+    (0x2614, 0x2615),
+    (0x2648, 0x2653),
+    (0x267f, 0x267f),
+    (0x2693, 0x2693),
+    (0x26a1, 0x26a1),
+    (0x26aa, 0x26ab),
+    (0x26bd, 0x26be),
+    (0x26c4, 0x26c5),
+    (0x26ce, 0x26ce),
+    (0x26d4, 0x26d4),
+    (0x26ea, 0x26ea),
+    (0x26f2, 0x26f3),
+    (0x26f5, 0x26f5),
+    (0x26fa, 0x26fd),
+    (0x2705, 0x2705),
+    (0x270a, 0x270b),
+    (0x2728, 0x2728),
+    (0x274c, 0x274c),
+    (0x274e, 0x274e),
+    (0x2753, 0x2755),
+    (0x2757, 0x2757),
+    (0x2795, 0x2797),
+    (0x27b0, 0x27b0),
+    (0x27bf, 0x27bf),
+    (0x2b1b, 0x2b1c),
+    (0x2b50, 0x2b50),
+    (0x2b55, 0x2b55),
+    (0x2ebf0, 0x2ee5d),
+    (0x1f004, 0x1f004),
+    (0x1f0cf, 0x1f0cf),
+    (0x1f18e, 0x1f18e),
+    (0x1f191, 0x1f19a),
+    (0x1f200, 0x1f2ff),
+];
+
 pub fn wcwidth(c: u32) -> u8 {
     if c == 0 {
         return 0;
     }
     if c < 0x20 || (0x7f <= c && c < 0xa0) {
         return 0; // 控制字符
+    }
+    if in_ranges(c, ZERO_WIDTH_RANGES) {
+        return 0; // 组合符/变体选择符/零宽控制：不占列
     }
     if (0x20..0x7f).contains(&c) || (0xa0..0x1100).contains(&c) {
         return 1;
@@ -58,6 +155,7 @@ pub fn wcwidth(c: u32) -> u8 {
         || (0xffe0..=0xffe6).contains(&c)
         || (0x1f300..=0x1faff).contains(&c)
         || (0x20000..=0x3fffd).contains(&c)
+        || in_ranges(c, WIDE_EXTRA_RANGES)
     {
         return 2;
     }

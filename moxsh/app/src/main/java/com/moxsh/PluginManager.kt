@@ -6,7 +6,7 @@ import com.moxsh.plugin.core.DemoGlassPlugin
 import com.moxsh.plugin.core.MoxshIpcClient
 import com.moxsh.plugin.core.PluginEvent
 import com.moxsh.plugin.core.PluginHost
-import com.moxsh.plugin.float.floating.FloatGlassPluginContract
+import com.moxsh.plugin.floating.FloatGlassPluginContract
 import com.moxsh.plugin.styling.StylePluginContract
 import com.moxsh.plugin.widget.WidgetPluginContract
 import com.moxsh.shared.BootstrapState
