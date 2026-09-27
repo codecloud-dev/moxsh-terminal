@@ -27,15 +27,17 @@ import java.util.concurrent.atomic.AtomicLong
 object ExecutionEngine {
 
     /**
-     * 默认 shell。
+     * 默认 shell（动态判定，非编译期常量）。
      *
-     * 当前为系统 shell 占位 `/system/bin/sh`。
-     * 运行环境就绪（自研 rootfs 解压完成、PREFIX 已布局）后，应切换到 moxsh 自有
-     * prefix 的 login shell，例如：
-     *   const val DEFAULT_SHELL = "$PREFIX/bin/login"
-     * 或 `val DEFAULT_SHELL = "$PREFIX/bin/bash -l"`，以获得正确的环境与 PATH。
+     * 运行环境就绪（bootstrap 解压完成）后，$PREFIX/bin/login 为自研入口脚本
+     * （BootstrapInstaller.initialize 生成：设置 PREFIX/HOME/PATH 等环境后 exec bash -l），
+     * 终端新会话即获得完整 Linux 环境；环境未就绪时回退系统 shell 占位。
      */
-    const val DEFAULT_SHELL: String = "/system/bin/sh"
+    val DEFAULT_SHELL: String
+        get() {
+            val login = java.io.File("$PREFIX/bin/login")
+            return if (login.exists() && login.canExecute()) "$PREFIX/bin/login" else "/system/bin/sh"
+        }
 
     /** 自研运行环境前缀（与 CompatShim.PREFIX 同源，M3 就绪后启用自有 login）。 */
     const val PREFIX: String = "/data/data/com.moxsh/files/usr"

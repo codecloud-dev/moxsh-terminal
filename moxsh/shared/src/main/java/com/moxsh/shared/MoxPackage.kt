@@ -114,7 +114,7 @@ object MoxPackage {
 
     /**
      * 解包到 outDir（IO 线程执行）。目录结构：
-     * `<outDir>/manifest.json`、`<outDir>/signature`、`<outDir>/payload/**`。
+     * `<outDir>/manifest.json`、`<outDir>/signature`、`<outDir>/payload` 目录递归展开。
      */
     suspend fun extract(path: String, outDir: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {

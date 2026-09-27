@@ -1,13 +1,17 @@
 package com.moxsh.shared
 
 import android.content.Context
+import android.os.Build
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.FilterInputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
+import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,15 +22,11 @@ import kotlinx.coroutines.withContext
  *
  * 职责（对应 roadmap 4.5 / D1-D3 决策）：
  *  1. 检测 `$PREFIX`（/data/data/com.moxsh/files/usr）是否已初始化；
- *  2. 下载 moxsh 官方 bootstrap rootfs tar（*国内 CDN 优先，官方源回退*）；
- *  3. SHA-256 校验（防传输损坏 / 篡改）；
- *  4. 解压到 $PREFIX（tar.gz，自实现 tar 头解析，零第三方依赖）；
- *  5. 首次初始化：写 dns（resolv.conf）、apt 风格 sources 模板（清华源默认，D8 国内优化）、
- *     执行一次性脚本标记（scripts.run_once）。
- *
- * ⚠️ bootstrap 产物由 moxsh 云端 CI 构建（见 docs/roadmap.md M6；构建脚本产出
- *    busybox 类工具链 + moxsh 自研包管理 CLI + 目录骨架）。URL 常量在 CI 上线后替换，
- *    当前结构完全按契约写好，CI 一出包即可用。
+ *  2. 下载 Termux 官方 bootstrap ZIP（按设备 ABI 自动选包；官方直连 + 国内加速双源回退）；
+ *  3. SHA-256 校验（官方 Release digest 核实，防传输损坏 / 篡改）；
+ *  4. 解压到 $PREFIX（ZIP + SYMLINKS.txt 符号链接重建，格式契约见 [extractZip]；
+ *     tar.gz 路径保留给 .mox 生态 rootfs 包，自实现 tar 头解析零依赖）；
+ *  5. 首次初始化：写 dns（resolv.conf）、包源模板（D8 国内优化）、一次性脚本标记。
  *
  * 小白体验：全程玻璃进度卡回调（阶段文案），用户不需要知道 $PREFIX 的存在。
  */
@@ -38,33 +38,81 @@ object BootstrapInstaller {
     /** 环境就绪标记文件。存在且可读 = 已安装。 */
     private const val READY_MARKER = "files/usr/READY"
 
-    // ── 下载源（CI 产出后替换真实地址；sha256 随版本发布页提供） ──────────────
-    // 国内 CDN（优先）：moxsh 官方国内分发节点
-    // 官方回退：GitHub Releases（走系统直连，失败则提示用户检查网络）
+    // ── 下载源（真实可用链：Termux 官方 bootstrap 产物，与 proot-distro 生态一致） ──
+    // 兼容性说明：moxsh 与 Termux 包生态完全兼容（D7），直接采用 termux-packages
+    // 社区持续构建的 bootstrap 产物作为运行环境底座（构建脚本 GPL 开源、产物公开
+    // 分发，moxsh 代码零复用）。moxsh 自有 CDN 上线后置于列表首位即可。
+
+    /** bootstrap 包格式。 */
+    enum class Format { ZIP, TAR_GZ }
 
     /**
      * 下载源定义。
      * @param label   玻璃进度卡上展示的中文源名
-     * @param url     bootstrap tar.gz 地址（占位，CI 上线后替换）
+     * @param url     bootstrap 包地址
      * @param sha256  期望摘要（hex，空串 = 跳过校验——仅本地调试用）
+     * @param format  包格式（Termux 官方为 ZIP，内含 usr/ 与 SYMLINKS.txt）
+     * @param abis    该源适用的设备 ABI（空 = 全部适用）
      */
-    data class BootstrapSource(val label: String, val url: String, val sha256: String)
+    data class BootstrapSource(
+        val label: String,
+        val url: String,
+        val sha256: String,
+        val format: Format = Format.ZIP,
+        val abis: Set<String> = emptySet(),
+    )
 
-    /** 当前版本的 bootstrap 源列表（顺序 = 优先级，第一个为国内 CDN）。 */
+    companion object {
+        /** Termux 官方 bootstrap 版本（升级时同步更新 URL 与 sha256）。 */
+        private const val TERMUX_BOOTSTRAP_TAG = "bootstrap-2026.09.20-r1%2Bapt.android-7"
+
+        /**
+         * 各 bootstrap 架构包的官方 sha256（GitHub Release 资产 digest 逐个核实，
+         * `gh api repos/termux/termux-packages/releases/tags/<tag>` 可复核）。
+         */
+        private val TERMUX_SHA256 = mapOf(
+            "aarch64" to "65ba578133ea2f4e5cc07234568815397cf9e1236b5da8c06ce6753cf036cc69",
+            "arm" to "1c953b1d808c45fd578b7a3b4ba4d6b6f54329a7f6db57dceeab55fe997102e8",
+            "i686" to "db0c868c88b8d814e71b7e2d60438c836b903585140f40046d885ce103e789fe",
+            "x86_64" to "2d23d45c1a9e72dda2172895c218334473a2d1560e724f4b88323e56e80736ff",
+        )
+
+        /** 设备 ABI -> Termux bootstrap 架构名映射（Termux 只按这 4 个架构分发）。 */
+        private fun bootstrapAbiOf(deviceAbi: String): String = when (deviceAbi) {
+            "arm64-v8a" -> "aarch64"
+            "armeabi-v7a", "armv7l", "armv8l" -> "arm"
+            "x86" -> "i686"
+            "x86_64" -> "x86_64"
+            else -> deviceAbi
+        }
+    }
+
+    /** 当前版本的 bootstrap 源列表（顺序 = 优先级；abis 为空 = 对已实例化的架构全部适用）。 */
     val SOURCES: List<BootstrapSource> = listOf(
         BootstrapSource(
-            label = "moxsh 国内 CDN",
-            // TODO(CI): 替换为真实 bootstrap 产物地址（M6 云端出包后填入）
-            url = "https://cdn.moxsh.example/bootstrap/bootstrap-aarch64.tar.gz",
-            sha256 = "",
+            label = "Termux 官方源（GitHub 直连）",
+            url = "https://github.com/termux/termux-packages/releases/download/$TERMUX_BOOTSTRAP_TAG/bootstrap-%ABI%.zip",
+            sha256 = "%SHA256%",
+            format = Format.ZIP,
+            abis = emptySet(),
         ),
         BootstrapSource(
-            label = "moxsh 官方源",
-            // TODO(CI): GitHub Releases 回退地址
-            url = "https://github.com/moxsh/moxsh-bootstrap/releases/latest/download/bootstrap-aarch64.tar.gz",
-            sha256 = "",
+            label = "Termux 官方源（国内加速）",
+            url = "https://ghproxy.net/https://github.com/termux/termux-packages/releases/download/$TERMUX_BOOTSTRAP_TAG/bootstrap-%ABI%.zip",
+            sha256 = "%SHA256%",
+            format = Format.ZIP,
+            abis = emptySet(),
         ),
     )
+
+    /** 按设备主 ABI 实例化源列表：替换 %ABI% / %SHA256% 占位，过滤不适用架构。 */
+    fun sourcesFor(abi: String): List<BootstrapSource> =
+        SOURCES.filter { it.abis.isEmpty() || abi in it.abis }.map { s ->
+            s.copy(
+                url = s.url.replace("%ABI%", abi),
+                sha256 = s.sha256.replace("%SHA256%", TERMUX_SHA256[abi] ?: ""),
+            )
+        }
 
     /**
      * 安装进度回调。
@@ -82,7 +130,8 @@ object BootstrapInstaller {
 
     /**
      * 一键安装运行环境（挂起函数，IO 线程执行）。
-     * 依序尝试 [SOURCES]：下载成功且校验通过即停止；全部失败抛 [BootstrapException]。
+     * 按设备主 ABI 实例化源列表后依序尝试：下载成功且校验通过即停止；
+     * 全部失败抛 [BootstrapException]。
      *
      * @param listener 玻璃进度卡回调（UI 线程外的普通回调，UI 层自行 post）
      */
@@ -94,43 +143,53 @@ object BootstrapInstaller {
                 return@withContext
             }
 
-            // ── 阶段 1：下载（国内 CDN 优先，逐源回退） ──
-            var tarFile: File? = null
+            // 按设备主 ABI 选包（arm64-v8a -> aarch64 等映射；Termux 官方按架构分发）
+            val deviceAbi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty().ifEmpty { "aarch64" }
+            val abi = bootstrapAbiOf(deviceAbi)
+            val sources = sourcesFor(abi)
+
+            // ── 阶段 1：下载（官方直连 + 国内加速逐源回退） ──
+            var pkgFile: File? = null
+            var chosen: BootstrapSource? = null
             var lastError: Exception? = null
-            for ((index, source) in SOURCES.withIndex()) {
+            for ((index, source) in sources.withIndex()) {
                 try {
                     listener.onProgress(1, 0, "正在下载运行环境（${source.label}）…")
-                    tarFile = download(ctx, source.url) { p ->
+                    pkgFile = download(ctx, source) { p ->
                         listener.onProgress(1, p, "下载中 $p%（${source.label}）")
                     }
                     // ── 阶段 2：SHA-256 校验 ──
                     listener.onProgress(2, 0, "校验文件完整性…")
                     if (source.sha256.isNotEmpty()) {
-                        val actual = sha256Hex(tarFile)
+                        val actual = sha256Hex(pkgFile)
                         if (!actual.equals(source.sha256, ignoreCase = true)) {
-                            tarFile.delete()
+                            pkgFile.delete()
                             throw BootstrapException("校验失败（${source.label}）：文件可能损坏，已自动换源重试")
                         }
                     }
+                    chosen = source
                     break // 下载+校验通过
                 } catch (e: Exception) {
                     lastError = e
-                    tarFile?.delete()
-                    tarFile = null
-                    if (index < SOURCES.lastIndex) {
+                    pkgFile?.delete()
+                    pkgFile = null
+                    if (index < sources.lastIndex) {
                         listener.onProgress(1, 0, "${source.label} 不可用，正在切换下一源…")
                     }
                 }
             }
-            val tar = tarFile ?: throw BootstrapException(
+            val pkg = pkgFile ?: throw BootstrapException(
                 "所有下载源均失败：${lastError?.message ?: "未知错误"}。请检查网络后重试。",
             )
 
             try {
-                // ── 阶段 3：解压 tar.gz 到 $PREFIX ──
+                // ── 阶段 3：按包格式解压到 $PREFIX ──
                 listener.onProgress(3, 0, "解压运行环境…")
                 prefix.mkdirs()
-                extractTarGz(tar, prefix) { p -> listener.onProgress(3, p, "解压中 $p%") }
+                when (chosen?.format ?: Format.ZIP) {
+                    Format.ZIP -> extractZip(pkg, prefix) { p -> listener.onProgress(3, p, "解压中 $p%") }
+                    Format.TAR_GZ -> extractTarGz(pkg, prefix) { p -> listener.onProgress(3, p, "解压中 $p%") }
+                }
 
                 // ── 阶段 4：首次初始化（国内优化，D8） ──
                 listener.onProgress(4, 0, "初始化配置…")
@@ -139,17 +198,23 @@ object BootstrapInstaller {
 
                 listener.onProgress(5, 100, "安装完成，欢迎来到 moxsh！")
             } finally {
-                tar.delete() // 下载缓存用完即删，不占空间
+                pkg.delete() // 下载缓存用完即删，不占空间
             }
         }
 
-    /** 从本地 tar.gz 导入（离线安装兜底：小白用文件管理器把 bootstrap 包放 Download 后一键导入）。 */
-    suspend fun installFromLocal(ctx: Context, tarPath: String, listener: ProgressListener): Unit =
+    /** 从本地包导入（离线安装兜底：小白用文件管理器把 bootstrap 包放 Download 后一键导入）。 */
+    suspend fun installFromLocal(ctx: Context, pkgPath: String, listener: ProgressListener): Unit =
         withContext(Dispatchers.IO) {
             val prefix = File(ctx.filesDir, PREFIX_SUBPATH)
             listener.onProgress(3, 0, "从本地包解压…")
             prefix.mkdirs()
-            extractTarGz(File(tarPath), prefix) { p -> listener.onProgress(3, p, "解压中 $p%") }
+            val f = File(pkgPath)
+            // 按扩展名自动识别格式：Termux 官方产物为 zip；.mox 生态 rootfs 包为 tar.gz
+            if (pkgPath.endsWith(".zip", ignoreCase = true)) {
+                extractZip(f, prefix) { p -> listener.onProgress(3, p, "解压中 $p%") }
+            } else {
+                extractTarGz(f, prefix) { p -> listener.onProgress(3, p, "解压中 $p%") }
+            }
             listener.onProgress(4, 0, "初始化配置…")
             initialize(ctx, prefix)
             File(ctx.filesDir, READY_MARKER).writeText("ok")
@@ -158,10 +223,11 @@ object BootstrapInstaller {
 
     // ── 内部实现 ────────────────────────────────────────────────────────────
 
-    /** 下载远程文件到缓存目录，回调 0-100 进度。 */
-    private fun download(ctx: Context, url: String, onProgress: (Int) -> Unit): File {
-        val out = File(ctx.cacheDir, "bootstrap.tar.gz")
-        val conn = URL(url).openConnection() as HttpURLConnection
+    /** 下载远程 bootstrap 包到缓存目录（按格式命名），回调 0-100 进度。 */
+    private fun download(ctx: Context, source: BootstrapSource, onProgress: (Int) -> Unit): File {
+        val suffix = if (source.format == Format.ZIP) "zip" else "tar.gz"
+        val out = File(ctx.cacheDir, "bootstrap.$suffix")
+        val conn = URL(source.url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = 30_000
         conn.instanceFollowRedirects = true
@@ -255,17 +321,150 @@ object BootstrapInstaller {
         }
     }
 
-    /** 首次初始化：DNS、包源模板（清华默认，D8 国内优化）、一次性脚本占位。 */
+    /**
+     * 解压 bootstrap ZIP 到目标目录（Termux 官方 bootstrap 格式）。
+     *
+     * 格式契约（termux-packages `scripts/generate-bootstraps.sh` 与 termux-app
+     * `TermuxInstaller` 双向核对）：
+     *  - zip 条目路径相对 $PREFIX 根（`bin/...`、`etc/...`），无 `usr/` 前缀；
+     *  - 符号链接不存入 zip（Java zip 流不还原 unix 链接），统一记在 SYMLINKS.txt：
+     *    每行 `链接目标←链接位置`，分隔符为 U+2190（←），位置相对 $PREFIX（可能带 ./ 前缀）；
+     *    全部条目解压完后统一重建（android.system.Os.symlink，与 Termux 同 API）。
+     *  - 安全：拒绝绝对路径与 `..` 逃逸（对齐 .mox 包解压白名单思路）。
+     */
+    private fun extractZip(pkg: File, dest: File, onProgress: (Int) -> Unit) {
+        val symlinks = mutableListOf<Pair<String, String>>() // first=链接目标 second=链接位置
+        val totalBytes = pkg.length()
+        FileInputStream(pkg).use { fin ->
+            val counting = CountingInputStream(fin)
+            ZipInputStream(counting, Charsets.UTF_8).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    val name = entry.name.trim('/').removePrefix("./")
+                    try {
+                        if (name == "SYMLINKS.txt") {
+                            // 符号链接清单不落盘，读入内存统一重建
+                            val text = zip.readBytes().toString(Charsets.UTF_8)
+                            for (line in text.split('\n')) {
+                                if (line.isBlank()) continue
+                                val parts = line.split('←')
+                                if (parts.size != 2) continue // 容错：坏行跳过
+                                val target = parts[0].trim()
+                                val linkPath = parts[1].trim().removePrefix("./")
+                                if (target.isEmpty() || !isSafePath(linkPath)) continue
+                                symlinks.add(target to linkPath)
+                            }
+                            continue
+                        }
+                        if (name.isEmpty() || !isSafePath(name)) continue // 拒绝路径逃逸
+                        val outFile = File(dest, name)
+                        if (entry.isDirectory) {
+                            outFile.mkdirs()
+                            continue
+                        }
+                        outFile.parentFile?.mkdirs()
+                        FileOutputStream(outFile).use { fos -> zip.copyTo(fos, 64 * 1024) }
+                        // 可执行位（对齐 TermuxInstaller：bin/、libexec、apt 传输工具）
+                        if (name.startsWith("bin/") || name.startsWith("libexec") ||
+                            name.startsWith("lib/apt/apt-helper") || name.startsWith("lib/apt/methods")
+                        ) {
+                            outFile.setExecutable(true, false)
+                            outFile.setReadable(true, false)
+                        }
+                    } finally {
+                        zip.closeEntry()
+                    }
+                    if (totalBytes > 0) {
+                        onProgress((counting.count * 100 / totalBytes).toInt().coerceIn(0, 99))
+                    }
+                }
+            }
+        }
+        // ── 重建符号链接（android.system.Os.symlink，API 21+；单条失败不阻断安装） ──
+        for ((target, linkPath) in symlinks) {
+            try {
+                val link = File(dest, linkPath)
+                link.parentFile?.mkdirs()
+                if (link.exists()) link.delete() // 重装场景防御
+                android.system.Os.symlink(target, link.absolutePath)
+            } catch (_: Exception) {
+                // 个别工具链接缺失不影响 shell 可用性，与 Termux 行为一致
+            }
+        }
+    }
+
+    /** 压缩流字节计数器（ZIP 进度估算：已读压缩字节 / 包总大小）。 */
+    private class CountingInputStream(input: InputStream) : FilterInputStream(input) {
+        var count: Long = 0L
+            private set
+
+        override fun read(): Int {
+            val n = super.read()
+            if (n != -1) count++
+            return n
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            val n = super.read(b, off, len)
+            if (n != -1) count += n
+            return n
+        }
+    }
+
+    /** 首次初始化：自研 login/profile、DNS、包源模板（D8 国内优化）、shebang 前缀修正。 */
     private fun initialize(ctx: Context, prefix: File) {
-        // 1. DNS（安卓上 /etc 不可写，用 resolv.conf 常规兜底；proot 发行版内另有处理）
+        val prefixPath = prefix.absolutePath
+        val homePath = File(ctx.filesDir, "files/home").absolutePath
+
+        // 1. 自研 login（覆盖 bootstrap 里按 com.termux 前缀硬编码的官方 ELF——
+        //    官方二进制会把 HOME/exec 指向不可写的 com.termux 路径，moxsh 必须接管）。
+        //    纯 POSIX 脚本、零编译依赖：设置环境后 exec bash -l（login shell 读 profile）。
+        val login = File(prefix, "bin/login")
+        login.parentFile?.mkdirs()
+        login.writeText(
+            "#!/system/bin/sh\n" +
+                "# moxsh login —— 运行环境入口（initialize 阶段生成，覆盖 Termux 官方硬编码版）\n" +
+                "PREFIX=$prefixPath\n" +
+                "HOME=$homePath\n" +
+                "TMPDIR=\$PREFIX/tmp\n" +
+                "SHELL=\$PREFIX/bin/bash\n" +
+                "PATH=\$PREFIX/bin:\$PATH\n" +
+                "LANG=C.UTF-8\n" +
+                "export PREFIX HOME TMPDIR SHELL PATH LANG\n" +
+                "mkdir -p \"\$HOME\" \"\$TMPDIR\" 2>/dev/null\n" +
+                "cd \"\$HOME\" 2>/dev/null || cd /\n" +
+                "exec \"\$SHELL\" -l\n",
+        )
+        login.setExecutable(true, false)
+
+        // 2. 自研 /etc/profile（同样覆盖官方版；bash -l 读取，保证 PATH/HOME/提示符正确）
         val etc = File(prefix, "etc").apply { mkdirs() }
+        File(etc, "profile").writeText(
+            "# moxsh /etc/profile（initialize 阶段生成）\n" +
+                "export PREFIX=$prefixPath\n" +
+                "export HOME=$homePath\n" +
+                "export TMPDIR=\$PREFIX/tmp\n" +
+                "export SHELL=\$PREFIX/bin/bash\n" +
+                "export PATH=\$PREFIX/bin:\$PATH\n" +
+                "export LANG=C.UTF-8\n" +
+                "export LD_LIBRARY_PATH=\$PREFIX/lib\n" +
+                "PS1='\\[\\e[36m\\]\\u\\[\\e[0m\\]@moxsh:\\w\\$ '\n" +
+                "if [ -d \$PREFIX/etc/profile.d ]; then\n" +
+                "  for i in \$PREFIX/etc/profile.d/*.sh; do\n" +
+                "    [ -r \$i ] && . \$i\n" +
+                "  done\n" +
+                "  unset i\n" +
+                "fi\n",
+        )
+
+        // 3. DNS（安卓上 /etc 不可写，用 resolv.conf 常规兜底；proot 发行版内另有处理）
         File(etc, "resolv.conf").writeText(
             "# moxsh 自动生成（国内 DNS，D8）\n" +
                 "nameserver 223.5.5.5\n" +
                 "nameserver 119.29.29.29\n",
         )
 
-        // 2. 包源模板：moxsh 自研包管理 CLI 读取（mox 格式仓库，国内 CDN 置顶）
+        // 4. 包源模板：moxsh 自研包管理 CLI 读取（mox 格式仓库，国内 CDN 置顶）
         File(etc, "moxsh-sources.list").writeText(
             "# moxsh 包源（自研 mox 格式仓库，按优先级排序）\n" +
                 "# 1) moxsh 国内 CDN（默认）\n" +
@@ -273,14 +472,48 @@ object BootstrapInstaller {
                 "# TODO(CI): 填入真实仓库地址（M6）\n",
         )
 
-        // 3. 兼容层提示：apt 风格 sources（发行版在 proot 容器内用容器自身的源，与这里无关）
+        // 5. 兼容层提示：apt 风格 sources（发行版在 proot 容器内用容器自身的源，与这里无关）
         File(etc, "apt-sources.readme").writeText(
             "proot 发行版内的 apt 源在发行版内部管理（图形包管理器可一键切换清华/中科大）。\n",
         )
 
-        // 4. 一次性初始化标记目录（首次启动引导向导会消费）
+        // 6. shebang 前缀修正：Termux 包的脚本 shebang 在构建期硬编码
+        //    /data/data/com.termux/...，moxsh 前缀不同会导致脚本直接失败。
+        //    仅处理纯文本文件（无 NUL 字节——排除 ELF，避免破坏二进制内部偏移）。
+        fixTextShebangs(File(prefix, "bin"))
+        fixTextShebangs(File(prefix, "etc"))
+
+        // 7. 一次性初始化标记目录（首次启动引导向导会消费）
         File(prefix, ".moxsh").apply { mkdirs() }
         File(prefix, ".moxsh/first-boot").writeText("pending")
+    }
+
+    /**
+     * 递归修正目录下文本文件中的 Termux 硬编码前缀（com.termux → com.moxsh）。
+     * 判定规则：文件不含 NUL 字节 = 文本（脚本/配置）；含 NUL = 二进制，跳过。
+     * 无该字符串的文件不做重写（避免无谓 IO）。
+     */
+    private fun fixTextShebangs(dir: File) {
+        if (!dir.isDirectory) return
+        val needle = "/data/data/com.termux/files/usr"
+        val replacement = "/data/data/com.moxsh/files/usr"
+        dir.walkTopDown().filter { it.isFile && it.length() in 1..(2 * 1024 * 1024) }.forEach { f ->
+            runCatching {
+                val bytes = f.readBytes()
+                if (bytes.contains(0.toByte())) return@runCatching // 二进制（ELF 等），跳过防偏移破坏
+                // 严格 UTF-8 校验：非法序列（非 UTF-8 文本）直接跳过，避免解码破坏
+                val text = try {
+                    Charsets.UTF_8.newDecoder()
+                        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                        .decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+                } catch (_: java.nio.charset.CharacterCodingException) {
+                    return@runCatching
+                }
+                if (!text.contains(needle)) return@runCatching
+                f.writeText(text.replace(needle, replacement), Charsets.UTF_8)
+            }
+        }
     }
 
     // ── tar 解析小工具 ──────────────────────────────────────────────────────
