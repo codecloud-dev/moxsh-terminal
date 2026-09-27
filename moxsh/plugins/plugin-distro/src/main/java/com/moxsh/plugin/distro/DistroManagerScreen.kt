@@ -267,8 +267,9 @@ internal fun startInstall(
     states[d.id] = InstallState(running = true, percent = 0, stage = "准备中")
     scope.launch {
         val ok = ProotManager.install(d.id) { percent, stage ->
-            // 进度回调来自 IO 线程，setState 需回主线程（Compose 快照写需主线程）。
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            // 进度回调来自 IO 线程（非挂起 lambda，不能 withContext），
+            // 用 Handler post 回主线程后写状态（Compose 快照写需主线程）。
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
                 states[d.id] = InstallState(running = true, percent = percent, stage = stage)
             }
         }

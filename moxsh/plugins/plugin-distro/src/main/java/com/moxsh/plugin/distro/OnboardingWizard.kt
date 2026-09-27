@@ -275,9 +275,9 @@ private fun FirstAppStep(onOpenPackageManager: (() -> Unit)?) {
         )
         Spacer(Modifier.height(10.dp))
         listOf(
-            Triple("python", "写脚本、做数据分析，新手首选"),
-            Triple("nodejs", "跑 JavaScript / npm 生态"),
-            Triple("vim", "在终端里编辑文件"),
+            Pair("python", "写脚本、做数据分析，新手首选"),
+            Pair("nodejs", "跑 JavaScript / npm 生态"),
+            Pair("vim", "在终端里编辑文件"),
         ).forEach { (name, desc) ->
             Row(
                 Modifier

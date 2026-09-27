@@ -15,21 +15,26 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -39,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.moxsh.plugin.distro.DistroManagerScreen
+import com.moxsh.shared.BootstrapState
 import com.moxsh.shared.ExecutionEngine
 import com.moxsh.ui.component.GlassBackdrop
 import com.moxsh.ui.component.GlassBottomBar
@@ -52,6 +58,7 @@ import com.moxsh.ui.settings.SettingsScreen
 import com.moxsh.ui.terminal.TerminalScreen
 import com.moxsh.ui.terminal.sendToSession
 import com.moxsh.ui.theme.MoxshGlassTheme
+import kotlinx.coroutines.launch
 
 /** 单个终端标签页：id 为 ExecutionEngine 会话句柄，title 仅用于显示。 */
 private data class TermTab(val id: Long, val title: String)
@@ -141,10 +148,19 @@ fun MoxshRoot() {
                 next.any { it.id == activeId } -> activeId
                 else -> next[(idx - 1).coerceAtLeast(0).coerceAtMost(next.size - 1)].id
             }
+            // 引擎活跃会话同步（关掉的若是活跃会话，引擎侧也随之切走）
+            ExecutionEngine.activeSessionId = activeId
         }
 
-        // 首次进入：自动开一个 shell
-        LaunchedEffect(Unit) { if (tabs.isEmpty()) newSession() }
+        // 首次进入：等运行环境就绪后自动开一个 shell（login 就位 → 完整 Linux 环境；
+        // 未就绪期间终端区显示玻璃进度卡，Failed 态提供重试按钮）
+        val bootState by BootstrapState.state.collectAsState()
+        val retryScope = rememberCoroutineScope()
+        LaunchedEffect(Unit) {
+            BootstrapState.state.collect { s ->
+                if (s is BootstrapState.State.Ready && tabs.isEmpty()) newSession()
+            }
+        }
 
         if (showSettings) {
             SettingsScreen(
@@ -219,7 +235,11 @@ fun MoxshRoot() {
                                             else GlassTokens.surfaceTint
                                         )
                                         .border(1.dp, GlassTokens.stroke, RoundedCornerShape(14.dp))
-                                        .clickable { activeId = tab.id }
+                                        .clickable {
+                                            activeId = tab.id
+                                            // 同步引擎活跃会话（插件 runLocalCommand 的写入目标）
+                                            ExecutionEngine.activeSessionId = tab.id
+                                        }
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -268,6 +288,8 @@ fun MoxshRoot() {
                             )
                         }
                     } else {
+                        // 无活动会话：环境就绪前显示 bootstrap 安装进度卡（小白不需要知道 $PREFIX）；
+                        // 就绪后（会话已开）正常不会走到这里，仅提示新建
                         GlassSurface(
                             Modifier
                                 .weight(1f)
@@ -275,11 +297,40 @@ fun MoxshRoot() {
                                 .fillMaxWidth(),
                             tint = GlassTokens.termTint,
                         ) {
-                            Text(
-                                "没有活动会话，点击右下角 + 新建",
-                                color = GlassTokens.onGlassDim,
-                                modifier = Modifier.padding(16.dp),
-                            )
+                            when (val s = bootState) {
+                                is BootstrapState.State.Running -> Column(
+                                    Modifier.align(Alignment.Center).padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text("正在准备运行环境", color = GlassTokens.onGlass)
+                                    Spacer(Modifier.height(10.dp))
+                                    LinearProgressIndicator(
+                                        progress = { s.progress / 100f },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(s.message, color = GlassTokens.onGlassDim)
+                                }
+                                is BootstrapState.State.Failed -> Column(
+                                    Modifier.align(Alignment.Center).padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text("运行环境安装失败", color = GlassTokens.onGlass)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(s.message, color = GlassTokens.onGlassDim)
+                                    Spacer(Modifier.height(14.dp))
+                                    Button(onClick = {
+                                        retryScope.launch {
+                                            BootstrapState.begin(context)
+                                        }
+                                    }) { Text("重试") }
+                                }
+                                else -> Text(
+                                    "没有活动会话，点击右下角 + 新建",
+                                    color = GlassTokens.onGlassDim,
+                                    modifier = Modifier.padding(16.dp),
+                                )
+                            }
                         }
                     }
 

@@ -54,6 +54,13 @@ object ExecutionEngine {
     /** 自增会话 id 分配器（从 1 开始，0 与 -1 保留作错误哨兵）。 */
     private val nextId = AtomicLong(1)
 
+    /**
+     * 当前活跃会话（UI 切换标签时更新；新建会话时自动指向它）。
+     * 插件经 PluginHost.runLocalCommand 向此会话写入（0/-1 是哨兵，不可用）。
+     */
+    @Volatile
+    var activeSessionId: Long = -1L
+
     /** 每个 id 对应的泵协程 Job，用于 [stopPump] 精确取消。 */
     private val pumpJobs = ConcurrentHashMap<Long, Job>()
 
@@ -84,6 +91,7 @@ object ExecutionEngine {
         val session = core.open(command, cols, rows) ?: return -1L
         val id = nextId.getAndIncrement()
         sessions[id] = session
+        activeSessionId = id
         sessionListener?.onSessionOpened(id, command)
         return id
     }

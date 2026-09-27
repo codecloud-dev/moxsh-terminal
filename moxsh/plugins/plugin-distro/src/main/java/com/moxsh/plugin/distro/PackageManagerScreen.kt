@@ -22,6 +22,7 @@ import com.moxsh.plugin.core.PluginHost
 import com.moxsh.ui.component.GlassSurface
 import com.moxsh.ui.component.GlassTokens
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 
 /**
  * 图形包管理器（D13 四件套之二）。

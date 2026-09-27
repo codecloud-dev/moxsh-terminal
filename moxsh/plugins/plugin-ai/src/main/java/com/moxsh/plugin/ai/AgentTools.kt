@@ -526,9 +526,10 @@ class AgentExecutor(
             if (tool.danger == DangerLevel.HIGH) {
                 // 玻璃确认卡在这里挂起：UI 层的 confirm 实现渲染 GlassConfirmCard，
                 // 用户点"确认"才继续，点"取消"走拒绝分支（小白看到的是确认卡而非命令行）。
+                // 函数类型调用不允许命名参数（confirm: suspend (title, body) -> Boolean）
                 val approved = confirm(
-                    title = "AI 想要：${tool.displayName}",
-                    body = "${tool.displayName} 属于高危操作（${tool.dangerDetail()}）。\n" +
+                    "AI 想要：${tool.displayName}",
+                    "${tool.displayName} 属于高危操作（${tool.dangerDetail()}）。\n" +
                         "参数：${summarizeArgs(call)}\n确认执行吗？",
                 )
                 if (!approved) {

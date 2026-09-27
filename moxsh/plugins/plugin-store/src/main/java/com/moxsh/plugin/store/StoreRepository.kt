@@ -51,7 +51,7 @@ interface StoreApi {
 }
 
 /**
- * 本地源：扫 `/sdcard/Download/moxsh-store/*.mox`（用户手动放的包，离线安装）。
+ * 本地源：扫 `/sdcard/Download/moxsh-store/` 目录下的 .mox 包（用户手动放的包，离线安装）。
  *
  * Android 10+ 无法直接读 Download 子目录，生产实现经 MediaStore.Downloads 或
  * SAF 列目录；骨架先按直路径扫描，真机不可读时返回空目录（不抛错）。

@@ -74,10 +74,12 @@ class PluginHost(
             if (it.isNotEmpty()) events.publish(PluginEvent.CommandExecuted(-1L, line))
         }
 
-    /** 本地直接把输入喂给 PTY（同进程执行引擎）；写入成功时发布命令执行事件。 */
+    /** 本地直接把输入喂给当前活跃会话的 PTY（同进程执行引擎）；写入成功时发布命令执行事件。 */
     fun runLocalCommand(line: String): Boolean {
-        val ok = engine.write(0, line.toByteArray())
-        if (ok) events.publish(PluginEvent.CommandExecuted(0L, line))
+        val sid = engine.activeSessionId
+        if (sid <= 0L) return false // 无活跃会话（0/-1 为哨兵）
+        val ok = engine.write(sid, line.toByteArray())
+        if (ok) events.publish(PluginEvent.CommandExecuted(sid, line))
         return ok
     }
 

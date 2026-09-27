@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
- * 自启命令持久化（重写 Termux:Boot 的 `~/.termux/boot/*.sh` 文件约定，
+ * 自启命令持久化（重写 Termux:Boot 的 `~/.termux/boot/` 目录下 .sh 脚本文件约定，
  * 改为结构化 SharedPreferences 存储，docs/plugins-rewrite.md §0.3 配置方式）。
  *
  * 命令列表以换行分隔落盘（保持用户配置顺序），空行自动过滤。
