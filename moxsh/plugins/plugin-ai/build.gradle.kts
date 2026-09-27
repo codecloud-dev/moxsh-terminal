@@ -36,5 +36,5 @@ dependencies {
     // AndroidX 注解（ForegroundServiceType 声明用）
     implementation("androidx.annotation:annotation:1.8.0")
     // NotificationCompat（AiService 常驻通知；core 是 ui 的传递依赖，这里显式声明）
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-ktx:1.19.1")
 }
