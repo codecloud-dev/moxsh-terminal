@@ -27,7 +27,24 @@ import kotlin.concurrent.thread
  */
 class TaskerReceiver : BroadcastReceiver() {
 
+    // P0 修复（未授权命令执行）：exported receiver 对全部应用开放，必须校验调用方。
+    // 静态白名单 = Tasker 官方包名（自身包名在 onReceive 里动态补，属性初始化器无 context）。
+    private val allowedCallers = setOf(
+        "net.dinglisch.android.taskerm",
+        "net.dinglisch.android.taskerm.debug",
+    )
+
     override fun onReceive(context: Context, intent: Intent) {
+        val callingUid = android.os.Binder.getCallingUid()
+        // 同 uid（自身进程内）调用直接放行
+        val pkgs = context.packageManager.getPackagesForUid(callingUid)?.toSet() ?: emptySet()
+        val allowed = callingUid == android.os.Process.myUid() ||
+            pkgs.any { it in allowedCallers || it == context.packageName }
+        if (!allowed) {
+            Log.w("TaskerReceiver", "拒绝未授权调用方 uid=" + callingUid + " pkgs=" + pkgs)
+            setResultCode(android.app.Activity.RESULT_CANCELED)
+            return
+        }
         if (intent.action != TaskerPluginContract.ACTION_RUN) return
         val command = intent.getStringExtra(TaskerPluginContract.EXTRA_COMMAND)
         if (command.isNullOrBlank()) {

@@ -96,11 +96,28 @@ object ExecutionEngine {
         return id
     }
 
-    /** 销毁一个会话：先停泵，再关闭 PTY，最后从表移除。 */
+    /** 会话关闭专用串行执行器：close 与仍在途的最后几次 native 调用天然隔离。 */
+    private val closer = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "moxsh-session-closer").apply { isDaemon = true }
+    }
+
+    /**
+     * 销毁一个会话：停泵 → 从表移除 → 延迟一拍关闭 native 会话。
+     *
+     * P1 修复（use-after-free）：native master 已非阻塞（EAGAIN 即返），
+     * stopPump 后泵协程最多再执行一轮即退出；close 再延迟 60ms 落到专用线程，
+     * 保证"泵最后一次 native pump"与"close 释放"不重叠。
+     */
     fun destroySession(id: Long) {
         stopPump(id)
-        sessions.remove(id)?.close()
+        val session = sessions.remove(id)
         sessionListener?.onSessionClosed(id)
+        if (session != null) {
+            closer.execute {
+                runCatching { Thread.sleep(60) }
+                runCatching { session.close() }
+            }
+        }
     }
 
     /** 向会话写入用户输入字节（键盘/粘贴等）。返回是否成功（无会话时 false）。 */
@@ -152,8 +169,12 @@ object ExecutionEngine {
             // isActive: 本协程是否被取消（stopPump 触发）；sessions 含 id: 会话是否仍存活。
             while (isActive && sessions.containsKey(id)) {
                 val n = pump(id)
-                if (n <= 0) break
-                onUpdate(n)
+                when {
+                    // -2 = 暂无数据（master 非阻塞 EAGAIN）：继续轮询，非 EOF
+                    n == -2 -> Unit
+                    n <= 0 -> break
+                    else -> onUpdate(n)
+                }
                 delay(PUMP_INTERVAL_MS)
             }
         }

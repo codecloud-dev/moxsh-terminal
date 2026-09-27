@@ -13,7 +13,7 @@
         android:name="com.termux.permission.RUN_COMMAND"
         android:label="moxsh 兼容 Termux 的 RUN_COMMAND 权限"
         android:description="@string/compat_run_command_permission_desc"
-        android:protectionLevel="normal" />
+        android:protectionLevel="dangerous" />
 
     <application>
         <!--

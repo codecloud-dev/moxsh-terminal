@@ -26,6 +26,12 @@ pub struct Parser {
     utf8: Vec<u8>,
 }
 
+impl Default for Parser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Parser {
     pub fn new() -> Parser {
         Parser {
@@ -78,7 +84,7 @@ impl Parser {
             0x0d => {
                 screen.carriage_return();
             }
-            0x0a | 0x0b | 0x0c => {
+            0x0a..=0x0c => {
                 screen.line_feed();
             }
             0x09 => {
@@ -318,12 +324,8 @@ impl Parser {
                     if final_byte == b'h' {
                         screen.erase_in_display(2);
                     }
-                } else if p.first().copied() == Some(47)
-                    || p.first().copied() == Some(1047)
-                {
-                    if final_byte == b'h' {
-                        screen.erase_in_display(2);
-                    }
+                } else if (p.first().copied() == Some(47) || p.first().copied() == Some(1047)) && final_byte == b'h' {
+                    screen.erase_in_display(2);
                 }
             }
             _ => {}

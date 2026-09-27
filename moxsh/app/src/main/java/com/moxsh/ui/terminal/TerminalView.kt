@@ -325,8 +325,17 @@ fun TerminalScreen(
                         paint.textSkewX = if (attrs and ATTR_ITALIC != 0) -0.25f else 0f
                         paint.isUnderlineText = attrs and ATTR_UNDERLINE != 0
 
-                        // code 为 Unicode 码点（含增补平面），toChars 处理代理对
-                        val text = String(Character.toChars(code))
+                        // code 为 Unicode 码点（含增补平面），toChars 处理代理对。
+                        // P1 修复：内核对非法 UTF-8 序列可能产出越界/代理区码点，
+                        // toChars 直接抛 IllegalArgumentException 崩掉渲染线程；
+                        // 越界一律回退 U+FFFD 替换符。
+                        val text = if (code in 1..Character.MAX_CODE_POINT &&
+                            !Character.isSurrogate(code.toChar()) || code > 0xFFFF
+                        ) {
+                            runCatching { String(Character.toChars(code)) }.getOrElse("\uFFFD")
+                        } else {
+                            "\uFFFD"
+                        }
                         drawIntoCanvas { it.nativeCanvas.drawText(text, c * cellW, rowTop + baseline, paint) }
                     }
                 }

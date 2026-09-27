@@ -33,6 +33,19 @@ impl Pty {
             unsafe { libc::close(master) };
             return Err(e);
         }
+        // P1 修复（配套 destroySession UAF）：master 设非阻塞。
+        // 阻塞读会让 Kotlin 泵协程永久卡在 native pump（cancel 无法中断），
+        // close 后即 use-after-free。非阻塞后 pump 以 WouldBlock 即时返回，
+        // 泵循环每轮都有挂起点，cancel 可及时生效。
+        // 仅影响 master 的 open file description；子进程的 slave 不受影响。
+        {
+            let flags = unsafe { libc::fcntl(master, libc::F_GETFL) };
+            if flags < 0 || unsafe { libc::fcntl(master, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+                let e = io::Error::last_os_error();
+                unsafe { libc::close(master) };
+                return Err(e);
+            }
+        }
         let slave_path = unsafe { libc::ptsname(master) };
         if slave_path.is_null() {
             let e = io::Error::last_os_error();

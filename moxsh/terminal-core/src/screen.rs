@@ -132,7 +132,7 @@ pub fn wcwidth(c: u32) -> u8 {
     if c == 0 {
         return 0;
     }
-    if c < 0x20 || (0x7f <= c && c < 0xa0) {
+    if c < 0x20 || (0x7f..0xa0).contains(&c) {
         return 0; // 控制字符
     }
     if in_ranges(c, ZERO_WIDTH_RANGES) {

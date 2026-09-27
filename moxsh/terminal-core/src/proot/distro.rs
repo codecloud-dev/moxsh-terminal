@@ -476,7 +476,7 @@ fn http_get(url: &str) -> Option<String> {
     let ok = text
         .split_whitespace()
         .nth(1)
-        .map_or(false, |s| s.starts_with('2'));
+        .is_some_and(|s| s.starts_with('2'));
     if !ok {
         return None;
     }
@@ -642,6 +642,62 @@ pub fn extract_tar(archive: &Path, dest: &Path) -> ProotResult<()> {
     }
 }
 
+
+/// 组件级路径推演：从 `base` 出发依次应用 `parent` 与 `rel` 的组件（处理 ..），
+/// 不触碰文件系统（解压前的纯推演）。
+fn resolve_under(base: &Path, parent: &Path, rel: &Path) -> std::path::PathBuf {
+    let mut cur = base.to_path_buf();
+    for c in parent.components() {
+        if let std::path::Component::Normal(p) = c {
+            cur.push(p);
+        }
+    }
+    for c in rel.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                cur.pop();
+            }
+            std::path::Component::Normal(p) => cur.push(p),
+            std::path::Component::CurDir => {}
+            _ => {}
+        }
+    }
+    cur
+}
+
+/// tar.gz 逐条目校验解压（symlink target 逃逸防护，见 extract_tar 注释）。
+fn extract_tar_gz_checked(f: fs::File, dest: &Path) -> ProotResult<()> {
+    let mut ar = tar::Archive::new(GzDecoder::new(f));
+    ar.set_preserve_permissions(false);
+    let dest_abs = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+    for entry in ar.entries().map_err(ProotError::Io)? {
+        let mut e = entry.map_err(ProotError::Io)?;
+        let et = e.header().entry_type();
+        if et.is_symlink() || et.is_hard_link() {
+            let link_path = e.path().map_err(ProotError::Io)?.to_path_buf();
+            let ok_path = !link_path.is_absolute()
+                && link_path
+                    .components()
+                    .all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir));
+            if !ok_path {
+                continue;
+            }
+            let target = e.link_name().map_err(ProotError::Io)?.unwrap_or_default();
+            let escape = if target.is_absolute() {
+                true
+            } else {
+                let parent = link_path.parent().unwrap_or(std::path::Path::new(""));
+                !resolve_under(dest, parent, &target).starts_with(&dest_abs)
+            };
+            if escape {
+                continue;
+            }
+        }
+        e.unpack_in(dest).map_err(|err| ProotError::ExtractFailed(format!("{}", err)))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -738,60 +794,4 @@ deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef  other-rootfs.t
             assert_eq!(fetch_expected_sha256(&spec), None);
         }
     }
-}
-
-
-/// 组件级路径推演：从 `base` 出发依次应用 `parent` 与 `rel` 的组件（处理 ..），
-/// 不触碰文件系统（解压前的纯推演）。
-fn resolve_under(base: &Path, parent: &Path, rel: &Path) -> std::path::PathBuf {
-    let mut cur = base.to_path_buf();
-    for c in parent.components() {
-        if let std::path::Component::Normal(p) = c {
-            cur.push(p);
-        }
-    }
-    for c in rel.components() {
-        match c {
-            std::path::Component::ParentDir => {
-                cur.pop();
-            }
-            std::path::Component::Normal(p) => cur.push(p),
-            std::path::Component::CurDir => {}
-            _ => {}
-        }
-    }
-    cur
-}
-
-/// tar.gz 逐条目校验解压（symlink target 逃逸防护，见 extract_tar 注释）。
-fn extract_tar_gz_checked(f: fs::File, dest: &Path) -> ProotResult<()> {
-    let mut ar = tar::Archive::new(GzDecoder::new(f));
-    ar.set_preserve_permissions(false);
-    let dest_abs = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
-    for entry in ar.entries().map_err(ProotError::Io)? {
-        let mut e = entry.map_err(ProotError::Io)?;
-        let et = e.header().entry_type();
-        if et.is_symlink() || et.is_hard_link() {
-            let link_path = e.path().map_err(ProotError::Io)?.to_path_buf();
-            let ok_path = !link_path.is_absolute()
-                && link_path
-                    .components()
-                    .all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir));
-            if !ok_path {
-                continue;
-            }
-            let target = e.link_name().map_err(ProotError::Io)?.unwrap_or_default();
-            let escape = if target.is_absolute() {
-                true
-            } else {
-                let parent = link_path.parent().unwrap_or(std::path::Path::new(""));
-                !resolve_under(dest, parent, &target).starts_with(&dest_abs)
-            };
-            if escape {
-                continue;
-            }
-        }
-        e.unpack_in(dest).map_err(|err| ProotError::ExtractFailed(format!("{}", err)))?;
-    }
-    Ok(())
 }

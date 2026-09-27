@@ -31,7 +31,14 @@ class MoxshApplication : Application() {
         super.onCreate()
 
         // 前台保活（应用冷启动时进程处于前台，满足 FGS 启动限制；Service.onCreate 内 startForeground）
-        startForegroundService(Intent(this, MoxshSessionService::class.java))
+        // P1 修复：插件 Receiver（Tasker/Boot/Widget）可从后台拉起本进程，此时
+        // startForegroundService 在 Android 12+ 抛 ForegroundServiceStartNotAllowedException
+        // 直接崩溃。防御性捕获并降级为普通 startService（后台场景只保泵不弹通知）。
+        runCatching {
+            startForegroundService(Intent(this, MoxshSessionService::class.java))
+        }.onFailure {
+            runCatching { startService(Intent(this, MoxshSessionService::class.java)) }
+        }
 
         // 插件宿主装配（D5 体系②）：内置原生玻璃插件注册 + 会话事件桥
         PluginManager.init(this)

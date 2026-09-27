@@ -18,6 +18,14 @@ import java.net.URL
  */
 object StoreSecrets {
     const val OFFICIAL: String = "moxsh-official-store-v1"
+
+    /**
+     * P1 修复：插件 id 白名单。id 来自包内 manifest（作者可控）/云端清单，
+     * 直接拼安装/缓存路径会路径逃逸。规则：仅字母数字与 `._-`，不以 `.` 开头。
+     */
+    fun validId(id: String): Boolean =
+        id.isNotEmpty() && id.length <= 64 && !id.startsWith(".") &&
+            id.all { it.isLetterOrDigit() || it == '.' || it == '_' || it == '-' }
 }
 
 /**

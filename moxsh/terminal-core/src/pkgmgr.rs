@@ -234,7 +234,7 @@ fn grab(json: &[u8], key: &str) -> String {
                 return String::new();
             }
             // 裸值（数字/布尔）：到 , 或 } 截断。
-            if let Some(end) = val.find(|c| c == ',' || c == '}') {
+            if let Some(end) = val.find([',', '}']) {
                 return val[..end].trim().to_string();
             }
         }
@@ -245,6 +245,12 @@ fn grab(json: &[u8], key: &str) -> String {
 /// 本地仓库：名称 → 包。
 pub struct Repository {
     pub packages: HashMap<String, Package>,
+}
+
+impl Default for Repository {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Repository {

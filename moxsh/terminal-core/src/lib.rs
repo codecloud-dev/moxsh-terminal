@@ -49,6 +49,9 @@ use session::TerminalSession;
 /// 出现请附 logcat 上报）`。
 pub const MOXSH_ERR_PANIC: c_int = -99;
 
+/// 安装/恢复等长任务的进度回调：参数为 (消息, 已完成字节, 总字节)。
+pub(crate) type ProgressCallback = Box<dyn FnMut(&str, u64, u64)>;
+
 fn ffi_guard<F: FnOnce() -> c_int + std::panic::UnwindSafe>(f: F) -> c_int {
     match std::panic::catch_unwind(f) {
         Ok(code) => code,
@@ -103,8 +106,7 @@ pub unsafe extern "C" fn moxsh_proot_install(
     moxsh_root: *const c_char,
     cache_tar: *const c_char,
 ) -> c_int {
-    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
-    unsafe {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；unsafe 操作收敛于内层块。
     // P3 panic 屏障：安装链路（下载/解压/落盘）体量大，内部异常折叠为 -99。
     ffi_guard(move ||
     unsafe {
@@ -112,12 +114,12 @@ pub unsafe extern "C" fn moxsh_proot_install(
         return -1;
     };
     let mgr = proot::distro::DistroManager::new(std::path::Path::new(&root));
-    let mut progress: Box<dyn FnMut(&str, u64, u64)> = Box::new(|_, _, _| {});
+    let mut progress: ProgressCallback = Box::new(|_, _, _| {});
     let r = match proot::distro::DistroManager::find_spec(&id) {
         Ok(spec) => {
             // 先把 String 绑定到局部，再取引用（避免临时值悬垂）。
             let cache_str = read_opt_cstr(cache_tar);
-            let cache = cache_str.as_deref().map(|t| std::path::Path::new(t));
+            let cache = cache_str.as_deref().map(std::path::Path::new);
             mgr.install(&spec, cache, &mut progress)
         }
         // 非预置 id：按自定义 rootfs 处理（cache_tar 必填）。
@@ -128,7 +130,6 @@ pub unsafe extern "C" fn moxsh_proot_install(
     };
     r.map(|_| 0).unwrap_or_else(|e| e.to_code())
     })
-}
 }
 
 /// 删除发行版。
@@ -237,8 +238,7 @@ pub unsafe extern "C" fn moxsh_proot_restore(
     moxsh_root: *const c_char,
     tar_path: *const c_char,
 ) -> c_int {
-    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
-    unsafe {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；unsafe 操作收敛于内层块。
     // P3 panic 屏障：rootfs 恢复 = 大 tar 解压 + 覆盖写，异常折叠为 -99。
     ffi_guard(move ||
     unsafe {
@@ -254,7 +254,6 @@ pub unsafe extern "C" fn moxsh_proot_restore(
         .map(|_| 0)
         .unwrap_or_else(|e| e.to_code())
     })
-}
 }
 
 /// 路径翻译自检：运行内置用例，返回通过数。
@@ -315,6 +314,9 @@ pub unsafe extern "C" fn moxsh_pump(
     let slice = std::slice::from_raw_parts_mut(buf, len);
     match (*sess).pump_into(slice) {
         Ok(n) => n as isize,
+        // 新契约：-2 = 暂无数据（master 非阻塞 EAGAIN）。调用方应继续循环，
+        // 不得当作 EOF/错误处理。
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => -2,
         Err(_) => -1,
     }
 }
@@ -585,7 +587,7 @@ pub unsafe extern "C" fn moxsh_mox_manifest(
     // 防御起见仍走 map_or 兜底空串。
     let json = (*handle)
         .manifest_json_bytes()
-        .map_or_else(String::new, |b| String::from_utf8_lossy(&b).into_owned());
+        .map_or_else(String::new, |b| String::from_utf8_lossy(b).into_owned());
     write_cstr_buf(out_buf, cap, &json)
 }
 }

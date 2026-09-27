@@ -241,7 +241,7 @@ pub enum RewriteOutcome {
 /// 换入更长的内存区（loader-mem）；moxsh M4 采用保守策略：放不下就不改写、
 /// 让原路径直通内核（结果通常是 ENOENT，等价于未做绑定，绝不损坏子进程）。
 pub fn can_fit(original_len: usize, new_len: usize) -> bool {
-    new_len + 1 <= original_len + 1
+    new_len < original_len + 1
 }
 
 /// 从子进程内存读取以 NUL 结尾的路径字符串。
@@ -449,7 +449,7 @@ impl Tracer {
         match regs.nr() {
             // getuid32(96)/geteuid32(107)/getgid32(104)/getegid32(108)
             // aarch64 统一为 getuid(174)/geteuid(175)/getgid(176)/getegid(177)
-            174 | 175 | 176 | 177 => regs.set_ret(0),
+            174..=177 => regs.set_ret(0),
             _ => {}
         }
     }

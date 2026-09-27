@@ -85,7 +85,7 @@ fn cmd_install(mgr: &DistroManager, args: &[&str]) -> String {
         let _ = (msg, done, total); // 文本 CLI 简化：完成时统一输出
     });
     match mgr.install(&spec, cache.as_deref(), &mut progress) {
-        Ok(()) => install_hint(&spec.id.to_string()),
+        Ok(()) => install_hint(spec.id),
         Err(e) => format!("proot-distro: 安装失败: {}", e),
     }
 }

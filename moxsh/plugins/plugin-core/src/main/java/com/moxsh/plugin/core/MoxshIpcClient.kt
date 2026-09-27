@@ -25,7 +25,11 @@ class MoxshIpcClient(
      * 握手由 IpcServer 在连接建立时完成（HMAC），此处只负责收发负载。
      */
     fun request(line: String): String = runCatching {
-        Socket(host, port).use { sock ->
+        // P1 修复：连接 3s / 读 5s 超时——IPC 服务未启动或被抢占时快速失败，
+        // 防调用方线程（boot-runner 等）永久阻塞。
+        Socket().use { sock ->
+            sock.connect(java.net.InetSocketAddress(host, port), 3_000)
+            sock.soTimeout = 5_000
             sock.getOutputStream().write((line + "\n").toByteArray(StandardCharsets.UTF_8))
             sock.shutdownOutput()
             val reader: BufferedReader = sock.inputStream.bufferedReader(StandardCharsets.UTF_8)

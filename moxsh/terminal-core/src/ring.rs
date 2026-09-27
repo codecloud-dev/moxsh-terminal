@@ -65,123 +65,6 @@ impl<T> RingBuffer<T> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn push_and_get() {
-        let mut r = RingBuffer::new(3);
-        r.push(1);
-        r.push(2);
-        r.push(3);
-        assert_eq!(r.len(), 3);
-        assert_eq!(*r.get(0), 1);
-        assert_eq!(*r.get(2), 3);
-        // 覆盖最老
-        r.push(4);
-        assert_eq!(*r.get(0), 2);
-        assert_eq!(*r.get(2), 4);
-    }
-
-    #[test]
-    fn overflow_buffer_mem_only() {
-        let mut b = OverflowBuffer::new(1024, std::env::temp_dir().join("moxsh-ring-test-mem")).unwrap();
-        b.push(b"hello world").unwrap();
-        let mut out = [0u8; 5];
-        assert_eq!(b.read_at(6, &mut out).unwrap(), 5);
-        assert_eq!(&out, b"world");
-        assert_eq!(b.total_len(), 11);
-    }
-
-    #[test]
-    fn overflow_buffer_spills_to_mmap() {
-        let path = std::env::temp_dir().join("moxsh-ring-test-spill");
-        let mut b = OverflowBuffer::new(8, path).unwrap();
-        // 超过内存上限 8 字节，触发落盘兜底
-        b.push(b"0123456789ABCDEF").unwrap();
-        assert!(b.spilled());
-        assert_eq!(b.total_len(), 16);
-        let mut out = [0u8; 16];
-        assert_eq!(b.read_at(0, &mut out).unwrap(), 16);
-        assert_eq!(&out, b"0123456789ABCDEF");
-        // 继续追加仍正确
-        b.push(b"!").unwrap();
-        let mut tail = [0u8; 1];
-        assert_eq!(b.read_at(16, &mut tail).unwrap(), 1);
-        assert_eq!(tail[0], b'!');
-    }
-
-    /// M5-补1：mem_only 阶段写入后触发落盘，跨"原内存段"的中部偏移读取仍正确。
-    #[test]
-    fn overflow_buffer_read_mid_after_spill() {
-        let path = std::env::temp_dir().join("moxsh-ring-test-mid");
-        let mut b = OverflowBuffer::new(16, path).unwrap();
-        b.push(b"0123456789").unwrap(); // 10 字节，仍在内存
-        assert!(!b.spilled());
-        b.push(b"ABCDEFGHIJKLMNOP").unwrap(); // 10+16 > 16 → 整体搬移落盘
-        assert!(b.spilled());
-        assert_eq!(b.total_len(), 26);
-        // 中部偏移 12..18（原内存段内）内容无损坏
-        let mut out = [0u8; 6];
-        assert_eq!(b.read_at(12, &mut out).unwrap(), 6);
-        assert_eq!(&out, b"CDEFGH");
-    }
-
-    /// M5-补2：sync 在未落盘（no-op）与已落盘（msync）两种状态下都不 panic。
-    #[test]
-    fn overflow_buffer_sync_ok() {
-        let path = std::env::temp_dir().join("moxsh-ring-test-sync");
-        let mut b = OverflowBuffer::new(4, path).unwrap();
-        b.push(b"abc").unwrap(); // 仍在内存
-        assert!(b.sync().is_ok()); // 无映射 → no-op Ok
-        b.push(b"defghi").unwrap(); // 3+6 > 4 → 触发落盘
-        assert!(b.spilled());
-        assert!(b.sync().is_ok()); // msync MS_ASYNC 不 panic、返回 Ok
-    }
-
-    /// M5-补3：drop 后落盘的 mmap 文件被清理（会话关闭即释放磁盘）。
-    #[test]
-    fn overflow_buffer_drop_cleans_file() {
-        let path = std::env::temp_dir().join("moxsh-ring-test-drop");
-        {
-            let mut b = OverflowBuffer::new(4, path.clone()).unwrap();
-            b.push(b"0123456789").unwrap(); // 触发落盘，创建 mmap 文件
-            assert!(b.spilled());
-            assert!(path.exists(), "落盘后 mmap 文件应存在");
-        } // 此处 drop
-        assert!(!path.exists(), "drop 后落盘文件应被清理");
-    }
-
-    /// P0 回归：mmap 扩容必须保留既有历史（旧映射数据整体迁移到新映射）。
-    #[test]
-    fn overflow_buffer_grow_preserves_history() {
-        let path = std::env::temp_dir().join("moxsh-ring-test-grow");
-        let mut b = OverflowBuffer::new(1024 * 1024, path).unwrap(); // mem_cap = 1 MiB
-        let seed: Vec<u8> = (0..1_200_000u32).map(|i| (i % 251) as u8).collect();
-        b.push(&seed).unwrap(); // 触发首次落盘（1.2 MB > 1 MiB）
-        assert!(b.spilled());
-        // 连续追加触发两次扩容（1.2→2.4→4.8 MB），全程历史不得丢失
-        for round in 0..2u32 {
-            let more: Vec<u8> = (0..1_400_000u32)
-                .map(|i| ((i + round * 7) % 251) as u8)
-                .collect();
-            b.push(&more).unwrap();
-        }
-        assert_eq!(b.total_len(), 1_200_000 + 1_400_000 * 2);
-        let mut head = [0u8; 64];
-        assert_eq!(b.read_at(0, &mut head).unwrap(), 64);
-        assert_eq!(&head, &seed[..64], "扩容后开头历史丢失");
-        let mut tail = [0u8; 64];
-        let end = b.total_len();
-        assert_eq!(b.read_at(end - 64, &mut tail).unwrap(), 64);
-        let expect_tail: Vec<u8> = (1_399_936u32..1_400_000u32)
-            .map(|i| ((i + 7) % 251) as u8)
-            .collect();
-        assert_eq!(&tail, &expect_tail[..], "扩容后尾部数据丢失");
-    }
-}
-
 /// 内存 + 落盘二级字节缓冲（回滚兜底，M5）。
 ///
 /// 前段保留在内存（`mem_cap` 字节）；超过上限后整段搬移到 mmap 文件，
@@ -343,5 +226,122 @@ impl Drop for OverflowBuffer {
         }
         // 清理落盘文件（会话关闭即释放磁盘）
         let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push_and_get() {
+        let mut r = RingBuffer::new(3);
+        r.push(1);
+        r.push(2);
+        r.push(3);
+        assert_eq!(r.len(), 3);
+        assert_eq!(*r.get(0), 1);
+        assert_eq!(*r.get(2), 3);
+        // 覆盖最老
+        r.push(4);
+        assert_eq!(*r.get(0), 2);
+        assert_eq!(*r.get(2), 4);
+    }
+
+    #[test]
+    fn overflow_buffer_mem_only() {
+        let mut b = OverflowBuffer::new(1024, std::env::temp_dir().join("moxsh-ring-test-mem")).unwrap();
+        b.push(b"hello world").unwrap();
+        let mut out = [0u8; 5];
+        assert_eq!(b.read_at(6, &mut out).unwrap(), 5);
+        assert_eq!(&out, b"world");
+        assert_eq!(b.total_len(), 11);
+    }
+
+    #[test]
+    fn overflow_buffer_spills_to_mmap() {
+        let path = std::env::temp_dir().join("moxsh-ring-test-spill");
+        let mut b = OverflowBuffer::new(8, path).unwrap();
+        // 超过内存上限 8 字节，触发落盘兜底
+        b.push(b"0123456789ABCDEF").unwrap();
+        assert!(b.spilled());
+        assert_eq!(b.total_len(), 16);
+        let mut out = [0u8; 16];
+        assert_eq!(b.read_at(0, &mut out).unwrap(), 16);
+        assert_eq!(&out, b"0123456789ABCDEF");
+        // 继续追加仍正确
+        b.push(b"!").unwrap();
+        let mut tail = [0u8; 1];
+        assert_eq!(b.read_at(16, &mut tail).unwrap(), 1);
+        assert_eq!(tail[0], b'!');
+    }
+
+    /// M5-补1：mem_only 阶段写入后触发落盘，跨"原内存段"的中部偏移读取仍正确。
+    #[test]
+    fn overflow_buffer_read_mid_after_spill() {
+        let path = std::env::temp_dir().join("moxsh-ring-test-mid");
+        let mut b = OverflowBuffer::new(16, path).unwrap();
+        b.push(b"0123456789").unwrap(); // 10 字节，仍在内存
+        assert!(!b.spilled());
+        b.push(b"ABCDEFGHIJKLMNOP").unwrap(); // 10+16 > 16 → 整体搬移落盘
+        assert!(b.spilled());
+        assert_eq!(b.total_len(), 26);
+        // 中部偏移 12..18（原内存段内）内容无损坏
+        let mut out = [0u8; 6];
+        assert_eq!(b.read_at(12, &mut out).unwrap(), 6);
+        assert_eq!(&out, b"CDEFGH");
+    }
+
+    /// M5-补2：sync 在未落盘（no-op）与已落盘（msync）两种状态下都不 panic。
+    #[test]
+    fn overflow_buffer_sync_ok() {
+        let path = std::env::temp_dir().join("moxsh-ring-test-sync");
+        let mut b = OverflowBuffer::new(4, path).unwrap();
+        b.push(b"abc").unwrap(); // 仍在内存
+        assert!(b.sync().is_ok()); // 无映射 → no-op Ok
+        b.push(b"defghi").unwrap(); // 3+6 > 4 → 触发落盘
+        assert!(b.spilled());
+        assert!(b.sync().is_ok()); // msync MS_ASYNC 不 panic、返回 Ok
+    }
+
+    /// M5-补3：drop 后落盘的 mmap 文件被清理（会话关闭即释放磁盘）。
+    #[test]
+    fn overflow_buffer_drop_cleans_file() {
+        let path = std::env::temp_dir().join("moxsh-ring-test-drop");
+        {
+            let mut b = OverflowBuffer::new(4, path.clone()).unwrap();
+            b.push(b"0123456789").unwrap(); // 触发落盘，创建 mmap 文件
+            assert!(b.spilled());
+            assert!(path.exists(), "落盘后 mmap 文件应存在");
+        } // 此处 drop
+        assert!(!path.exists(), "drop 后落盘文件应被清理");
+    }
+
+    /// P0 回归：mmap 扩容必须保留既有历史（旧映射数据整体迁移到新映射）。
+    #[test]
+    fn overflow_buffer_grow_preserves_history() {
+        let path = std::env::temp_dir().join("moxsh-ring-test-grow");
+        let mut b = OverflowBuffer::new(1024 * 1024, path).unwrap(); // mem_cap = 1 MiB
+        let seed: Vec<u8> = (0..1_200_000u32).map(|i| (i % 251) as u8).collect();
+        b.push(&seed).unwrap(); // 触发首次落盘（1.2 MB > 1 MiB）
+        assert!(b.spilled());
+        // 连续追加触发两次扩容（1.2→2.4→4.8 MB），全程历史不得丢失
+        for round in 0..2u32 {
+            let more: Vec<u8> = (0..1_400_000u32)
+                .map(|i| ((i + round * 7) % 251) as u8)
+                .collect();
+            b.push(&more).unwrap();
+        }
+        assert_eq!(b.total_len(), 1_200_000 + 1_400_000 * 2);
+        let mut head = [0u8; 64];
+        assert_eq!(b.read_at(0, &mut head).unwrap(), 64);
+        assert_eq!(&head, &seed[..64], "扩容后开头历史丢失");
+        let mut tail = [0u8; 64];
+        let end = b.total_len();
+        assert_eq!(b.read_at(end - 64, &mut tail).unwrap(), 64);
+        let expect_tail: Vec<u8> = (1_399_936u32..1_400_000u32)
+            .map(|i| ((i + 7) % 251) as u8)
+            .collect();
+        assert_eq!(&tail, &expect_tail[..], "扩容后尾部数据丢失");
     }
 }
