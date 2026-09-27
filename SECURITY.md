@@ -13,10 +13,9 @@ moxsh 目前处于快速迭代阶段，安全修复仅针对最新发布的版�
 
 **请勿通过公开的 GitHub Issue 报告安全漏洞。**
 
-请通过以下任一渠道私密报告：
+请通过 GitHub 私密漏洞报告渠道提交：
 
-1. **GitHub 私密漏洞报告**：仓库页 → Security → Report a vulnerability（推荐）
-2. **邮件**：zyr15555086235@gmail.com（标题注明 `[moxsh security]`）
+**GitHub 私密漏洞报告**：仓库页 → Security → Report a vulnerability（推荐）
 
 请在报告中尽量包含：
 
