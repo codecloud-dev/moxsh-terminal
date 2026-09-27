@@ -56,8 +56,8 @@ impl Pty {
                 if slave_fd < 0 {
                     libc::_exit(1);
                 }
-                // 把从设备设为控制终端
-                if libc::ioctl(slave_fd, libc::TIOCSCTTY as libc::c_ulong, 0) < 0 {
+                // 把从设备设为控制终端（TIOCSCTTY 在不同平台上是 c_int 或 c_ulong，用 as _ 按目标平台推断）
+                if libc::ioctl(slave_fd, libc::TIOCSCTTY as _, 0) < 0 {
                     libc::_exit(1);
                 }
                 // 重定向标准流

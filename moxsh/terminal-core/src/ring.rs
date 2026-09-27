@@ -210,7 +210,7 @@ impl OverflowBuffer {
         if self.map.is_none() && self.mem.len() + data.len() > self.mem_cap {
             let need = self.mem.len() + data.len();
             let grow = (need * 2).max(1024 * 1024); // 翻倍增长，最少 1 MiB，减少重映射次数
-            let mut area = self.create_map(grow)?;
+            let area = self.create_map(grow)?;
             unsafe {
                 std::ptr::copy_nonoverlapping(self.mem.as_ptr(), area.ptr, self.mem.len());
             }

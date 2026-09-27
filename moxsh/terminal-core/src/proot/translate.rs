@@ -204,7 +204,7 @@ impl TranslateRules {
         let mut best: Option<&Binding> = None;
         for b in self.bindings.iter().filter(|b| b.isolated) {
             let hcomps = split_comps(&b.host);
-            if let Some(rest) = strip_prefix_comps(&comps, &hcomps) {
+            if strip_prefix_comps(&comps, &hcomps).is_some() {
                 if hcomps.len() >= best_len {
                     best_len = hcomps.len();
                     best = Some(b);

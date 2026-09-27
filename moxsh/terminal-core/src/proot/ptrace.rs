@@ -534,17 +534,18 @@ impl Tracer {
                 }
                 return Err(ProotError::Io(e));
             }
-            if unsafe { libc::WIFEXITED(status) } {
-                return Ok(unsafe { libc::WEXITSTATUS(status) });
+            // WIFEXITED/WEXITSTATUS 等在当前 libc 版本已是安全函数，无需 unsafe
+            if libc::WIFEXITED(status) {
+                return Ok(libc::WEXITSTATUS(status));
             }
-            if unsafe { libc::WIFSIGNALED(status) } {
-                return Ok(128 + unsafe { libc::WTERMSIG(status) });
+            if libc::WIFSIGNALED(status) {
+                return Ok(128 + libc::WTERMSIG(status));
             }
-            if !unsafe { libc::WIFSTOPPED(status) } {
+            if !libc::WIFSTOPPED(status) {
                 continue;
             }
 
-            let sig = unsafe { libc::WSTOPSIG(status) };
+            let sig = libc::WSTOPSIG(status);
             let sysgood_stop = sig == libc::SIGTRAP | 0x80;
 
             if sysgood_stop {

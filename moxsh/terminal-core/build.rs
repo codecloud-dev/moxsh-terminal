@@ -2,6 +2,9 @@
 // cargo-ndk 已设置好 CC_aarch64_linux_android / AR / 链接标志等环境变量，
 // cc crate 会自动采用对应工具链，无需手写路径。
 fn main() {
+    // 告知 rustc 检查自定义 cfg，消除 unexpected_cfgs 警告
+    println!("cargo:rustc-check-cfg=cfg(has_neon_asm)");
+
     let target = std::env::var("TARGET").unwrap_or_default();
     let is_android = target.contains("android");
 
