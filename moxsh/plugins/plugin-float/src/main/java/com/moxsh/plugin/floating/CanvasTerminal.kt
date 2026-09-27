@@ -45,7 +45,7 @@ fun CanvasTerminal(
 
     // tick 变化触发 CanvasTerminal 重组，从而重画 Canvas
     Canvas(modifier) {
-        val density = this.density.density
+        val density = this.density // DrawScope 实现 Density 接口，density 即 Float
         val cellW = fontSizeSp * density * 0.6f
         val cellH = fontSizeSp * density * 1.2f
         paint.textSize = fontSizeSp * density

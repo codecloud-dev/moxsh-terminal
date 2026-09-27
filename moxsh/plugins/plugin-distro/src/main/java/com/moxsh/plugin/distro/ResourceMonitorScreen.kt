@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moxsh.plugin.core.PluginContract
 import com.moxsh.plugin.core.PluginHost
-import com.moxsh.ui.component.GlassConfirmDialog
 import com.moxsh.ui.component.GlassSurface
 import com.moxsh.ui.component.GlassTokens
 import kotlinx.coroutines.Dispatchers
