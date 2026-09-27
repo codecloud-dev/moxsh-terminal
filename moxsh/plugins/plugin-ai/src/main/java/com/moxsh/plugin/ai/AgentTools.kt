@@ -525,9 +525,14 @@ class AgentExecutor(
             )
             // P1 修复（确认绕过）：破坏性分级可被模型用 run_command 绕过——
             // 对 LOW/RISKY 工具额外做命令内容审查，命中破坏性模式时强制走确认卡。
-            val cmdText = call.args["command"] ?: call.args.values.joinToString(" ")
+            val argsObj = runCatching {
+                org.json.JSONObject(call.argumentsJson.ifBlank { "{}" })
+            }.getOrDefault(org.json.JSONObject())
+            val cmdText = buildString {
+                argsObj.keys().forEach { k -> append(argsObj.optString(k)).append(' ') }
+            }
             val destructive = tool.danger != DangerLevel.HIGH && Regex(
-                pattern = "(?i)\\b(rm\\s+-[rf]|mkfs|dd\\s+if=|chmod\\s+-R\\s+777|sed\\s+-i|>|\\|\\|)\\b|>>?\\s*/",
+                "(?i)(rm\\s+-[rf]|mkfs|dd\\s+if=|chmod\\s+-R\\s+777|sed\\s+-i|mkdir)",
             ).containsMatchIn(cmdText)
             if (tool.danger == DangerLevel.HIGH || destructive) {
                 // 玻璃确认卡在这里挂起：UI 层的 confirm 实现渲染 GlassConfirmCard，
