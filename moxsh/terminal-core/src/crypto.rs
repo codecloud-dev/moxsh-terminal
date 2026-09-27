@@ -124,7 +124,9 @@ pub fn random_bytes(buf: &mut [u8]) -> bool {
             )
         };
         if n < 0 {
-            if unsafe { *libc::__errno_location() } == libc::EINTR {
+            // 经 std 封装读 errno：跨平台一致（Android bionic 为 __errno，
+            // glibc 为 __errno_location，直接调用会在 aarch64-android 缺符号）。
+            if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
                 continue;
             }
             return fill_from_urandom(&mut buf[off..]);
