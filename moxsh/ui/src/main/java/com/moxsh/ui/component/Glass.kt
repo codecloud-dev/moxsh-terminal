@@ -1,7 +1,5 @@
 package com.moxsh.ui.component
 
-import android.graphics.RenderEffect as AndroidRenderEffect
-import android.graphics.Shader
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,11 +12,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.unit.dp
 
 /**
@@ -44,20 +41,15 @@ object GlassTokens {
 
 /**
  * 玻璃模糊 Modifier（D8 关键能力）。
- * 仅 API31+ 生效；低版本静默回退到静态半透明（不报错、不掉帧）。
+ * 仅 API31+ 生效（Compose blur 内部经 RenderEffect 实现）；低版本自动 no-op，
+ * 静默回退到静态半透明（不报错、不掉帧）。
  *
  * @param enabled 是否开启实时模糊；通常传 `!perfMode`（性能模式关模糊）。
  * @param radiusDp 模糊半径（dp）。
  */
 fun Modifier.glassBlur(enabled: Boolean, radiusDp: Float = 20f): Modifier =
     if (enabled && Build.VERSION.SDK_INT >= 31) {
-        this.then(
-            Modifier.graphicsLayer {
-                renderEffect = AndroidRenderEffect.createBlurEffect(
-                    radiusDp, radiusDp, Shader.TileMode.CLAMP
-                ).asComposeRenderEffect()
-            }
-        )
+        this.then(Modifier.blur(radiusDp.dp))
     } else this
 
 /** 全局玻璃背景层：在内容之下铺一层渐变 +（可选）实时模糊。 */
