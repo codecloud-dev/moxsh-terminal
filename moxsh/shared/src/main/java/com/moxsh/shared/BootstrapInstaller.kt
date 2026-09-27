@@ -62,29 +62,27 @@ object BootstrapInstaller {
         val abis: Set<String> = emptySet(),
     )
 
-    companion object {
-        /** Termux 官方 bootstrap 版本（升级时同步更新 URL 与 sha256）。 */
-        private const val TERMUX_BOOTSTRAP_TAG = "bootstrap-2026.09.20-r1%2Bapt.android-7"
+    /** Termux 官方 bootstrap 版本（升级时同步更新 URL 与 sha256）。 */
+    private const val TERMUX_BOOTSTRAP_TAG = "bootstrap-2026.09.20-r1%2Bapt.android-7"
 
-        /**
-         * 各 bootstrap 架构包的官方 sha256（GitHub Release 资产 digest 逐个核实，
-         * `gh api repos/termux/termux-packages/releases/tags/<tag>` 可复核）。
-         */
-        private val TERMUX_SHA256 = mapOf(
-            "aarch64" to "65ba578133ea2f4e5cc07234568815397cf9e1236b5da8c06ce6753cf036cc69",
-            "arm" to "1c953b1d808c45fd578b7a3b4ba4d6b6f54329a7f6db57dceeab55fe997102e8",
-            "i686" to "db0c868c88b8d814e71b7e2d60438c836b903585140f40046d885ce103e789fe",
-            "x86_64" to "2d23d45c1a9e72dda2172895c218334473a2d1560e724f4b88323e56e80736ff",
-        )
+    /**
+     * 各 bootstrap 架构包的官方 sha256（GitHub Release 资产 digest 逐个核实，
+     * `gh api repos/termux/termux-packages/releases/tags/<tag>` 可复核）。
+     */
+    private val TERMUX_SHA256 = mapOf(
+        "aarch64" to "65ba578133ea2f4e5cc07234568815397cf9e1236b5da8c06ce6753cf036cc69",
+        "arm" to "1c953b1d808c45fd578b7a3b4ba4d6b6f54329a7f6db57dceeab55fe997102e8",
+        "i686" to "db0c868c88b8d814e71b7e2d60438c836b903585140f40046d885ce103e789fe",
+        "x86_64" to "2d23d45c1a9e72dda2172895c218334473a2d1560e724f4b88323e56e80736ff",
+    )
 
-        /** 设备 ABI -> Termux bootstrap 架构名映射（Termux 只按这 4 个架构分发）。 */
-        private fun bootstrapAbiOf(deviceAbi: String): String = when (deviceAbi) {
-            "arm64-v8a" -> "aarch64"
-            "armeabi-v7a", "armv7l", "armv8l" -> "arm"
-            "x86" -> "i686"
-            "x86_64" -> "x86_64"
-            else -> deviceAbi
-        }
+    /** 设备 ABI -> Termux bootstrap 架构名映射（Termux 只按这 4 个架构分发）。 */
+    private fun bootstrapAbiOf(deviceAbi: String): String = when (deviceAbi) {
+        "arm64-v8a" -> "aarch64"
+        "armeabi-v7a", "armv7l", "armv8l" -> "arm"
+        "x86" -> "i686"
+        "x86_64" -> "x86_64"
+        else -> deviceAbi
     }
 
     /** 当前版本的 bootstrap 源列表（顺序 = 优先级；abis 为空 = 对已实例化的架构全部适用）。 */

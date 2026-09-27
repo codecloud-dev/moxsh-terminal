@@ -59,9 +59,12 @@ dependencies {
     implementation(project(":terminal-core"))
     implementation(project(":shared"))
     implementation(project(":ui"))
+    implementation(project(":plugins:plugin-core"))
     implementation(project(":plugins:plugin-float"))
     implementation(project(":plugins:plugin-distro"))
     implementation(project(":plugins:plugin-styling"))
+    implementation(project(":plugins:plugin-boot"))
+    implementation(project(":plugins:plugin-widget"))
     implementation(project(":plugins:plugin-api"))
     // D16 插件商店 + D18 AI Agent（plugin-ai 目录由另一 agent 实现，此处仅依赖占位）
     implementation(project(":plugins:plugin-store"))

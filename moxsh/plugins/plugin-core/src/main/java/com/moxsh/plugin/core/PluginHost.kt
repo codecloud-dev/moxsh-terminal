@@ -29,20 +29,57 @@ class PluginHost(
         plugins[plugin.id] = plugin
     }
 
-    /** 按 id 卸载插件，并清理其注册的 AI 技能等运行期资源。 */
+    /**
+     * 加载 v2 插件（[MoxPlugin] 子类）：注册进宿主、注入带权限校验的
+     * [PluginApi] 门面并回调 [MoxPlugin.onLoad]。
+     */
+    fun load(plugin: MoxPlugin, appContext: android.content.Context) {
+        load(plugin)
+        runCatching { plugin.attachHost(this, appContext) }
+    }
+
+    /** 按 id 卸载插件：回调 [MoxPlugin.onUnload]，并清理其注册的 AI 技能等运行期资源。 */
     fun unload(id: String) {
-        plugins.remove(id)
+        val plugin = plugins.remove(id)
+        if (plugin is MoxPlugin) runCatching { plugin.detachHost() }
         runCatching { SkillRegistry.unregisterAllOf(id) }
     }
 
     /** 列出当前已加载的全部插件。 */
     fun list(): List<PluginContract> = plugins.values.toList()
 
-    /** 经加固 IPC 把命令转发给 moxsh 内核，返回结果文本。 */
-    fun runRemoteCommand(line: String): String = ipc.request(line)
+    /**
+     * 会话事件桥（shared.ExecutionEngine → v2 事件总线）：
+     * 引擎侧会话开/关在此转为 [PluginEvent.SessionOpened] / [PluginEvent.SessionClosed]。
+     * 方向为 plugin 主动注册监听，shared 不反向依赖 plugin 层。
+     */
+    private val sessionBridge = object : ExecutionEngine.SessionListener {
+        override fun onSessionOpened(id: Long, command: String) {
+            events.publish(PluginEvent.SessionOpened(id))
+        }
 
-    /** 本地直接把输入喂给 PTY（同进程执行引擎）。返回是否写入成功。 */
-    fun runLocalCommand(line: String): Boolean = engine.write(0, line.toByteArray())
+        override fun onSessionClosed(id: Long) {
+            events.publish(PluginEvent.SessionClosed(id))
+        }
+    }
+
+    /** 进程级装配（主 app 启动时调用一次）：把会话生命周期桥接到事件总线。 */
+    fun attachEngineEvents() {
+        engine.sessionListener = sessionBridge
+    }
+
+    /** 经加固 IPC 把命令转发给 moxsh 内核，返回结果文本；成功时发布命令执行事件。 */
+    fun runRemoteCommand(line: String): String =
+        ipc.request(line).also {
+            if (it.isNotEmpty()) events.publish(PluginEvent.CommandExecuted(-1L, line))
+        }
+
+    /** 本地直接把输入喂给 PTY（同进程执行引擎）；写入成功时发布命令执行事件。 */
+    fun runLocalCommand(line: String): Boolean {
+        val ok = engine.write(0, line.toByteArray())
+        if (ok) events.publish(PluginEvent.CommandExecuted(0L, line))
+        return ok
+    }
 
     /**
      * 为插件构造 [PluginApi] 门面（v2 主入口）。

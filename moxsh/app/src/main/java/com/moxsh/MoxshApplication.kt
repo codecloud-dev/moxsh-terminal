@@ -33,6 +33,9 @@ class MoxshApplication : Application() {
         // 前台保活（应用冷启动时进程处于前台，满足 FGS 启动限制；Service.onCreate 内 startForeground）
         startForegroundService(Intent(this, MoxshSessionService::class.java))
 
+        // 插件宿主装配（D5 体系②）：内置原生玻璃插件注册 + 会话事件桥
+        PluginManager.init(this)
+
         // 运行环境就绪流水线：幂等（已就绪直接 Ready；失败进 BootstrapState.Failed，
         // UI 可引导重试或走 BootstrapInstaller.installFromLocal 离线导入）
         appScope.launch { BootstrapState.begin(this@MoxshApplication) }

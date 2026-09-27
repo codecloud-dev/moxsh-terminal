@@ -61,6 +61,19 @@ object ExecutionEngine {
     private val pumpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /**
+     * 会话生命周期监听（插件宿主装配时设置；null = 无监听）。
+     * 方向设计：shared 不感知 plugin 层，由 plugin-core 注册回调，避免循环依赖。
+     */
+    interface SessionListener {
+        fun onSessionOpened(id: Long, command: String)
+        fun onSessionClosed(id: Long)
+    }
+
+    /** 进程级会话事件监听（[com.moxsh.plugin.core.PluginHost] 装配时注入）。 */
+    @Volatile
+    var sessionListener: SessionListener? = null
+
+    /**
      * 创建一个终端会话。
      * @param command 要执行的命令（默认 [DEFAULT_SHELL]）。
      * @param cols 初始列数。
@@ -71,6 +84,7 @@ object ExecutionEngine {
         val session = core.open(command, cols, rows) ?: return -1L
         val id = nextId.getAndIncrement()
         sessions[id] = session
+        sessionListener?.onSessionOpened(id, command)
         return id
     }
 
@@ -78,6 +92,7 @@ object ExecutionEngine {
     fun destroySession(id: Long) {
         stopPump(id)
         sessions.remove(id)?.close()
+        sessionListener?.onSessionClosed(id)
     }
 
     /** 向会话写入用户输入字节（键盘/粘贴等）。无会话时静默忽略。 */
