@@ -73,6 +73,9 @@ class GlassWidgetProvider : AppWidgetProvider() {
         /** extra：按钮槽位编号。 */
         const val EXTRA_SLOT: String = "slot"
 
+        /** extra：按钮绑定的待执行命令（与 Tasker 通道的 extra 键名保持一致）。 */
+        const val EXTRA_COMMAND: String = "command"
+
         private val ipc = MoxshIpcClient()
 
         /** 主 app 包名（单 App 内置架构）。 */
