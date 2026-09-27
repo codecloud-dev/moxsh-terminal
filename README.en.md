@@ -2,7 +2,7 @@
 
 moxsh is a terminal application for Android: it gives you a full Linux command-line environment out of the box — no root required, no setup, just install and run.
 
-It is fully compatible with the Termux ecosystem: packages from the official Termux repositories install and run directly. At the same time, moxsh is a 100% clean-room implementation with none of Termux's code, which leaves room for better performance and a UI built entirely around liquid glass design. The kernel and package management are written in Rust, and the app ships with an AI assistant and a plugin store.
+It is fully compatible with the Termux ecosystem: packages from the official Termux repositories install and run directly. At the same time, moxsh is an AI-assisted, clean-room implementation: Termux's public documentation and build scripts were studied to align behavior and ecosystem contracts, but no code was copied, which leaves room for better performance and a UI built entirely around liquid glass design. The kernel and package management are written in Rust, and the app ships with an AI assistant and a plugin store.
 
 ## How it works
 
@@ -84,7 +84,7 @@ moxsh also hosts the Termux add-ons (Termux:API, Termux:Widget, etc.) through a 
 ## Relationship with Termux
 
 - **Packages**: fully compatible. `.deb` packages from the official Termux repository install and run; commands behave the same.
-- **Code**: zero reuse. The terminal kernel, package manager, runtime environment and PRoot engine are all written from scratch (Rust/Kotlin) — no Termux code, no patched Termux sources.
+- **Code**: AI-assisted, clean-room rewrite. The terminal kernel, package manager, runtime environment and PRoot engine are all written from scratch (Rust/Kotlin); Termux sources were studied for behavior alignment but no code was copied and no patched Termux sources are used.
 - **Plugins**: dual system. The compatibility host keeps existing Termux add-ons working; native moxsh plugins (`.mox`) are independently signed with glass UI.
 
 ## Documentation
@@ -101,3 +101,9 @@ Found a bug or want a feature? Open an [Issue](../../issues). Pull requests are 
 ## License
 
 [GPL-3.0](LICENSE)
+
+## AI Assistance Notice
+
+This project (all code, docs and the website) is designed and owned by **Codecloud**,
+with **AI-assisted code generation**: architecture decisions, requirements and acceptance are human-driven;
+implementation and documentation are AI-collaborated and human-reviewed.

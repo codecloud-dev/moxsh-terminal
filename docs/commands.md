@@ -1,6 +1,6 @@
 # Termux 命令体系全景
 
-> 基于已克隆至 `/workspace/termux-src` 的 Termux 源码盘点整理。
+> 与 Termux 生态命令体系对齐的盘点整理。
 > 覆盖范围：`termux-api`、`termux-tools`、`termux-app` 三大组件。
 > 本文聚焦「有哪些命令 / 它们做什么 / 如何被分发」，不含实现代码。
 

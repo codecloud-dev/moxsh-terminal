@@ -95,7 +95,7 @@ Kotlin/Compose ──JNI──> cpp/bridge.cpp (C++ 仅桥接) ──C-ABI──
 push 到 `main`/`dev` 即触发 `.github/workflows/build.yml`：
 - JDK17 → Android SDK + NDK 26 → **Rust 工具链 + cargo-ndk + `ANDROID_NDK_HOME`** → Gradle 缓存(镜像) → 复制国内镜像 init → `gradle assembleRelease`（内部 `preBuild` 先跑 `cargo ndk` 产出 `libmoxshcore.so`）→ 上传 APK。
 - 正式签名：仓库 Secrets 配置 `KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`。
-- 沙箱内无 Android SDK，**APK 由云端 CI 在 push 后产出**。
+- 本地开发无需安装 Android SDK，**APK 由云端 CI 在 push 后自动产出**。
 
 ### 本地
 - Android Studio 打开 `moxsh/`；需 Android SDK(34) + NDK 26.1.10909125 + Rust（见 `rust-toolchain.toml`，含 aarch64/x86_64 android targets）+ `cargo install cargo-ndk`。

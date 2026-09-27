@@ -146,7 +146,7 @@ GitHub Actions `build.yml`：
 3. `gradle assembleRelease`（内部 `preBuild` 已先跑 `cargo ndk` 产出 `libmoxshcore.so`）
 4. 上传 APK/AAB
 
-> 沙箱限制：本环境无 Android SDK，**APK 由云端 CI 在 push 后产出**；沙箱交付可编译工程 + CI 配置 + 源码分析。
+> 本地开发无需 Android SDK：**APK 由云端 CI 在 push 后产出**；仓库交付可编译工程 + CI 配置 + 源码。
 
 ---
 
@@ -170,7 +170,7 @@ targetSdk/exec、loader/`/proc/self/exe`、Phantom Process Killer、Scoped Stora
 
 ## 13. 工程脚手架（当前已产出）
 
-位置：`/workspace/moxsh/`，GitHub Actions 在 `/workspace/.github/workflows/build.yml`。
+位置：`moxsh/`，GitHub Actions 在 `.github/workflows/build.yml`。
 
 | 路径 | 内容 |
 |---|---|
@@ -192,4 +192,4 @@ targetSdk/exec、loader/`/proc/self/exe`、Phantom Process Killer、Scoped Stora
 - `docs/plugins-rewrite.md`（7 插件重写方案）
 - `research/termux-plugins-shortcomings.md`（插件缺点调研，12 条）
 - `research/build-pitfalls.md`（构建踩坑，48 条）
-- `/workspace/termux-src/`（Termux 全量官方源码，供参考）
+- `termux-src/`（Termux 官方源码本地克隆，仅供 clean-room 阅读参考，已列入 .gitignore 不入库）

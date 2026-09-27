@@ -12,7 +12,7 @@
 | M3 | 玻璃 UI 主体 + 真实终端渲染 + 7 插件 | ✅ 完成 |
 | M4 | PRoot 容器引擎 + 图形化管理全家桶 + 商店 + AI Agent | ✅ 完成 |
 | M5 | Bootstrap 安装流程 + 回滚 mmap 兜底 | ✅ 完成 |
-| M6 | 首个可安装 APK（GitHub Actions 云端出包 + 真机联调） | ⏳ 待用户推仓库 |
+| M6 | 首个可安装 APK（GitHub Actions 云端出包 + 真机联调） | 🔄 CI 出包中，真机联调待验证 |
 | M7 | 性能打磨（120Hz 渲染、glyph atlas、syscall 热路径、本地小模型接入、售卖支付） | ⏳ 未开始 |
 
 ---
