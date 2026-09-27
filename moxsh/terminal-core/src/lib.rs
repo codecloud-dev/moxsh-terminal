@@ -40,6 +40,22 @@ use session::TerminalSession;
 // 注：安装为同步阻塞调用（下载已在 Kotlin 层完成、解压阶段不可中断），
 // 进度条按阶段估算；M6 真机联调如需细粒度回调，经 bridge.cpp 传函数指针。
 
+/// FFI panic 屏障（P3）：`extern "C"` 里 unwind 属未定义行为（Rust 1.81+ 会 abort，
+/// 表现为 Android 端整个 App 进程闪退）。所有重逻辑入口统一经 [ffi_guard] 执行：
+/// 内部 panic 被捕获并折叠为约定错误码 `-99`（MOXSH_ERR_PANIC），App 存活、
+/// Kotlin 侧可提示重试。只吞 panic 不吞错误：正常错误仍走各函数原有错误码。
+///
+/// 错误码约定补遗（与模块头注释的错误码表并列）：`-99 = 内核内部 panic（不应出现，
+/// 出现请附 logcat 上报）`。
+pub const MOXSH_ERR_PANIC: c_int = -99;
+
+fn ffi_guard<F: FnOnce() -> c_int + std::panic::UnwindSafe>(f: F) -> c_int {
+    match std::panic::catch_unwind(f) {
+        Ok(code) => code,
+        Err(_) => MOXSH_ERR_PANIC,
+    }
+}
+
 /// 读取 C 字符串为 Rust &str（非法 UTF-8 / null 返回 None）。
 ///
 /// # Safety
@@ -89,6 +105,9 @@ pub unsafe extern "C" fn moxsh_proot_install(
 ) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
+    // P3 panic 屏障：安装链路（下载/解压/落盘）体量大，内部异常折叠为 -99。
+    ffi_guard(move ||
+    unsafe {
     let (Some(id), Some(root)) = (read_opt_cstr(id), read_opt_cstr(moxsh_root)) else {
         return -1;
     };
@@ -108,6 +127,7 @@ pub unsafe extern "C" fn moxsh_proot_install(
         },
     };
     r.map(|_| 0).unwrap_or_else(|e| e.to_code())
+    })
 }
 }
 
@@ -219,6 +239,9 @@ pub unsafe extern "C" fn moxsh_proot_restore(
 ) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
+    // P3 panic 屏障：rootfs 恢复 = 大 tar 解压 + 覆盖写，异常折叠为 -99。
+    ffi_guard(move ||
+    unsafe {
     let (Some(id), Some(root), Some(tar)) = (
         read_opt_cstr(id),
         read_opt_cstr(moxsh_root),
@@ -230,6 +253,7 @@ pub unsafe extern "C" fn moxsh_proot_restore(
         .restore(&id, std::path::Path::new(&tar))
         .map(|_| 0)
         .unwrap_or_else(|e| e.to_code())
+    })
 }
 }
 
@@ -494,16 +518,19 @@ pub unsafe extern "C" fn moxsh_mox_extract(
 ) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
+    // P3 panic 屏障：解包 = 不可信第三方 tar 解压，异常折叠为 -99。
     if handle.is_null() {
         return -1;
     }
+    let handle_ref = &*handle;
     let Some(out_dir) = read_opt_cstr(out_dir) else {
         return -1;
     };
-    (*handle)
-        .extract_to(std::path::Path::new(&out_dir))
-        .map(|_| 0)
-        .unwrap_or_else(|e| e.to_code())
+    ffi_guard(move ||
+        handle_ref
+            .extract_to(std::path::Path::new(&out_dir))
+            .map(|_| 0)
+            .unwrap_or_else(|e| e.to_code()))
 }
 }
 

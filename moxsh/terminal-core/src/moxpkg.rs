@@ -673,8 +673,8 @@ mod tests {
         assert!(out.join("signature").is_file());
         assert!(!out.join("sneaky.txt").exists(), "非白名单顶级条目必须被跳过");
         let _ = fs::remove_dir_all(&out);
-        // 顺带清理 open_from_bytes_for_test 留下的临时 .mox 目录。
-        let _ = fs::remove_dir_all(std::env::temp_dir().join(format!("moxsh-mox-file-{}", std::process::id())));
+        // 注：open_from_bytes_for_test 的公共临时目录不在此清理——
+        // cargo test 并行执行时其他测试可能仍在读同一目录，删除会引入竞争。
     }
 
     // P1 回归：payload 内符号链接条目（target 指向包外）必须被防御性跳过，
@@ -721,10 +721,7 @@ mod tests {
             "符号链接条目必须被防御性跳过（防逃逸写入口）"
         );
         let _ = fs::remove_dir_all(&out);
-        let _ = fs::remove_dir_all(std::env::temp_dir().join(format!(
-            "moxsh-mox-file-{}",
-            std::process::id()
-        )));
+        // 同上：公共临时目录留给 /tmp 生命周期，避免并行测试竞争。
     }
 
     // 7. 缺 manifest.json → NotAMox；缺必填字段 / 非法 type → BadManifest。
