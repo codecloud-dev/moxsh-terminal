@@ -32,11 +32,12 @@ moxsh_neon_utf8_decode:
     b.eq    .Lthree
     // 4 字节
     and     w7, w6, #0x07
-    ldrb    w8, [x0, x4, #1]
+    add     x11, x0, x4            // p = src + i（AArch64 不允许基址+索引+立即数三元素寻址）
+    ldrb    w8, [x11, #1]
     and     w8, w8, #0x3f
-    ldrb    w9, [x0, x4, #2]
+    ldrb    w9, [x11, #2]
     and     w9, w9, #0x3f
-    ldrb    w10, [x0, x4, #3]
+    ldrb    w10, [x11, #3]
     and     w10, w10, #0x3f
     lsl     w7, w7, #18
     lsl     w8, w8, #12
@@ -51,9 +52,10 @@ moxsh_neon_utf8_decode:
 
 .Lthree:
     and     w7, w6, #0x0f
-    ldrb    w8, [x0, x4, #1]
+    add     x11, x0, x4
+    ldrb    w8, [x11, #1]
     and     w8, w8, #0x3f
-    ldrb    w9, [x0, x4, #2]
+    ldrb    w9, [x11, #2]
     and     w9, w9, #0x3f
     lsl     w7, w7, #12
     lsl     w8, w8, #6
@@ -66,7 +68,8 @@ moxsh_neon_utf8_decode:
 
 .Ltwo:
     and     w7, w6, #0x1f
-    ldrb    w8, [x0, x4, #1]
+    add     x11, x0, x4
+    ldrb    w8, [x11, #1]
     and     w8, w8, #0x3f
     lsl     w7, w7, #6
     orr     w7, w7, w8
