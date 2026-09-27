@@ -95,9 +95,11 @@ object ExecutionEngine {
         sessionListener?.onSessionClosed(id)
     }
 
-    /** 向会话写入用户输入字节（键盘/粘贴等）。无会话时静默忽略。 */
-    fun write(id: Long, data: ByteArray) {
-        sessions[id]?.write(data)
+    /** 向会话写入用户输入字节（键盘/粘贴等）。返回是否成功（无会话时 false）。 */
+    fun write(id: Long, data: ByteArray): Boolean {
+        val s = sessions[id] ?: return false
+        s.write(data)
+        return true
     }
 
     /** 更新会话窗口尺寸（cols/rows 联动写入内核）。无会话时静默忽略。 */

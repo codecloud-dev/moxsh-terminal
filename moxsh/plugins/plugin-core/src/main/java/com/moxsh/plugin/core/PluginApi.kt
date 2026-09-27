@@ -276,27 +276,27 @@ class PluginApi internal constructor(
     /** 网络能力（权限：network）。GET/POST 封装，固定 15s 超时、5 MB 响应上限。 */
     val net: NetApi = NetApi()
 
+    /** HTTP 响应（Kotlin 规则：data class 不能嵌套在 inner class 内，故提升到外层）。 */
+    data class HttpResponse(val status: Int, val body: ByteArray, val contentType: String?) {
+        /** 按 UTF-8 解码响应体。 */
+        fun text(): String = body.toString(Charsets.UTF_8)
+    }
+
     inner class NetApi internal constructor() {
 
-        /** HTTP 响应。 */
-        data class Response(val status: Int, val body: ByteArray, val contentType: String?) {
-            /** 按 UTF-8 解码响应体。 */
-            fun text(): String = body.toString(Charsets.UTF_8)
-        }
-
         /** 同步 GET（勿在主线程调用；建议配合 events/onOutput 的后台线程）。 */
-        fun get(url: String, headers: Map<String, String> = emptyMap()): Response {
+        fun get(url: String, headers: Map<String, String> = emptyMap()): HttpResponse {
             require(PluginPermissions.NETWORK)
             return request("GET", url, null, headers)
         }
 
         /** 同步 POST（body 原样发送；勿在主线程调用）。 */
-        fun post(url: String, body: ByteArray, headers: Map<String, String> = emptyMap()): Response {
+        fun post(url: String, body: ByteArray, headers: Map<String, String> = emptyMap()): HttpResponse {
             require(PluginPermissions.NETWORK)
             return request("POST", url, body, headers)
         }
 
-        private fun request(method: String, url: String, body: ByteArray?, headers: Map<String, String>): Response {
+        private fun request(method: String, url: String, body: ByteArray?, headers: Map<String, String>): HttpResponse {
             val conn = URL(url).openConnection() as HttpURLConnection
             conn.requestMethod = method
             conn.connectTimeout = 15_000
@@ -311,13 +311,27 @@ class PluginApi internal constructor(
                 if (body != null) conn.outputStream.use { it.write(body) }
                 val code = conn.responseCode
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val bytes = stream?.use { it.readBytes(MAX_RESPONSE_BYTES + 1) } ?: ByteArray(0)
+                val bytes = stream?.use { readLimited(it, MAX_RESPONSE_BYTES + 1) } ?: ByteArray(0)
                 require(bytes.size <= MAX_RESPONSE_BYTES) { "响应超过 5 MB 上限" }
-                Response(code, bytes, conn.contentType)
+                HttpResponse(code, bytes, conn.contentType)
             } finally {
                 conn.disconnect()
             }
         }
+    }
+
+    /** 限量读流：最多 max 字节（防恶意大响应占内存；readBytes(estimated) 已被 Kotlin 弃用为 error）。 */
+    private fun readLimited(input: java.io.InputStream, max: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream(minOf(max, 64 * 1024))
+        val buf = ByteArray(32 * 1024)
+        var total = 0
+        while (total < max) {
+            val n = input.read(buf, 0, minOf(buf.size, max - total))
+            if (n == -1) break
+            out.write(buf, 0, n)
+            total += n
+        }
+        return out.toByteArray()
     }
 
     // ── store：插件 KV ──────────────────────────────────────────────────────
@@ -326,7 +340,11 @@ class PluginApi internal constructor(
     val store: StorageApi = StorageApi()
 
     inner class StorageApi internal constructor() {
-        private val file: File by lazy { File(privateDir(), "store.properties") }
+        // 直接按插件私有目录构造（复用 FsApi 的目录契约，但不触发 fs 权限——
+        // storage 与 fs 是相互独立的权限域）
+        private val file: File by lazy {
+            File(File(context.filesDir, "plugins/$pluginId").apply { mkdirs() }, "store.properties")
+        }
         private val props = java.util.Properties()
 
         init {
