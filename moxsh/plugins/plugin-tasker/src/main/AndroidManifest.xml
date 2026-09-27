@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+          Tasker 联动接收器（重写 Termux:Tasker，docs/plugins-rewrite.md §五）：
+          接收 com.moxsh.plugin.tasker.RUN 意图，解析命令经 CompatShim 路由执行，
+          结果以 PendingIntent 或广播回传 Tasker。
+        -->
+        <receiver
+            android:name=".TaskerReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.moxsh.plugin.tasker.RUN" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Tasker 命令模板的玻璃配置面板 -->
+        <activity
+            android:name=".TaskerGlassActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Moxsh.Glass" />
+    </application>
+</manifest>

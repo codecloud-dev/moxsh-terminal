@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 玻璃卡片部件元信息：2x1 起步、支持双向缩放、点按由代码绑定（不轮询省电） -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="72dp"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/glass_widget"
+    android:configure="com.moxsh.plugin.widget.WidgetGlassActivity"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

@@ -1,0 +1,146 @@
+package com.moxsh.shared
+
+import com.moxsh.core.TerminalCore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+
+/**
+ * 执行引擎（L4）：管理多个终端会话、PTY、以及输入/输出泵循环。
+ *
+ * 设计要点：
+ *  - 内部用 [TerminalCore] 创建并持有多个 [TerminalCore.Session]，对外暴露自增的 Long 句柄，
+ *    与 terminal-core 的裸指针彻底解耦，避免上层直接碰 native 指针。
+ *  - 用 [ConcurrentHashMap] 存储会话，保证多线程（尤其 [startPump] 起的协程）安全。
+ *  - [startPump] 使用 kotlinx.coroutines 在 [Dispatchers.IO] 上起一个独立的泵循环，
+ *    反复调用 [pump] 把 PTY 输出驱动出来；返回字节数 > 0 时回调 [onUpdate]，
+ *    EOF（n<=0）或协程被取消（[stopPump]）时自动停止。
+ *
+ * 该类为单例 [object]，全局唯一，负责整份应用的会话生命周期。
+ */
+object ExecutionEngine {
+
+    /**
+     * 默认 shell。
+     *
+     * 当前为系统 shell 占位 `/system/bin/sh`。
+     * 运行环境就绪（自研 rootfs 解压完成、PREFIX 已布局）后，应切换到 moxsh 自有
+     * prefix 的 login shell，例如：
+     *   const val DEFAULT_SHELL = "$PREFIX/bin/login"
+     * 或 `val DEFAULT_SHELL = "$PREFIX/bin/bash -l"`，以获得正确的环境与 PATH。
+     */
+    const val DEFAULT_SHELL: String = "/system/bin/sh"
+
+    /** 自研运行环境前缀（与 CompatShim.PREFIX 同源，M3 就绪后启用自有 login）。 */
+    const val PREFIX: String = "/data/data/com.moxsh/files/usr"
+
+    /** 泵循环每次 pump 后让出 8ms，平衡实时性与 CPU 占用（与架构 §3 滚动/渲染节奏配合）。 */
+    private const val PUMP_INTERVAL_MS = 8L
+
+    /** 单一的 Rust 内核桥接实例。 */
+    private val core = TerminalCore()
+
+    /** id -> 会话句柄。 */
+    private val sessions = ConcurrentHashMap<Long, TerminalCore.Session>()
+
+    /** 自增会话 id 分配器（从 1 开始，0 与 -1 保留作错误哨兵）。 */
+    private val nextId = AtomicLong(1)
+
+    /** 每个 id 对应的泵协程 Job，用于 [stopPump] 精确取消。 */
+    private val pumpJobs = ConcurrentHashMap<Long, Job>()
+
+    /** 泵协程作用域：IO 调度 + 监督 Job，单个会话泵失败不影响其它会话。 */
+    private val pumpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /**
+     * 创建一个终端会话。
+     * @param command 要执行的命令（默认 [DEFAULT_SHELL]）。
+     * @param cols 初始列数。
+     * @param rows 初始行数。
+     * @return 新会话的自增 id；内核打开失败返回 -1L。
+     */
+    fun createSession(command: String = DEFAULT_SHELL, cols: Int, rows: Int): Long {
+        val session = core.open(command, cols, rows) ?: return -1L
+        val id = nextId.getAndIncrement()
+        sessions[id] = session
+        return id
+    }
+
+    /** 销毁一个会话：先停泵，再关闭 PTY，最后从表移除。 */
+    fun destroySession(id: Long) {
+        stopPump(id)
+        sessions.remove(id)?.close()
+    }
+
+    /** 向会话写入用户输入字节（键盘/粘贴等）。无会话时静默忽略。 */
+    fun write(id: Long, data: ByteArray) {
+        sessions[id]?.write(data)
+    }
+
+    /** 更新会话窗口尺寸（cols/rows 联动写入内核）。无会话时静默忽略。 */
+    fun resize(id: Long, cols: Int, rows: Int) {
+        sessions[id]?.resize(cols, rows)
+    }
+
+    /**
+     * 拉取一次 PTY 输出并驱动 VT 解析。
+     * @return 读取字节数（0=EOF，-1=错误）；无会话返回 -1。
+     */
+    fun pump(id: Long): Int = sessions[id]?.pump() ?: -1
+
+    /** 总行数（可见行 + 历史回滚行），供滚动视图定位。 */
+    fun totalRows(id: Long): Int = sessions[id]?.totalRows ?: 0
+
+    /** 当前列数。 */
+    fun cols(id: Long): Int = sessions[id]?.cols ?: 0
+
+    /** 当前行数。 */
+    fun rows(id: Long): Int = sessions[id]?.rows ?: 0
+
+    /**
+     * 复制绝对行 [startRow, startRow+count) 的单元格到 [out]。
+     * 每行写入 cols * [TerminalCore.CELL_SIZE] 字节。
+     * @return 实际复制的字节数；无会话返回 -1。
+     */
+    fun copyCells(id: Long, startRow: Int, count: Int, out: ByteArray): Int =
+        sessions[id]?.copyCells(startRow, count, out) ?: -1
+
+    /**
+     * 启动一个持续的泵循环：在 [Dispatchers.IO] 上反复 [pump]，
+     * 返回字节数 > 0 时回调 [onUpdate]（传入本次读取字节数），随后让出 [PUMP_INTERVAL_MS]。
+     * 当 pump 返回 <= 0（EOF/错误）或协程被取消（[stopPump]）时停止。
+     *
+     * 若同一 id 已有泵在跑，会先取消旧泵再起新泵，避免重复泵。
+     */
+    fun startPump(id: Long, onUpdate: (Int) -> Unit) {
+        if (!sessions.containsKey(id)) return
+        stopPump(id)
+        val job = pumpScope.launch {
+            // isActive: 本协程是否被取消（stopPump 触发）；sessions 含 id: 会话是否仍存活。
+            while (isActive && sessions.containsKey(id)) {
+                val n = pump(id)
+                if (n <= 0) break
+                onUpdate(n)
+                delay(PUMP_INTERVAL_MS)
+            }
+        }
+        pumpJobs[id] = job
+    }
+
+    /** 停止指定会话的泵循环（若正在跑）。 */
+    fun stopPump(id: Long) {
+        pumpJobs.remove(id)?.cancel()
+    }
+
+    /** 当前存活会话数。 */
+    fun sessionCount(): Int = sessions.size
+
+    /** 列出所有会话 id（快照）。 */
+    fun listSessions(): List<Long> = sessions.keys.toList()
+}

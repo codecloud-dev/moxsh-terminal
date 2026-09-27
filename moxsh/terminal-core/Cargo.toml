@@ -1,0 +1,31 @@
+[package]
+name = "moxsh-terminal-core"
+version = "0.1.0"
+edition = "2021"
+description = "moxsh 终端内核：Rust 全包实现（PTY/VT 解析/屏幕/回滚/IPC/包管理/兼容层），零外部依赖，通过 cdylib 暴露 C-ABI 供 Kotlin/JNI 调用。"
+
+[lib]
+name = "moxshcore"
+# cdylib 产出 libmoxshcore.so（内含 Rust 内核 + C++ JNI 桥接 + NEON 汇编，由 build.rs 链接）；
+# rlib 供本机 `cargo test` 使用（cdylib-only 无法承载测试 harness），不影响 Android 构建产物。
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# 只依赖 libc：所有内存安全敏感逻辑均在 Rust 内自研，避免外部 crate 在 NDK target 下的编译不确定性。
+libc = "0.2"
+# M4 PRoot（D12）：rootfs 归档解压/备份打包。两 crate 均纯 Rust（flate2 默认
+# miniz_oxide 后端），NDK target 可编。ProotError 为手写 thiserror 展开风格
+# （依赖约束：本文件仅允许新增 tar/flate2，不引 thiserror/reqwest/sha2 等，
+# 校验复用 crypto::sha256，HTTP 下载走 Kotlin 层）。
+tar = "0.4"
+flate2 = "1"
+
+# 构建脚本依赖：cc 用于在 Android 目标下把 cpp/bridge.cpp 与 arch/neon.s 编入 cdylib（见 build.rs）。
+[build-dependencies]
+cc = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

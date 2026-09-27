@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 监听开机广播（重写 Termux:Boot，docs/plugins-rewrite.md §二） -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application>
+        <!--
+          开机自启命令执行器：BOOT_COMPLETED 后按用户配置的命令列表执行。
+          goAsync() + 独立线程，避免广播 10 秒超时打断执行。
+        -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 自启命令的玻璃配置面板 -->
+        <activity
+            android:name=".BootGlassActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Moxsh.Glass" />
+    </application>
+</manifest>

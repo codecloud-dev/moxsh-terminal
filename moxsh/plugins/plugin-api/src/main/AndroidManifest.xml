@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- wake-lock 的本地等价实现需要 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!--
+      兼容 Termux 的 RUN_COMMAND 自定义权限（D7 体系①）：
+      moxsh 是该权限的 owner，第三方 app 声明 uses-permission 后即可调用；
+      签名体系仍是 moxsh 自有签名，与原 Termux 不互通（契约兼容而非签名兼容）。
+    -->
+    <permission
+        android:name="com.termux.permission.RUN_COMMAND"
+        android:label="moxsh 兼容 Termux 的 RUN_COMMAND 权限"
+        android:description="@string/compat_run_command_permission_desc"
+        android:protectionLevel="normal" />
+
+    <application>
+        <!--
+          Termux 兼容宿主服务：接收新旧两种 RUN_COMMAND action，
+          经 CompatShim 分类路由（Tool 本地 / Api·Shell 走加固 IPC）。
+          挂上兼容权限，对齐 termux-app 的调用方校验语义。
+        -->
+        <service
+            android:name=".TermuxCompatHost"
+            android:exported="true"
+            android:permission="com.termux.permission.RUN_COMMAND">
+            <intent-filter>
+                <action android:name="com.termux.app.RUN_COMMAND" />
+                <action android:name="com.termux.RUN_COMMAND" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
