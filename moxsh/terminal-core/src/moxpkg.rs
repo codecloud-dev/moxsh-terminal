@@ -460,6 +460,16 @@ impl MoxPackage {
             if e.header().entry_type().is_dir() {
                 continue; // unpack 按文件路径自动建目录。
             }
+            // P1 修复（符号链接穿越）：tar 的 unpack_in 只校验条目自身路径，
+            // 不校验链接 target——恶意包可放 "payload/x -> ../../../../..."，
+            // 解压后在包外制造可写入口。.mox 规范中 payload 只有普通文件，
+            // 链接条目一律防御性跳过。
+            {
+                let et = e.header().entry_type();
+                if et.is_symlink() || et.is_hard_link() {
+                    continue;
+                }
+            }
             let name = e
                 .path()
                 .map_err(MoxError::Io)?
