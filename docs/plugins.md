@@ -64,15 +64,95 @@ my-plugin.mox
 
 ### 权限列表
 
-权限在安装时向用户明示，只声明真正需要的：
+权限在安装时向用户明示，只声明真正需要的。运行期每个 API 入口都会校验，
+未声明就调用会得到 `PluginPermissionDenied` 异常（fail-fast）：
 
-| 权限 | 含义 |
+| 权限 | 含义 | 对应 API |
+|---|---|---|
+| `run_command` | 在终端环境执行命令 | `sessions.write` / `sessions.runLine` |
+| `install_pkg` | 安装软件包 | 图形化包管理动作 |
+| `install_distro` | 安装发行版（PRoot） | 发行版管理动作 |
+| `change_repo` | 更换软件源 | 源配置动作 |
+| `explain_error` | 读取报错信息（AI 技能常用） | AI 报错解释 |
+| `manage_sessions` | 创建/关闭/切换终端会话 | `sessions.create/close/list/resize` |
+| `read_screen` | 读取屏幕与回滚缓冲文本 | `sessions.screenDump` |
+| `post_notification` | 发送系统通知与 Toast | `ui.notify` / `ui.toast` |
+| `clipboard` | 读写系统剪贴板 | `ui.copyToClipboard/readClipboard` |
+| `vibrate` | 震动/触感反馈 | `ui.vibrate` |
+| `network` | 发起 HTTP 请求（15s 超时 / 5MB 上限） | `net.get/post` |
+| `storage` | 插件私有目录读写 + 导出到 Download | `fs.*` / `store.*` |
+| `register_skill` | 向 AI 助手注册技能工具 | `skills.register` |
+| `subscribe_events` | 订阅命令/输出/会话/开机事件 | `events.*` / `sessions.onOutput` |
+
+## 插件 API v2（原生插件）
+
+原生玻璃插件（继承 `MoxPlugin` 基类）通过 `api` 属性调用主 app 的全部能力面。
+相比 v1 的"只能发命令"，v2 暴露七个域：
+
+```kotlin
+class NetDiagPlugin : MoxPlugin() {
+    override val id = "netdiag.glass"
+    override val permissions = setOf(
+        PluginPermissions.NETWORK,          // 网络请求
+        PluginPermissions.POST_NOTIFICATION, // 通知/Toast
+        PluginPermissions.REGISTER_SKILL,    // 注册 AI 技能
+    )
+
+    override fun onLoad(api: PluginApi) {
+        // 把能力挂进 AI 助手：用户对 AI 说"测一下 github 通不通"即可触发
+        api.skills.register(
+            name = "ping",
+            description = "测试一个网站的连通性并返回 HTTP 状态码",
+            parametersSchema = """{"url":"string"}""",
+        ) { args ->
+            val r = api.net.get(args["url"] ?: "https://github.com")
+            "HTTP ${r.status}"
+        }
+    }
+
+    override fun onEvent(event: PluginEvent) { /* 需 subscribe_events 权限 */ }
+
+    @Composable
+    override fun GlassContent(host: PluginHost) {
+        // 用 com.moxsh.ui.component 的玻璃组件搭界面
+    }
+}
+```
+
+七域能力速查：
+
+| 域 | 能做什么 |
 |---|---|
-| `run_command` | 在终端环境执行命令 |
-| `install_pkg` | 安装软件包 |
-| `install_distro` | 安装发行版（PRoot） |
-| `change_repo` | 更换软件源 |
-| `explain_error` | 读取报错信息（AI 技能常用） |
+| `api.sessions` | 多会话创建/关闭/列表/写入/改尺寸；`screenDump` 读取屏幕+回滚文本；`startPump` 驱动输出并触发事件 |
+| `api.ui` | Toast、系统通知（自动降级）、震动、剪贴板读写（主线程安全） |
+| `api.fs` | 插件私有目录（随卸载删除）；`exportToDownloads` 经 MediaStore 导出到 Download/moxsh/（无需存储权限） |
+| `api.net` | GET/POST，固定 15s 超时、5MB 响应上限；请勿在主线程调用 |
+| `api.store` | 插件私有 KV（Properties 落盘，随插件卸载删除） |
+| `api.events` | 订阅命令执行/输出产出/会话开闭/环境就绪事件（回调在主线程） |
+| `api.skills` | 把插件能力注册为 AI 可调用的工具（name 自动加插件前缀防冲突） |
+
+宿主侧（主 app）通过 `PluginHost.createApi(id, context, permissions)` 构造 API，
+`PluginHost.events.publish(...)` 发布全局事件。
+
+### 装配与事件接线（已落地）
+
+主 app 侧的装配点在 `app/.../PluginManager.kt`（Application.onCreate 调用 `init`）：
+
+1. **内置插件注册**：DemoGlassPlugin + float/styling/boot/widget 五个玻璃卡片入口，
+   由主界面标签栏 `✦` 按钮进入插件面板渲染；
+2. **v2 动态插件**：plugin-store 安装链路调用 `host.load(moxPlugin, appContext)`
+   —— 自动注入 `PluginApi`（按声明权限构造）并回调 `onLoad`；
+3. **事件桥**（shared 不感知 plugin，方向由 plugin 侧注册，防循环依赖）：
+   - `ExecutionEngine.sessionListener` → 会话开/关转 `SessionOpened`/`SessionClosed`；
+   - `BootstrapState.onReady` → 环境就绪转 `BootCompleted`；
+   - `PluginHost.runLocalCommand` / `runRemoteCommand` → 成功后发布 `CommandExecuted`。
+
+插件本地执行命令的目标是**当前活跃会话**（`ExecutionEngine.activeSessionId`，
+UI 切换标签时自动同步）。
+
+已知边界：Termux 官方 bootstrap 产物按 `com.termux` 前缀硬编码，moxsh 在
+`initialize` 阶段写自研 login/覆盖 profile 并批量修正脚本文本前缀；ELF 内的
+硬编码前缀（如 dpkg 数据库路径）暂依赖 proot 翻译层处理（后续迭代）。
 
 ## 从零打包一个插件
 
