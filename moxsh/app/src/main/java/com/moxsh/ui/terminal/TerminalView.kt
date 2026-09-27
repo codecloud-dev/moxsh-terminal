@@ -332,7 +332,7 @@ fun TerminalScreen(
                         val text = if (code in 1..Character.MAX_CODE_POINT &&
                             !Character.isSurrogate(code.toChar()) || code > 0xFFFF
                         ) {
-                            runCatching { String(Character.toChars(code)) }.getOrElse("\uFFFD")
+                            runCatching { String(Character.toChars(code)) }.getOrDefault("\uFFFD")
                         } else {
                             "\uFFFD"
                         }
