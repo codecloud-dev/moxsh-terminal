@@ -56,12 +56,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      # audit 是独立工具（不参与构建），用预编译二进制安装，
+      # 避免受项目钉死的 1.86.0 工具链限制（cargo-audit 0.22.x 需 1.88+）
+      - uses: taiki-e/install-action@v2
         with:
-          toolchain: "1.86.0"
-      - name: 安装 cargo-audit
-        run: cargo install cargo-audit --locked
-        # 安装慢可换 taiki-e/install-action@v2 加速二进制拉取
+          tool: cargo-audit
       - name: cargo audit
         working-directory: moxsh/terminal-core
         run: cargo audit
@@ -78,14 +77,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: moxsh/terminal-core
+      # build.rs 用 cc-rs 编译 C++ JNI 桥与 NEON 汇编，
+      # 必须有真实 NDK 工具链（aarch64-linux-android*-clang++ wrapper）
+      - name: Install NDK 26.1.10909125
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKMANAGER" ] || SDKMANAGER="$(command -v sdkmanager)"
+          if [ ! -d "$ANDROID_HOME/ndk/26.1.10909125" ]; then
+            yes | "$SDKMANAGER" "ndk;26.1.10909125" > /dev/null
+          else
+            echo "NDK 26.1.10909125 已预装，跳过安装"
+          fi
+          echo "$ANDROID_HOME/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
       - name: cargo check --target aarch64-linux-android
         working-directory: moxsh/terminal-core
         run: cargo check --lib --target aarch64-linux-android
         env:
-          # check 阶段不链接，无需真实 NDK 工具链；提供占位 AR/CC 防构建脚本探测失败
-          AR_aarch64_linux_android: llvm-ar
-          CC_aarch64_linux_android: clang
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: clang
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
 
 # 覆盖率说明：tarpaulin 官方 docker 镜像在 GitHub Actions 里拉取慢且与 cdylib 目标
 # 兼容性一般，暂以「测试全绿 + clippy + audit」作为合并门槛；llvm-cov 覆盖率
