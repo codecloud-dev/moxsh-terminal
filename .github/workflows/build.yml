@@ -22,11 +22,19 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # GitHub 托管 runner 已预装完整 Android SDK（含 cmdline-tools 与构建工具），
+      # 无需 android-actions/setup-android —— 该 Action 在新版 cmdline-tools 上
+      # 会因安装过时包名 "tools" 而失败（sdkmanager exit 1）。
 
-      - name: Install NDK
-        run: sdkmanager "ndk;26.1.10909125"
+      - name: Install NDK 26.1.10909125
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKMANAGER" ] || SDKMANAGER="$(command -v sdkmanager)"
+          if [ ! -d "$ANDROID_HOME/ndk/26.1.10909125" ]; then
+            yes | "$SDKMANAGER" "ndk;26.1.10909125" > /dev/null
+          else
+            echo "NDK 26.1.10909125 已预装，跳过安装"
+          fi
 
       - name: Set ANDROID_NDK_HOME
         run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> "$GITHUB_ENV"
@@ -46,15 +54,11 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version "^4"
 
-      - name: Cache Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-home-cache-cleanup: on-success
-
-      - name: Setup Gradle (no wrapper needed)
+      - name: Setup Gradle 8.9 (含缓存)
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.9
+          gradle-home-cache-cleanup: on-success
 
       # 国内网络优化：优先走腾讯/阿里镜像（无网络时也兼容 google/mavenCentral）
       - name: Setup Gradle mirror (domestic)
