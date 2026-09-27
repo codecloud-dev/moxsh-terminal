@@ -26,7 +26,7 @@ dependencies {
     implementation(project(":ui"))
     // 通过原生插件框架注册（D5 体系②，照 plugin-float 模式）
     implementation(project(":plugins:plugin-core"))
-    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
