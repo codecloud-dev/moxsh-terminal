@@ -19,6 +19,22 @@
 - 本地小模型接入（llama.cpp 端侧）
 - 插件售卖支付流程（manifest 中 author/price/purchased 字段已预留）
 
+## [0.6.0] - 2026-09-28 🌐
+
+### 新增
+
+- **PTY 内核四项强化**：`Pty::write` 处理 `EAGAIN`（非阻塞 master 写满重试）、`ptsname_r` 可重入（消除并发开会话竞态）、`read` 折叠 `EIO` 为干净 `EOF`、新增 `exitStatus` 收割 API（宿主 4 项测试覆盖退出码/运行中等路径）
+- **液态玻璃设计系统增强**：`LocalGlassAccent` CompositionLocal 实现主题色流动、`glassPress` 弹性按压动效、`glassSheen` 高光渐变、`GlassSurface` 渐变描边、`GlassFAB` 主题色染色；修复 `isSpecified` 扩展属性导入
+- **命令云同步 MVP**：`CommandHistoryStore` 本地 JSONL 离线队列、`SyncClient` 对接 mox-id Workers（`POST /sync/push`、`GET /sync/pull`，last-write-wins）、`ExecutionEngine.inputRecorder` 喂入钩子、`SettingsScreen`「账号与云同步」卡片（登录/退出 + 开关 + 立即同步）
+- **登录入口接线**：主界面 👤 按钮跳转 `LoginActivity`，深链 `moxsh://auth.callback` 回跳解析 token 存入 `SessionStore`
+
+### 变更
+
+- GitHub 用户名更名为 `codecloud-dev`（全量替换 + 官网 base64），保留 workers.dev 子域名
+- 全套文档（README/CHANGELOG/CONTRIBUTING/SECURITY/CODE_OF_CONDUCT/SETUP/验收）统一液态玻璃视觉装饰
+
+[0.6.0]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.0
+
 ## [0.5.1] - 2026-09-28 ✨
 
 ### 新增
@@ -56,5 +72,5 @@
 - 项目为 100% clean-room 实现：包层面兼容 Termux 生态，代码层面零复用
 - 与 Termux 的关系详见 [README](README.md#和-termux-是什么关系)
 
-[Unreleased]: https://github.com/codecloud-dev/moxsh-terminal/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/codecloud-dev/moxsh-terminal/compare/v0.6.0...HEAD
 [0.5.0]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.5.0

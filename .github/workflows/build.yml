@@ -99,7 +99,8 @@ jobs:
           until [ "$n" -ge "$max" ]; do
             n=$((n+1))
             echo "=== Build attempt $n/$max ==="
-            gradle assembleRelease --stacktrace 2>&1 | tee /tmp/build.log
+            # clean 打破增量编译缓存（避免复用坏文件时期的依赖图/产物导致误报）
+            gradle clean assembleRelease --stacktrace 2>&1 | tee /tmp/build.log
             rc=${PIPESTATUS[0]}
             if [ "$rc" -eq 0 ]; then
               echo "BUILD_OK=1" >> "$GITHUB_OUTPUT"
@@ -153,17 +154,22 @@ jobs:
           path: moxsh/app/build/outputs/apk/release/*.apk
           retention-days: 30
 
-      # 构建成功后直接用本地 APK 文件发布到 v0.5.1（不走 artifact 下载，沙箱/runner 均无法下载 artifacts）
+      # 构建成功后直接用本地 APK 文件发布到 v0.6.0（不走 artifact 下载，沙箱/runner 均无法下载 artifacts）
       # 仅依赖 Build 是否成功，与 Upload APK 步骤结果解耦（artifact 上传抖动不应阻断发布）。
-      - name: 发布到 v0.5.1 Release
+      - name: 发布到 v0.6.0 Release
         if: steps.build.outcome == 'success'
         working-directory: moxsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 首次构建时创建 v0.6.0 Release（含 tag），已存在则忽略
+          gh release create v0.6.0 \
+            --title "v0.6.0 · 云同步与玻璃增强" \
+            --notes "moxsh v0.6.0：PTY 内核强化 + 液态玻璃增强 + 命令云同步 MVP + 登录入口接线。详见 CHANGELOG.md" \
+            --latest 2>/dev/null || true
           for f in app/build/outputs/apk/release/*.apk; do
             [ -e "$f" ] || continue
-            gh release delete-asset v0.5.1 "$(basename "$f")" --yes 2>/dev/null || true
-            gh release upload v0.5.1 "$f"
+            gh release delete-asset v0.6.0 "$(basename "$f")" --yes 2>/dev/null || true
+            gh release upload v0.6.0 "$f"
           done
-          gh release view v0.5.1 --json assets --jq '.assets[] | {name, size, state}'
+          gh release view v0.6.0 --json assets --jq '.assets[] | {name, size, state}'
