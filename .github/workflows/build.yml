@@ -81,7 +81,7 @@ jobs:
         run: echo "$KEYSTORE_BASE64" | base64 -d > moxsh/release.jks
 
       # Rust/NDK/cargo 交叉编译链偶发网络超时（crates.io / maven 抖动）会直接打挂整个构建。
-      # 这里加重试：最多 4 次，每次把完整日志 tee 到 /tmp/build.log，最后失败时诊断步骤直接读该文件，
+      # 这里加重试：最多 3 次，每次把完整日志 tee 到 /tmp/build.log，最后失败时诊断步骤直接读该文件，
       # 不必再 clean 全量重编译（既慢又可能再次撞网络）。
       - name: Build Release APK (with retry)
         id: build
@@ -95,7 +95,7 @@ jobs:
         run: |
           set +e
           n=0
-          max=4
+          max=3
           until [ "$n" -ge "$max" ]; do
             n=$((n+1))
             echo "=== Build attempt $n/$max ==="
@@ -110,13 +110,14 @@ jobs:
             sleep 20
           done
           echo "BUILD_OK=0" >> "$GITHUB_OUTPUT"
-          echo "4 次重试后仍失败"
+          echo "3 次重试后仍失败"
           exit 1
 
-      # 诊断：仅在 4 次重试全部失败后才触发。直接读 /tmp/build.log（已落盘），
-      # 把错误同时写 step summary 与创建一个 GitHub Issue（沙箱无法下载日志 zip，
-      # 但 issue 可经 gh api 读取），便于定位是网络抖动还是真实代码/配置错误。
-      - name: 诊断构建错误（issue 暴露）
+      # 诊断：仅在 3 次重试全部失败后才触发。直接读 /tmp/build.log（已落盘），
+      # 把错误同时写 step summary、建 GitHub Issue、并在 head commit 留评论
+      # （沙箱无法下载日志 zip / 读 step summary API，但 commit 评论可经 gh api 可靠读取），
+      # 用于定位是网络抖动还是真实代码/配置错误。
+      - name: 诊断构建错误（issue + commit 评论暴露）
         if: failure()
         working-directory: moxsh
         env:
@@ -129,13 +130,17 @@ jobs:
             echo "$SUMMARY"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          printf 'CI 构建失败（4 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n' \
-            "$(echo '${{ github.sha }}' | cut -c1-7)" "${{ github.run_id }}" "$SUMMARY" \
-            > /tmp/issue_body.md
+          SHA7=$(echo '${{ github.sha }}' | cut -c1-7)
+          printf 'CI 构建失败（3 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n' \
+            "$SHA7" "${{ github.run_id }}" "$SUMMARY" \
+            > /tmp/diag.md
+          # 1) 建 issue（可见性好，注意仓库无 ci 标签，故不带 --label）
           gh issue create \
-            --title "CI 构建失败 $(echo '${{ github.sha }}' | cut -c1-7) · run ${{ github.run_id }}" \
-            --body-file /tmp/issue_body.md \
-            --label ci || echo "issue 创建失败（不影响主流程）"
+            --title "CI 构建失败 $SHA7 · run ${{ github.run_id }}" \
+            --body-file /tmp/diag.md 2>&1 | head -3 || echo "issue 创建失败（不影响主流程）"
+          # 2) 兜底：在 head commit 留评论（沙箱可靠可读，contents: write 已授权）
+          gh api repos/zyr15555086235/moxsh-terminal/commits/'${{ github.sha }}'/comments \
+            -f body=@/tmp/diag.md 2>&1 | head -3 || echo "commit 评论失败（不影响主流程）"
 
       - name: Upload APK
         if: always()
