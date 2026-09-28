@@ -23,6 +23,13 @@ jobs:
         with:
           clean: true
 
+      # 在编译前拦截"肉眼看不出、只有编译器才炸"的词法问题：
+      # 注释文本里写了 "/*" 会被 Kotlin 当作嵌套注释起始符，整段吞掉后续代码，
+      # 最终只在 EOF 报 "Unclosed comment" + 一堆 "Unresolved reference"，极难定位。
+      # 早失败、早定位，比等 5 分钟 Gradle 编译强。
+      - name: Kotlin 源码静态自检
+        run: python3 .github/scripts/check_kotlin_lexer.py moxsh
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -114,12 +121,6 @@ jobs:
           done
           echo "BUILD_OK=0" >> "$GITHUB_OUTPUT"
           echo "3 次重试后仍失败"
-          # 诊断：用绝对路径打印 CI 实际 checkout 落到工作树的关键文件真实状态
-          DIAGF="${GITHUB_WORKSPACE}/moxsh/app/src/main/java/com/moxsh/cloud/CommandHistoryStore.kt"
-          echo "CHECKOUT_DIAG_SHA256=$(sha256sum "$DIAGF" 2>&1)"
-          echo "CHECKOUT_DIAG_L20_27=[$(sed -n '20,27p' "$DIAGF" 2>&1)]"
-          echo "CHECKOUT_DIAG_L100_103=[$(sed -n '100,103p' "$DIAGF" 2>&1)]"
-          echo "CHECKOUT_DIAG_TOTAL_LINES=$(wc -l < "$DIAGF" 2>&1)"
           exit 1
 
       # 诊断：仅在 3 次重试全部失败后才触发。直接读 /tmp/build.log（已落盘），
@@ -140,17 +141,14 @@ jobs:
           SUMMARY=$(grep -v -e "prefer settings repositories over project repositories" \
                             -e "UP-TO-DATE" -e "NO-SOURCE" /tmp/build.log 2>/dev/null \
                             | tail -c 60000 || echo "（/tmp/build.log 不存在）")
-          DIAG=$(grep "CHECKOUT_DIAG_" /tmp/build.log 2>/dev/null || echo "(无 checkout 诊断)")
           {
             echo '```'
             echo "$SUMMARY"
             echo '```'
-            echo "--- CI checkout 诊断 ---"
-            echo "$DIAG"
           } >> "$GITHUB_STEP_SUMMARY"
           SHA7=$(echo '${{ github.sha }}' | cut -c1-7)
-          printf 'CI 构建失败（3 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n\n%s\n' \
-            "$SHA7" "${{ github.run_id }}" "$SUMMARY" "$DIAG" \
+          printf 'CI 构建失败（3 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n' \
+            "$SHA7" "${{ github.run_id }}" "$SUMMARY" \
             > /tmp/diag.md
           # 建 issue（可见性好；仓库无 ci 标签，故不带 --label）
           gh issue create \

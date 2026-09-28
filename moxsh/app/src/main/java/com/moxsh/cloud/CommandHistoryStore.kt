@@ -24,7 +24,7 @@ object CommandHistoryStore {
     private const val FILE_NAME = "cloud_sync_queue.jsonl"
     private const val MAX_PENDING = 500
 
-    /** 云端 bucket 约定（与 mox-id /sync/* 一致）。 */
+    /** 云端 bucket 约定（与 mox-id 的 sync 端点一致）。 */
     const val BUCKET = "termux:history"
 
     private fun file(ctx: Context) = File(ctx.filesDir, FILE_NAME)
