@@ -3,7 +3,9 @@ package com.moxsh.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import com.moxsh.ui.component.LocalGlassAccent
 
 private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF7CF9E5),
@@ -37,5 +39,9 @@ fun MoxshGlassTheme(
     } else {
         LightColorScheme
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    // 主题色流动：把 accent 注入玻璃组件层（描边/染色/背景高光随之变化）。
+    // 未走本主题的调用方（插件直用组件）拿到 Unspecified，自动回退中性玻璃。
+    CompositionLocalProvider(LocalGlassAccent provides accent) {
+        MaterialTheme(colorScheme = scheme, content = content)
+    }
 }
