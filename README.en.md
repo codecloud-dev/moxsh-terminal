@@ -1,109 +1,166 @@
-# moxsh
+<p align="center">
+  <img src="assets/logo.svg" width="128" alt="moxsh liquid-glass logo">
+</p>
 
-moxsh is a terminal application for Android: it gives you a full Linux command-line environment out of the box — no root required, no setup, just install and run.
+<h1 align="center">moxsh</h1>
 
-It is fully compatible with the Termux ecosystem: packages from the official Termux repositories install and run directly. At the same time, moxsh is an AI-assisted, clean-room implementation: Termux's public documentation and build scripts were studied to align behavior and ecosystem contracts, but no code was copied, which leaves room for better performance and a UI built entirely around liquid glass design. The kernel and package management are written in Rust, and the app ships with an AI assistant and a plugin store.
+<p align="center">
+  <b>A liquid-glass terminal that runs on Android</b> —— a full Linux command line the moment you install it. No root, no setup, fully Termux-compatible.
+</p>
+
+<p align="center">
+  <a href="../../actions"><img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&label=CI%20Build&color=8a7bff" alt="CI Build"></a>
+  <a href="../../releases"><img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=Latest&color=37d5d3" alt="Latest"></a>
+  <a href="../../stargazers"><img src="https://img.shields.io/github/stars/codecloud-dev/moxsh-terminal?style=social" alt="GitHub Stars"></a>
+  <a href="../../discussions"><img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal?label=Discussions&color=ff7ac3" alt="Discussions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/codecloud-dev/moxsh-terminal?color=3DDC84" alt="License"></a>
+  <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9+">
+  <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust&logoColor=white" alt="Rust core">
+  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="Liquid-glass UI">
+</p>
+
+> A complete Linux command line out of the box; the whole app — from the core to the UI — was rebuilt for speed and beauty: a Rust core plus a set of water-like liquid-glass interfaces.
+
+## Contents
+
+- [MoX family](#mox-family)
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Getting started](#getting-started)
+- [Plugin system](#plugin-system)
+- [Relationship with Termux](#relationship-with-termux)
+- [Docs](#docs)
+- [Get involved](#get-involved)
+- [Support us](#support-us)
+- [License](#license)
+
+---
+
+## MoX family
+
+moxsh is just the first piece of the **MoX tool series** — one visual language, bringing desktop-grade tools into your pocket.
+
+| Product | Status | One-liner |
+| :---: | :---: | --- |
+| **moxsh** | Released | Android liquid-glass terminal, Termux-compatible |
+| **mox-site** | Released | The series' official portal ([site](https://codecloud-dev.github.io/mox-site/)) |
+| **moxbox** | Planned · tentative | File manager & system suite in the same glass UI; may or may not happen |
+| **moxcode** | Planned · tentative | Lightweight mobile IDE: terminal + editor + preview; may or may not happen |
+
+---
+
+## Features
+
+| Dimension | Notes |
+| :--- | --- |
+| **Rust core** | PTY/session, VT parsing, scrollback, render scheduling, package signing, IPC auth — all in Rust, memory-safe |
+| **Liquid-glass UI** | Real-time blur, translucent layers, draggable floating windows; real-time on high-end, static fallback on low-end |
+| **Termux compatible** | Eats the official termux-packages repos; `*.deb` installs and runs, commands behave the same |
+| **PRoot distros** | Ubuntu / Debian / Kali / Alpine one-tap, isolated, no system touch |
+| **AI assistant** | Explain errors, write scripts, manage environments; DeepSeek / Zhipu / Qwen / Kimi and more |
+| **Plugin system** | Floating glass terminal, themes, system monitor; one-tap `.mox`, plus Termux-plugin compatible |
+| **Hardened IPC** | Challenge-response + HMAC-SHA256 auth; cross-process calls never run naked |
+| **Cloud sync** | After sign-in, sync shell config, aliases and history to the cloud — your environment travels with you |
+
+---
 
 ## How it works
 
-moxsh is neither a virtual machine nor an emulator.
+moxsh is neither a VM nor an emulator.
 
-The terminal is driven by a Rust kernel: the app launches command-line programs (`execve`) and wires their standard input/output to the screen — exactly like a terminal on desktop Linux. Since Android does not allow apps to write into system directories such as `/bin` or `/usr`, moxsh installs all software into its private app directory (called the *prefix*, exposed as `$PREFIX`) and aligns path handling with Termux conventions — that is why Termux packages run unmodified.
+The terminal is driven directly by the **Rust core**: it launches the command-line program (`execve`) and wires stdout/stdin to the screen, just like a desktop Linux terminal. Because Android won't let apps write to `/bin` or `/usr`, moxsh installs software into its own private directory (called *prefix*, i.e. `$PREFIX`), with path handling aligned to Termux conventions — that's why Termux packages run directly.
 
-Packages come from the official Termux repositories (with both `apt` and `pkg` protocol support), cross-compiled with the Android NDK. They run natively — no emulation overhead. To run an entire distribution (Ubuntu, Debian, Kali, Alpine) in an isolated environment, the built-in PRoot engine installs one with a single tap.
+Packages come from the official Termux repos (`apt`/`pkg` dual-protocol compatible), all cross-compiled with the Android NDK and run natively with no emulation overhead. Want a whole distro in an isolated environment? Use the built-in **PRoot engine**, one tap.
 
-The UI follows a liquid glass design: real-time blur, translucent layers, draggable floating windows. Newer Android versions get live blur; older ones fall back to static translucency automatically.
+The UI uses **liquid glass**: real-time blur, translucent layers, draggable floating windows. High-end Android uses real-time render blur; low-end falls back to a static effect automatically — no manual setup.
 
-## What can I do with moxsh?
+---
 
-- Learn the Linux command line and shell scripting
-- Program in Python, Node.js, Rust, C/C++
-- Use SSH to reach remote servers, or use the phone as a jump host
-- Install Ubuntu / Debian / Kali / Alpine with one tap
-- Ask the built-in AI assistant to explain errors, write scripts, and manage environments (DeepSeek, Zhipu, Qwen, Kimi and more)
-- Install plugins: floating terminal, themes, system monitor — or write your own
+## Getting started
 
-## Installation
+On first launch it auto-downloads and installs the base system (bootstrap). Then you're straight into the terminal.
 
-### Requirements
-
-- Android 9.0 or higher
-- arm64-v8a device
-- About 300 MB of free space (including the bootstrap)
-
-### Getting the APK
-
-This repository builds automatically with GitHub Actions:
-
-1. Open the [Actions](../../actions) page and pick the latest successful run
-2. Download the APK from the Artifacts section and install it
-
-Release builds are published on the [Releases](../../releases) page. If Android warns about "unknown sources", allow it.
-
-## Quick start
-
-The first launch downloads and installs the base system (bootstrap), then drops you into a terminal.
-
-Update package lists and upgrade:
+Update sources and packages:
 
 ```bash
 pkg update && pkg upgrade
 ```
 
-Install software (identical to Termux usage):
+Install software (identical to Termux):
 
 ```bash
-pkg install python
-pkg install nodejs
-pkg install openssh
+pkg install python nodejs openssh
 ```
 
-Common tasks:
+Common commands:
 
 ```bash
-# Grant access to shared storage (photos, downloads, ...)
-termux-setup-storage
-
-# Connect to a remote server
-ssh user@host
-
-# Show the prefix path
-echo $PREFIX
+termux-setup-storage          # allow access to phone storage
+ssh user@host                 # connect to a remote server
+echo $PREFIX                  # print the current prefix path
 ```
 
-Run `pkg update` once before installing anything for the first time.
+> Run `pkg update` once before your first package install to avoid "package not found".
 
-## Plugins
+### Requirements
 
-Plugins, AI skills, themes and distribution images all ship as `.mox` packages, installed through the built-in store or offline from the download folder.
+- Android 9.0 or newer
+- arm64-v8a device
+- ~300 MB free (incl. first-run bootstrap)
 
-See [docs/plugins.md](docs/plugins.md) for writing and publishing your own plugins.
+### Get the APK
 
-moxsh also hosts the Termux add-ons (Termux:API, Termux:Widget, etc.) through a compatibility layer; third-party zip plugin packages are converted automatically on import.
+Signed release builds are on the [Releases](../../releases) page; CI also produces the latest APK on every successful build. If the system warns "unknown source" on install, just allow it.
+
+---
+
+## Plugin system
+
+moxsh's plugins, AI skills, themes and distro images all use the **`.mox`** package format, installed via the built-in store; you can also drop a `.mox` file into Downloads for offline install.
+
+See [docs/plugins.md](docs/plugins.md) to write and publish plugins. moxsh also hosts Termux plugins (Termux:API, Termux:Widget, etc. keep working); foreign zip formats are auto-converted on import.
+
+---
 
 ## Relationship with Termux
 
-- **Packages**: fully compatible. `.deb` packages from the official Termux repository install and run; commands behave the same.
-- **Code**: AI-assisted, clean-room rewrite. The terminal kernel, package manager, runtime environment and PRoot engine are all written from scratch (Rust/Kotlin); Termux sources were studied for behavior alignment but no code was copied and no patched Termux sources are used.
-- **Plugins**: dual system. The compatibility host keeps existing Termux add-ons working; native moxsh plugins (`.mox`) are independently signed with glass UI.
+- **Packages**: directly compatible. Official Termux `.deb` installs and runs, commands behave the same.
+- **Code**: AI-assisted, clean-room rewrite. The terminal core, package manager, runtime and PRoot engine are all rewritten (Rust/Kotlin). We studied Termux's public docs/source to align behavior and ecosystem contracts, but **did not copy its code** and do not depend on modifying Termux source.
+- **Plugins**: dual system. The Termux-compatible host keeps original plugins working; moxsh-native `.mox` plugins are independently signed with a glass GUI.
 
-## Documentation
+---
+
+## Docs
 
 - [Architecture whitepaper](docs/architecture.md) (Chinese)
-- [Plugin development guide](docs/plugins.md) (Chinese)
+- [Plugin guide](docs/plugins.md) (Chinese)
 - [Command reference](docs/commands.md) (Chinese)
 - [Roadmap](docs/roadmap.md) (Chinese)
 
-## Contributing
+---
 
-Found a bug or want a feature? Open an [Issue](../../issues). Pull requests are welcome.
+## Get involved
+
+Found a bug or want a feature? Open an [Issue](../../issues); to contribute code, just open a Pull Request.
+
+---
+
+## Support us
+
+If this project is useful to you, **a Star, a follow, or a share** is the biggest encouragement for a tiny indie project — and helps more people find a better terminal.
+
+- Star it on GitHub: hit the Star button at the top-right of the repo
+- Follow the repo / join [Discussions](../../discussions) for updates
+- Share it with friends, groups, or any developer who's been tortured by terminals
+
+All forms of contribution are welcome: bugs, ideas, code, docs, translations. Indie dev + AI collaboration, but every direction is decided by a human.
+
+---
 
 ## License
 
 [GPL-3.0](LICENSE)
 
-## AI Assistance Notice
+## AI assistance statement
 
-This project (all code, docs and the website) is designed and owned by **Codecloud**,
-with **AI-assisted code generation**: architecture decisions, requirements and acceptance are human-driven;
-implementation and documentation are AI-collaborated and human-reviewed.
+This project (all code, docs and site pages) is led by the developer **Codecloud**, with **AI-assisted code generation**: architecture decisions, requirements and acceptance are done by humans; implementation and docs are AI-collaborative and reviewed/edited by humans.

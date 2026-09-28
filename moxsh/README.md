@@ -112,14 +112,14 @@ push 到 `main`/`dev` 即触发 `.github/workflows/build.yml`：
 - `app`：TerminalView 真实 Canvas 渲染（16 字节 Cell/256 色/滚动/捏合缩放）、多会话玻璃标签栏、ExtraKeys 真发 VT 序列、设置页持久化。
 - `plugins/*`（10 个）：全部经 PluginContract 注册；含图形化管理四件套、.mox 商店、AI Agent（国内预置服务商 + 技能系统 + 高危确认卡）。
 
-**待办**：M6（推 GitHub 出 APK + 真机联调，唯一卡点）、M7（性能打磨/本地小模型/支付抽成）。
+**近期方向**：首个可安装 APK 已随 GitHub Release 发布；后续聚焦性能打磨、AI 能力深化、`.mox` 插件生态完善（均为规划、待定，详见产品路线图）。
 
 ---
 
 ## 配套文档（仓库 `docs/`、`research/`）
 
 - `docs/architecture.md` — 架构白皮书（v0.5，含 18 项决策 + 语言选型证据）
-- `docs/roadmap.md` — 开发路线图（权威进度清单）
+- `docs/roadmap.md` — 产品路线图（对外分享的方向，规划类均「待定」）
 - `docs/commands.md` — Termux 命令体系盘点（来自源码）
 - `docs/plugins-rewrite.md` — 6 插件重写方案（含代码片段）
 - `research/termux-plugins-shortcomings.md` — 插件缺点调研（12 条）
