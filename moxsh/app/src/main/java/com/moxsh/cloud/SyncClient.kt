@@ -7,6 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 /**
  * 云同步客户端（对接 mox-id Worker：POST /sync/push、GET /sync/pull）。
@@ -48,16 +49,19 @@ object SyncClient {
             arr.put(JSONObject().put("key", k.toString()).put("value", v).put("updated_at", k))
         }
         val body = JSONObject().put("bucket", CommandHistoryStore.BUCKET).put("items", arr)
-        val res = http(
+        val c = http(
             url = "${AuthConfig.BACKEND_BASE}/sync/push",
             method = "POST",
             token = token,
             body = body.toString().toByteArray(Charsets.UTF_8),
         )
-        res.use { c ->
+        try {
             val code = c.responseCode
             val text = c.errorStream?.readBytes()?.toString(Charsets.UTF_8) ?: ""
             if (code !in 200..299) throw IllegalStateException("push HTTP $code${if (text.isNotBlank()) ": $text" else ""}")
+        } finally {
+            // HttpURLConnection 不是 Closeable（没有 close()），只能用 disconnect() 释放连接
+            c.disconnect()
         }
         CommandHistoryStore.dropSynced(ctx, items.size)
         return items.size
@@ -68,12 +72,13 @@ object SyncClient {
     private fun pullNew(ctx: Context, token: String): Int {
         val since = ctx.getSharedPreferences("mox_sync", Context.MODE_PRIVATE)
             .getLong(PULL_SINCE_KEY, 0L)
-        val res = http(
-            url = "${AuthConfig.BACKEND_BASE}/sync/pull?bucket=${CommandHistoryStore.BUCKET}&since=$since&limit=200",
+        val bucket = URLEncoder.encode(CommandHistoryStore.BUCKET, Charsets.UTF_8.name())
+        val c = http(
+            url = "${AuthConfig.BACKEND_BASE}/sync/pull?bucket=$bucket&since=$since&limit=200",
             method = "GET",
             token = token,
         )
-        res.use { c ->
+        try {
             val code = c.responseCode
             if (code !in 200..299) throw IllegalStateException("pull HTTP $code")
             val json = JSONObject(c.inputStream.readBytes().toString(Charsets.UTF_8))
@@ -86,6 +91,8 @@ object SyncClient {
                     .edit().putLong(PULL_SINCE_KEY, maxTs).apply()
             }
             return items.size
+        } finally {
+            c.disconnect()
         }
     }
 

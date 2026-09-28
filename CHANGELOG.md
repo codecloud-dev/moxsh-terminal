@@ -28,6 +28,11 @@
 - **命令云同步 MVP**：`CommandHistoryStore` 本地 JSONL 离线队列、`SyncClient` 对接 mox-id Workers（`POST /sync/push`、`GET /sync/pull`，last-write-wins）、`ExecutionEngine.inputRecorder` 喂入钩子、`SettingsScreen`「账号与云同步」卡片（登录/退出 + 开关 + 立即同步）
 - **登录入口接线**：主界面 👤 按钮跳转 `LoginActivity`，深链 `moxsh://auth.callback` 回跳解析 token 存入 `SessionStore`
 
+### 修复
+
+- **CI 持续构建失败的真正根因**：`CommandHistoryStore` 的 KDoc 中写了 `mox-id /sync/*`，其中的 `/*` 被 Kotlin 词法器当作（嵌套的）块注释起始符，导致该文件第 28 行起的所有声明被整段吞成注释，表现为 `25:40 Missing '}'` + `103:1 Unclosed comment`，并级联出 5 处 `Unresolved reference`。编辑器里肉眼完全看不出来，只有编译器才会炸
+- **CI 防回归**：新增 `.github/scripts/check_kotlin_lexer.py` 源码静态自检（按嵌套块注释语义扫描，另查 BOM / CRLF / 裸控制字符），在编译前执行，早失败早定位
+
 ### 变更
 
 - GitHub 用户名更名为 `codecloud-dev`（全量替换 + 官网 base64），保留 workers.dev 子域名
