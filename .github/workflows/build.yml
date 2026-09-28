@@ -94,8 +94,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gradle clean assembleRelease --stacktrace 2>&1 | tail -250 > /tmp/ci_err.txt
-          gh issue create --title "CI build 诊断 $(date -u +%Y%m%dT%H%M%SZ)" --body-file /tmp/ci_err.txt
+          set +e
+          gradle clean assembleRelease --stacktrace > /tmp/ci_err.txt 2>&1
+          TITLE="CI build 诊断 $(date -u +%Y%m%dT%H%M%SZ)"
+          jq -n --arg t "$TITLE" --rawfile b /tmp/ci_err.txt '{title: $t, body: $b}' > /tmp/issue.json
+          gh api -X POST /repos/zyr15555086235/moxsh-terminal/issues --input /tmp/issue.json
 
       - name: Upload APK
         if: always()
