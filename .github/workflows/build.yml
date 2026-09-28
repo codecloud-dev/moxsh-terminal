@@ -114,10 +114,10 @@ jobs:
           exit 1
 
       # 诊断：仅在 3 次重试全部失败后才触发。直接读 /tmp/build.log（已落盘），
-      # 把错误同时写 step summary、建 GitHub Issue、并在 head commit 留评论
-      # （沙箱无法下载日志 zip / 读 step summary API，但 commit 评论可经 gh api 可靠读取），
-      # 用于定位是网络抖动还是真实代码/配置错误。
-      - name: 诊断构建错误（issue + commit 评论暴露）
+      # 抓尾部并过滤噪音行（PREFER_SETTINGS 警告 / UP-TO-DATE / NO-SOURCE），
+      # 把真实报错建为一个 GitHub Issue（沙箱无法下载日志 zip / 读 step summary API，
+      # 但 issue 可经 gh api 可靠读取），用于定位是网络抖动还是真实代码/配置错误。
+      - name: 诊断构建错误（建 issue 暴露）
         if: failure()
         working-directory: moxsh
         env:
@@ -140,13 +140,10 @@ jobs:
           printf 'CI 构建失败（3 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n' \
             "$SHA7" "${{ github.run_id }}" "$SUMMARY" \
             > /tmp/diag.md
-          # 1) 建 issue（可见性好，注意仓库无 ci 标签，故不带 --label）
+          # 建 issue（可见性好；仓库无 ci 标签，故不带 --label）
           gh issue create \
             --title "CI 构建失败 $SHA7 · run ${{ github.run_id }}" \
             --body-file /tmp/diag.md 2>&1 | head -3 || echo "issue 创建失败（不影响主流程）"
-          # 2) 兜底：在 head commit 留评论（沙箱可靠可读，contents: write 已授权）
-          gh api repos/zyr15555086235/moxsh-terminal/commits/'${{ github.sha }}'/comments \
-            -f body=@/tmp/diag.md 2>&1 | head -3 || echo "commit 评论失败（不影响主流程）"
 
       - name: Upload APK
         if: always()
