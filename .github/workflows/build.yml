@@ -114,12 +114,12 @@ jobs:
           done
           echo "BUILD_OK=0" >> "$GITHUB_OUTPUT"
           echo "3 次重试后仍失败"
-          # 诊断：打印 CI 实际 checkout 落到工作树的关键文件真实状态（进入 /tmp/build.log 末尾，供诊断 issue 抓取）
-          DIAGF=moxsh/app/src/main/java/com/moxsh/cloud/CommandHistoryStore.kt
-          echo "CHECKOUT_DIAG_SHA256=$(sha256sum "$DIAGF")"
-          echo "CHECKOUT_DIAG_L21=[$(sed -n '21p' "$DIAGF")]"
-          echo "CHECKOUT_DIAG_L25=[$(sed -n '25p' "$DIAGF")]"
-          echo "CHECKOUT_DIAG_L102_103=[$(sed -n '102,103p' "$DIAGF")]"
+          # 诊断：用绝对路径打印 CI 实际 checkout 落到工作树的关键文件真实状态
+          DIAGF="${GITHUB_WORKSPACE}/moxsh/app/src/main/java/com/moxsh/cloud/CommandHistoryStore.kt"
+          echo "CHECKOUT_DIAG_SHA256=$(sha256sum "$DIAGF" 2>&1)"
+          echo "CHECKOUT_DIAG_L20_27=[$(sed -n '20,27p' "$DIAGF" 2>&1)]"
+          echo "CHECKOUT_DIAG_L100_103=[$(sed -n '100,103p' "$DIAGF" 2>&1)]"
+          echo "CHECKOUT_DIAG_TOTAL_LINES=$(wc -l < "$DIAGF" 2>&1)"
           exit 1
 
       # 诊断：仅在 3 次重试全部失败后才触发。直接读 /tmp/build.log（已落盘），
