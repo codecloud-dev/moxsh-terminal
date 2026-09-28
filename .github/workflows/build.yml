@@ -124,9 +124,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          # 抓尾部 60KB，但先过滤掉 PREFER_SETTINGS 的仓库警告噪音（每个子工程都刷一遍，
-          # 会占满日志导致真正失败原因被挤到更后面）。过滤后尾部即可露出真实报错。
-          SUMMARY=$(grep -v "prefer settings repositories over project repositories" /tmp/build.log 2>/dev/null | tail -c 60000 || echo "（/tmp/build.log 不存在）")
+          # 抓尾部 60KB，先过滤掉噪音行：
+          #  - PREFER_SETTINGS 的仓库警告（每个子工程刷一遍）
+          #  - "UP-TO-DATE" / "NO-SOURCE"（海量任务状态行，会把真正失败原因挤到更后面）
+          # 过滤后尾部即可露出真正失败的任务与报错。
+          SUMMARY=$(grep -v -e "prefer settings repositories over project repositories" \
+                            -e "UP-TO-DATE" -e "NO-SOURCE" /tmp/build.log 2>/dev/null \
+                            | tail -c 60000 || echo "（/tmp/build.log 不存在）")
           {
             echo '```'
             echo "$SUMMARY"
