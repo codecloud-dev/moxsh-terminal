@@ -1,5 +1,34 @@
 # moxsh
 
+<p align="center">
+  <img src="assets/logo.svg" width="120" alt="moxsh 玻璃标志">
+</p>
+
+<p align="center">
+  <a href="../../actions"><img src="https://img.shields.io/github/actions/workflow/status/zyr15555086235/moxsh-terminal/build.yml?branch=main&label=CI%20Build" alt="CI Build"></a>
+  <a href="../../releases"><img src="https://img.shields.io/github/v/release/zyr15555086235/moxsh-terminal" alt="最新版本"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/zyr15555086235/moxsh-terminal" alt="许可证"></a>
+  <a href="../../discussions"><img src="https://img.shields.io/github/discussions/zyr15555086235/moxsh-terminal" alt="社区讨论"></a>
+  <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9+">
+  <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust&logoColor=white" alt="Rust 内核">
+  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="液态玻璃 UI">
+</p>
+
+> 跑在 Android 上的**液态玻璃终端**：装上就有完整 Linux 命令行，无需 root、无需配置，全面兼容 Termux 生态。
+
+<details>
+<summary>📑 目录</summary>
+
+- [核心特性](#核心特性)
+- [它是怎么工作的](#它是怎么工作的)
+- [能用它做什么](#能用它做什么)
+- [安装](#安装)
+- [插件](#插件)
+- [和 Termux 是什么关系](#和-termux-是什么关系)
+- [参与进来](#参与进来)
+
+</details>
+
 moxsh 是一款 Android 终端应用：装上就有完整的 Linux 命令行环境，不需要 root，不需要任何配置。
 
 它全面兼容 Termux 生态——Termux 官方源的软件包可以直接安装运行。同时 moxsh 是一套 AI 辅助生成的 clean-room 实现——开发过程中研读了 Termux 的公开文档与构建脚本以对齐行为，但代码全部重新编写、未复制 Termux 源码，因此在性能和界面上有更大的发挥空间：整个应用采用液态玻璃（liquid glass）设计，内核与包管理用 Rust 编写，并内置 AI 助手与插件商店。
@@ -22,6 +51,18 @@ moxsh 不是虚拟机，也不是模拟器。
 - 一键安装 Ubuntu / Debian / Kali / Alpine 发行版
 - 用 AI 助手解释报错、写脚本、管理环境（支持 DeepSeek、智谱、通义、Kimi 等）
 - 安装插件：悬浮窗终端、主题、系统监控等，也可以自己写
+
+## 核心特性
+
+| 维度 | 说明 |
+|---|---|
+| 🦀 **Rust 内核** | PTY/会话、VT 解析、回滚、渲染调度、包管理验签、IPC 鉴权全部用 Rust，内存安全 |
+| 💎 **液态玻璃 UI** | 实时模糊、半透明层级、可拖拽悬浮窗；高版本实时渲染，低版本自动回退 |
+| 📦 **Termux 兼容** | 直接吃 termux-packages 官方仓库，`*.deb` 能装能跑，命令用法一致 |
+| 🐧 **PRoot 发行版** | Ubuntu / Debian / Kali / Alpine 一键安装，隔离环境随便玩 |
+| 🤖 **AI 助手** | 解释报错、写脚本、管环境，支持 DeepSeek / 智谱 / 通义 / Kimi 等 |
+| 🧩 **插件体系** | 悬浮玻璃终端、主题、系统监控，`.mox` 一键装，也兼容 Termux 插件 |
+| 🔐 **加固 IPC** | 挑战-响应 + HMAC-SHA256 鉴权，跨进程调用不裸奔 |
 
 ## 安装
 
