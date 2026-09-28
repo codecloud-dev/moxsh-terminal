@@ -40,5 +40,20 @@
                 android:value="terminal_session_keepalive" />
         </service>
 
+        <!-- GitHub 登录页：被深链 moxsh://auth.callback 拉起，承接后端回跳的会话 token -->
+        <activity
+            android:name=".auth.LoginActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Moxsh.Glass">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="moxsh"
+                    android:host="auth.callback" />
+            </intent-filter>
+        </activity>
+
     </application>
 </manifest>

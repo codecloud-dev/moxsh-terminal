@@ -75,4 +75,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
+    // GitHub 登录会话的安全本地存储（基于 Android Keystore 的 AES-256）
+    implementation("androidx.security:security-crypto:1.1.0")
 }
