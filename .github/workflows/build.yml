@@ -76,8 +76,6 @@ jobs:
         run: echo "$KEYSTORE_BASE64" | base64 -d > moxsh/release.jks
 
       - name: Build Release APK
-        id: build
-        continue-on-error: true
         working-directory: moxsh
         run: gradle assembleRelease
         env:
@@ -86,17 +84,6 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-
-      # 诊断：构建失败时把 gradle 错误抓到 issue，便于在沙箱里读取（沙箱无法下载 Actions 日志）
-      - name: 上报构建错误
-        if: ${{ steps.build.outcome == 'failure' }}
-        working-directory: moxsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gradle assembleRelease --stacktrace 2>&1 | tail -200 > /tmp/ci_build_err.txt
-          gh issue create --title "CI build 诊断 $(date -u +%Y%m%dT%H%M%SZ)" \
-            --body "$(cat /tmp/ci_build_err.txt)"
 
       - name: Upload APK
         if: always()
