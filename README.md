@@ -1,70 +1,114 @@
-# moxsh
-
-<p align="center">
-  <img src="assets/logo.svg" width="120" alt="moxsh 玻璃标志">
+<p align="center">  
+  <img src="assets/logo.svg" width="128" alt="moxsh 液态玻璃标志">  
 </p>
 
-<p align="center">
-  <a href="../../actions"><img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&label=CI%20Build" alt="CI Build"></a>
-  <a href="../../releases"><img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal" alt="最新版本"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/codecloud-dev/moxsh-terminal" alt="许可证"></a>
-  <a href="../../discussions"><img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal" alt="社区讨论"></a>
-  <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9+">
-  <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust&logoColor=white" alt="Rust 内核">
-  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="液态玻璃 UI">
+<h1 align="center">💎 moxsh</h1>
+
+<p align="center">  
+  <b>跑在 Android 上的液态玻璃终端</b> —— 装上就有完整 Linux 命令行，无需 root、无需配置，全面兼容 Termux 生态。  
 </p>
 
-> 跑在 Android 上的**液态玻璃终端**：装上就有完整 Linux 命令行，无需 root、无需配置，全面兼容 Termux 生态。
+<p align="center">  
+  <a href="../../actions"><img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main\&label=CI%20Build\&color=8a7bff" alt="CI Build"></a>  
+  <a href="../../releases"><img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=Latest\&color=37d5d3" alt="最新版本"></a>  
+  <a href="../../discussions"><img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal?label=Discussions\&color=ff7ac3" alt="社区讨论"></a>  
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/codecloud-dev/moxsh-terminal?color=3DDC84" alt="许可证"></a>  
+    
+  
+  <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android\&logoColor=white" alt="Android 9+">  
+  <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust\&logoColor=white" alt="Rust 内核">  
+  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="液态玻璃 UI">  
+  <img src="https://img.shields.io/badge/Kotlin-UI-7F52FF?logo=kotlin\&logoColor=white" alt="Kotlin">  
+  <img src="https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions\&logoColor=white" alt="GitHub Actions">  
+</p>
+
+> 装上就有完整的 Linux 命令行；整个应用从内核到界面都为「快」与「美」重新造过一遍——Rust 内核 + 一整套美得像水的液态玻璃界面。
 
 <details>
+
 <summary>📑 目录</summary>
 
-- [核心特性](#核心特性)
-- [它是怎么工作的](#它是怎么工作的)
-- [能用它做什么](#能用它做什么)
-- [安装](#安装)
-- [插件](#插件)
-- [和 Termux 是什么关系](#和-termux-是什么关系)
-- [参与进来](#参与进来)
+- [🌌 MoX 系列](#-mox-系列)
+- [✨ 核心特性](#-核心特性)
+- [🛠 它是怎么工作的](#-它是怎么工作的)
+- [🚀 快速上手](#-快速上手)
+- [🧩 插件体系](#-插件体系)
+- [🔗 和 Termux 的关系](#-和-termux-的关系)
+- [📚 文档](#-文档)
+- [🤝 参与进来](#-参与进来)
 
 </details>
 
-moxsh 是一款 Android 终端应用：装上就有完整的 Linux 命令行环境，不需要 root，不需要任何配置。
+---
 
-它全面兼容 Termux 生态——Termux 官方源的软件包可以直接安装运行。同时 moxsh 是一套 AI 辅助生成的 clean-room 实现——开发过程中研读了 Termux 的公开文档与构建脚本以对齐行为，但代码全部重新编写、未复制 Termux 源码，因此在性能和界面上有更大的发挥空间：整个应用采用液态玻璃（liquid glass）设计，内核与包管理用 Rust 编写，并内置 AI 助手与插件商店。
+## 🌌 MoX 系列
 
-## 它是怎么工作的
+moxsh 只是 **MoX 工具系列**的第一块拼图。一个账号、一套审美，把桌面级工具搬进掌心。
+
+|      产品      |   状态   | 一句话定位                                                            |
+| :----------: | :----: | ---------------------------------------------------------------- |
+|   **moxsh**  |  ✅ 已上线 | Android 液态玻璃终端，兼容 Termux 生态                                      |
+|  **mox-id**  |  ✅ 已上线 | MoX 统一身份后端（GitHub OAuth，可自托管）                                    |
+| **mox-site** |  ✅ 已上线 | MoX 系列官方门户（[mox系列官网](https://codecloud-dev.github.io/mox-site/)） |
+|  **moxbox**  | 🚧 规划中 | 文件管理与系统套件，同款玻璃界面                                                 |
+|  **moxcode** | 🚧 规划中 | 移动端轻量 IDE：终端 + 编辑器 + 预览一体                                        |
+
+---
+
+## ✨ 核心特性
+
+| 维度               | 说明                                             |
+| :--------------- | ---------------------------------------------- |
+| 🦀 **Rust 内核**   | PTY/会话、VT 解析、回滚、渲染调度、包管理验签、IPC 鉴权全部用 Rust，内存安全 |
+| 💎 **液态玻璃 UI**   | 实时模糊、半透明层级、可拖拽悬浮窗；高版本实时渲染，低版本自动回退              |
+| 📦 **Termux 兼容** | 直接吃 termux-packages 官方仓库，`*.deb` 能装能跑，命令用法一致   |
+| 🐧 **PRoot 发行版** | Ubuntu / Debian / Kali / Alpine 一键安装，隔离环境随便玩   |
+| 🤖 **AI 助手**     | 解释报错、写脚本、管环境，支持 DeepSeek / 智谱 / 通义 / Kimi 等    |
+| 🧩 **插件体系**      | 悬浮玻璃终端、主题、系统监控，`.mox` 一键装，也兼容 Termux 插件        |
+| 🔐 **加固 IPC**    | 挑战-响应 + HMAC-SHA256 鉴权，跨进程调用不裸奔                |
+| ☁️ **命令云同步**     | 登录后把 shell 配置、别名、历史同步到云端，换机不丢环境                |
+
+---
+
+## 🛠 它是怎么工作的
 
 moxsh 不是虚拟机，也不是模拟器。
 
-终端部分由 Rust 内核直接驱动：应用启动命令行程序（`execve`），并把标准输入输出接到屏幕上，这一点和桌面 Linux 上的终端是一样的。由于 Android 不允许应用往 `/bin`、`/usr` 这类系统目录写文件，moxsh 把所有软件安装在自己的私有目录里（称为 *prefix*，对应环境变量 `$PREFIX`），并把路径处理对齐 Termux 的约定——这就是 Termux 软件包能直接运行的原因。
+终端部分由 **Rust 内核**直接驱动：应用启动命令行程序（`execve`），把标准输入输出接到屏幕上，和桌面 Linux 终端一致。由于 Android 不允许应用往 `/bin`、`/usr` 写文件，moxsh 把软件装在自己的私有目录（称为 *prefix*，对应 `$PREFIX`），路径处理对齐 Termux 约定——这就是 Termux 软件包能直接运行的原因。
 
-软件包来自 Termux 官方仓库（`apt`/`pkg` 双协议兼容），全部用 Android NDK 交叉编译，原生运行，没有仿真开销。想在隔离环境里玩整个发行版（Ubuntu、Debian、Kali、Alpine），可以用内置的 PRoot 引擎一键安装。
+软件包来自 Termux 官方仓库（`apt`/`pkg` 双协议兼容），全部用 Android NDK 交叉编译、原生运行、无仿真开销。想在隔离环境玩整个发行版，用内置 **PRoot 引擎**一键安装。
 
-界面采用液态玻璃设计：实时模糊、半透明层级、可拖拽的悬浮窗。高版本安卓使用实时渲染模糊，低版本自动回退到静态效果，不需要手动设置。
+界面采用**液态玻璃**设计：实时模糊、半透明层级、可拖拽悬浮窗。高版本安卓用实时渲染模糊，低版本自动回退静态效果，无需手动设置。
 
-## 能用它做什么
+---
 
-- 学习 Linux 命令行和 Shell 脚本
-- 用 Python、Node.js、Rust、C/C++ 写程序
-- 通过 SSH 连接远程服务器，或把手机当跳板
-- 一键安装 Ubuntu / Debian / Kali / Alpine 发行版
-- 用 AI 助手解释报错、写脚本、管理环境（支持 DeepSeek、智谱、通义、Kimi 等）
-- 安装插件：悬浮窗终端、主题、系统监控等，也可以自己写
+## 🚀 快速上手
 
-## 核心特性
+第一次启动会自动下载并安装基础系统（引导包），完成后直接进入终端。
 
-| 维度 | 说明 |
-|---|---|
-| 🦀 **Rust 内核** | PTY/会话、VT 解析、回滚、渲染调度、包管理验签、IPC 鉴权全部用 Rust，内存安全 |
-| 💎 **液态玻璃 UI** | 实时模糊、半透明层级、可拖拽悬浮窗；高版本实时渲染，低版本自动回退 |
-| 📦 **Termux 兼容** | 直接吃 termux-packages 官方仓库，`*.deb` 能装能跑，命令用法一致 |
-| 🐧 **PRoot 发行版** | Ubuntu / Debian / Kali / Alpine 一键安装，隔离环境随便玩 |
-| 🤖 **AI 助手** | 解释报错、写脚本、管环境，支持 DeepSeek / 智谱 / 通义 / Kimi 等 |
-| 🧩 **插件体系** | 悬浮玻璃终端、主题、系统监控，`.mox` 一键装，也兼容 Termux 插件 |
-| 🔐 **加固 IPC** | 挑战-响应 + HMAC-SHA256 鉴权，跨进程调用不裸奔 |
+更新软件源与包：
 
-## 安装
+```bash
+pkg update && pkg upgrade
+```
+
+安装软件（和 Termux 用法完全一致）：
+
+```bash
+pkg install python nodejs openssh
+```
+
+常用操作：
+
+```bash
+termux-setup-storage          # 允许访问手机存储（照片、下载等）
+ssh user@host                 # 连接远程服务器
+echo $PREFIX                  # 查看当前 prefix 路径
+```
+
+
+
+> 💡 首次装包前先 `pkg update` 一次，可避免找不到包的问题。
 
 ### 系统要求
 
@@ -74,76 +118,43 @@ moxsh 不是虚拟机，也不是模拟器。
 
 ### 获取 APK
 
-本仓库通过 GitHub Actions 自动构建：
+正式签名包在 [Releases](../../releases) 页面；CI 每次成功构建也会产出最新 APK。安装时如系统提示「未知来源」，允许即可。
 
-1. 打开仓库的 [Actions](../../actions) 页面，选择最近一次成功的构建
-2. 在页面底部的 Artifacts 里下载 APK 并安装
+---
 
-发布版本会同时放到 [Releases](../../releases) 页面。安装时如系统提示"未知来源"，允许即可。
+## 🧩 插件体系
 
-## 快速上手
+moxsh 的插件、AI 技能、主题、发行版镜像统一使用 **`.mox`** 包格式，通过内置商店安装，也支持把 `.mox` 文件放到下载目录离线安装。
 
-第一次启动 moxsh 会自动下载并安装基础系统（引导包），完成后直接进入终端。
+为 moxsh 编写和发布插件的方法见 [docs/plugins.md](docs/plugins.md)。同时 moxsh 兼容 Termux 插件宿主（Termux:API、Termux:Widget 等原插件可用）；外来 zip 格式会在导入时自动转换。
 
-更新软件源和包：
+---
 
-```bash
-pkg update && pkg upgrade
-```
+## 🔗 和 Termux 的关系
 
-安装软件（和 Termux 用法完全一致）：
+- **软件包层面**：直接兼容。Termux 官方源 `.deb` 能装能跑，命令用法一致。
+- **代码层面**：AI 辅助生成、clean-room 重写。终端内核、包管理器、运行环境、PRoot 引擎全部重新编写（Rust/Kotlin）；开发过程研读 Termux 公开文档/源码以对齐行为与生态契约，但**未复制其代码**，也不依赖修改 Termux 源码。
+- **插件层面**：双体系。Termux 兼容宿主让原插件继续可用；moxsh 原生插件（`.mox`）独立签名、带玻璃图形界面。
 
-```bash
-pkg install python
-pkg install nodejs
-pkg install openssh
-```
+---
 
-常用操作：
-
-```bash
-# 允许访问手机存储（照片、下载等）
-termux-setup-storage
-
-# 连接远程服务器
-ssh user@host
-
-# 查看当前 prefix 路径
-echo $PREFIX
-```
-
-首次安装某个包之前先 `pkg update` 一次，可以避免找不到包的问题。
-
-## 插件
-
-moxsh 的插件、AI 技能、主题、发行版镜像统一使用 `.mox` 包格式，通过内置商店安装，也支持把 `.mox` 文件放到下载目录离线安装。
-
-为 moxsh 编写和发布插件的方法见 [docs/plugins.md](docs/plugins.md)。
-
-同时 moxsh 兼容 Termux 插件宿主（Termux:API、Termux:Widget 等原插件可用）；外来 zip 格式的插件包会在导入时自动转换。
-
-## 和 Termux 是什么关系
-
-- **软件包层面**：直接兼容。Termux 官方源的 `.deb` 包能装能跑，命令用法一致。
-- **代码层面**：AI 辅助生成、clean-room 重写。moxsh 的终端内核、包管理器、运行环境、PRoot 引擎全部重新编写（Rust/Kotlin）；开发过程研读 Termux 公开文档/源码以对齐行为与生态契约，但未复制其代码，也不依赖修改 Termux 源码。
-- **插件层面**：双体系。Termux 兼容宿主让原有插件继续可用；moxsh 原生插件（`.mox`）独立签名、带玻璃图形界面。
-
-## 文档
+## 📚 文档
 
 - [架构白皮书](docs/architecture.md) —— 设计与实现原理
 - [插件开发指南](docs/plugins.md) —— 编写、打包、签名、上架
 - [命令体系](docs/commands.md) —— 支持的命令清单
 - [开发路线图](docs/roadmap.md) —— 进度与规划
 
-## 参与进来
+---
+
+## 🤝 参与进来
 
 发现 bug 或想要新功能，欢迎提 [Issue](../../issues)；想贡献代码直接提 Pull Request。
 
-## 许可证
+## 📄 许可证
 
 [GPL-3.0](LICENSE)
 
-## AI 辅助声明
+## 🤖 AI 辅助声明
 
-本项目（含全部代码、文档与官网页面）由开发者 **Codecloud** 主导设计，
-**AI 辅助生成代码**：架构决策、需求定义与验收由人完成，代码实现与文档撰写由 AI 协作完成并经人工审核修订。
+本项目（含全部代码、文档与官网页面）由开发者 **Codecloud** 主导设计，**AI 辅助生成代码**：架构决策、需求定义与验收由人完成，代码实现与文档撰写由 AI 协作完成并经人工审核修订。
