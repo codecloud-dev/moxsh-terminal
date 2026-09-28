@@ -1,0 +1,38 @@
+# ── Build artifacts ─────────────────────────────────────────────
+.gradle/
+build/
+**/build/
+.cxx/
+.externalNativeBuild/
+captures/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+*.apk
+*.aab
+
+# ── Android signing ────────────────────────────────────────────
+release.jks
+*.jks
+*.keystore
+
+# ── Rust (keep Cargo.lock for reproducible CI builds) ──────────
+**/target/
+
+# ── Termux reference clone (local study only, NOT part of repo) ─
+termux-src/
+
+# ── Agent / IDE internals ──────────────────────────────────────
+.codebuddy/
+
+# ── OS / editor noise ──────────────────────────────────────────
+Thumbs.db
+*~
+
+# ── Local push helper output ───────────────────────────────────
+push_to_github.local.log
+mox-site/
+验收报告.md
+mox-archive/

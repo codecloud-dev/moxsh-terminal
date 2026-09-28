@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+          玻璃卡片桌面部件（重写 Termux:Widget，docs/plugins-rewrite.md §六）：
+          AppWidgetProvider + 半透明圆角 RemoteViews。
+          exported=false：仅系统派发 APPWIDGET_UPDATE 与本应用自身的点击 PendingIntent。
+        -->
+        <receiver
+            android:name=".GlassWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_provider" />
+        </receiver>
+
+        <!-- 部件配置 Activity：管理 4 个按钮槽位绑定的命令 -->
+        <activity
+            android:name=".WidgetGlassActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Moxsh.Glass">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

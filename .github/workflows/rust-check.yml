@@ -1,0 +1,100 @@
+name: Rust 检查（内核质量门）
+
+# terminal-core（Rust 内核）的快速质量门：
+#   - 单元测试（含 SHA-256 NIST 向量、P0/P1 回归）
+#   - clippy 静态检查（-D warnings 严格模式：存量警告已清零，新增警告即失败）
+#   - cargo audit 依赖漏洞扫描
+#   - Android 目标（aarch64）交叉编译检查——PR 与主分支均执行，
+#     确保内核改动不破坏 NDK 构建（完整 APK 构建见 build.yml）
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "moxsh/terminal-core/**"
+      - "moxsh/rust-toolchain.toml"
+      - ".github/workflows/rust-check.yml"
+  pull_request:
+    paths:
+      - "moxsh/terminal-core/**"
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 测试（host target）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装工具链（跟随 rust-toolchain.toml 钉死 1.86.0）
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: moxsh/terminal-core
+      - name: cargo test
+        working-directory: moxsh/terminal-core
+        run: cargo test --lib
+
+  clippy:
+    name: Clippy 静态检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: moxsh/terminal-core
+      - name: cargo clippy
+        working-directory: moxsh/terminal-core
+        run: cargo clippy --all-targets -- -D warnings
+
+  audit:
+    name: 依赖漏洞扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # audit 是独立工具（不参与构建），用预编译二进制安装，
+      # 避免受项目钉死的 1.86.0 工具链限制（cargo-audit 0.22.x 需 1.88+）
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        working-directory: moxsh/terminal-core
+        run: cargo audit
+
+  ndk-cross:
+    name: Android aarch64 交叉编译检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: moxsh/terminal-core
+      # build.rs 用 cc-rs 编译 C++ JNI 桥与 NEON 汇编，
+      # 必须有真实 NDK 工具链（aarch64-linux-android*-clang++ wrapper）
+      - name: Install NDK 26.1.10909125
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKMANAGER" ] || SDKMANAGER="$(command -v sdkmanager)"
+          if [ ! -d "$ANDROID_HOME/ndk/26.1.10909125" ]; then
+            yes | "$SDKMANAGER" "ndk;26.1.10909125" > /dev/null
+          else
+            echo "NDK 26.1.10909125 已预装，跳过安装"
+          fi
+          echo "$ANDROID_HOME/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+      - name: cargo check --target aarch64-linux-android
+        working-directory: moxsh/terminal-core
+        run: cargo check --lib --target aarch64-linux-android
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
+
+# 覆盖率说明：tarpaulin 官方 docker 镜像在 GitHub Actions 里拉取慢且与 cdylib 目标
+# 兼容性一般，暂以「测试全绿 + clippy + audit」作为合并门槛；llvm-cov 覆盖率
+# 报告作为后续任务接入（见 roadmap）。

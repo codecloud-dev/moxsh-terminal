@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- specialUse 前台服务类型所需（targetSdk 34）：会话保活服务专用，已有权限保持不动 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <application
+        android:name=".MoxshApplication"
+        android:allowBackup="false"
+        android:label="moxsh"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Moxsh.Glass">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Moxsh.Glass">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- 兼容 Termux 的 RUN_COMMAND 意图，让旧脚本可调用 moxsh -->
+            <intent-filter>
+                <action android:name="com.termux.RUN_COMMAND" />
+            </intent-filter>
+        </activity>
+
+        <!-- 会话保活 foreground service；specialUse 类型按 Android 14 要求声明子类型说明 -->
+        <service
+            android:name=".MoxshSessionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="terminal_session_keepalive" />
+        </service>
+
+        <!-- GitHub 登录页：被深链 moxsh://auth.callback 拉起，承接后端回跳的会话 token -->
+        <activity
+            android:name=".auth.LoginActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Moxsh.Glass">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="moxsh"
+                    android:host="auth.callback" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>

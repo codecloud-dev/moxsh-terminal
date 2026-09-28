@@ -1,0 +1,68 @@
+name: 🐛 问题报告
+description: 报告 moxsh 的 bug 或异常行为
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请先搜索已有 issue，避免重复。
+        安全漏洞请**不要**使用此表单，见 [安全政策](../blob/main/SECURITY.md)。
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / 构建来源
+      description: APK 来源与日期，例如 "Actions 构建 #2（2026-09-27）"
+      placeholder: 构建 #___ 或版本号
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题范围
+      options:
+        - 终端本身（渲染 / 输入 / 会话）
+        - 包管理 / pkg 命令
+        - PRoot 发行版（安装 / 登录 / 运行）
+        - 插件 / .mox 包 / 商店
+        - AI 助手
+        - 界面（液态玻璃 UI）
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 期望行为与实际行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 …
+        2. 执行 …
+        3. 出现 …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 终端输出、报错截图等
+    validations:
+      required: false
+
+  - type: input
+    id: device
+    attributes:
+      label: 设备与系统
+      placeholder: 例如 小米 14 / Android 15 / arm64
+    validations:
+      required: true

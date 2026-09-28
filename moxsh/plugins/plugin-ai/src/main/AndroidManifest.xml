@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- AI Agent（D18）需要联网调用大模型 API（OpenAI 兼容 / 国内预置服务商）。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 前台服务：杀后台不断流（Agent 会话由 AiService 持有，SSE 流持续回包）。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- API 34+ 要求前台服务声明具体类型；联网流式会话用 dataSync。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- API 33+ 前台服务需通知权限（发起对话中的通知渠道）。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <!-- AI 对话独立入口：宿主统一玻璃主题，无需在此声明（照 plugin-distro 模式）。 -->
+        <activity
+            android:name=".AiChatActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <!-- 前台服务：持有 AgentExecutor 会话，进程被切后台后 SSE 流不断。 -->
+        <service
+            android:name=".AiService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>

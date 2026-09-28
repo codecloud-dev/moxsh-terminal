@@ -1,0 +1,48 @@
+name: 发布 APK 到 Release
+
+# 一次性辅助 workflow：把 CI 构建产物（moxsh-apk artifact）上传到指定 Release。
+# 用途：本地网络对 uploads.github.com 大文件上传受限时，由 runner 内网直传。
+# 触发：workflow_dispatch，输入 release tag 与构建 run id。
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Build moxsh APK 的 run id（artifact 所在 run）'
+        required: true
+        type: string
+      tag:
+        description: '目标 Release tag（需已存在）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: moxsh-apk
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.run_id }}
+
+      - name: 列出产物
+        run: ls -la
+
+      - name: 上传到 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for f in *.apk; do
+            [ -e "$f" ] || continue
+            # 已有同名资产先删除，保证可重跑
+            gh release delete-asset "${{ inputs.tag }}" "$f" --yes 2>/dev/null || true
+            gh release upload "${{ inputs.tag }}" "$f"
+          done
+          gh release view "${{ inputs.tag }}" --json assets --jq '.assets[] | {name, size, state}'

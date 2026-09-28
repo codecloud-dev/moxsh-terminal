@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 兼容权限描述（manifest android:description 需要资源引用） -->
+    <string name="compat_run_command_permission_desc">允许本应用向 moxsh 的 Termux 兼容宿主发送 RUN_COMMAND 命令意图</string>
+</resources>

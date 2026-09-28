@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 终端内核库：无独立权限声明，权限由宿主 app 统一申请 -->
+</manifest>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- moxsh 原生玻璃插件：插件商店（D16/D17）。独立签名，与 Termux 插件不互通（D7）。 -->
+    <application>
+        <activity
+            android:name=".StoreActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Moxsh.Glass" />
+    </application>
+</manifest>
