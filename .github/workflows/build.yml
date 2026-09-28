@@ -6,9 +6,10 @@ on:
   workflow_dispatch:
   pull_request:
 
-# 允许诊断步骤创建 issue 暴露构建错误（仓库默认 workflow 权限为 read-only）
+# 允许诊断步骤写 summary；允许构建成功后直接把本地 APK 上传到 Release
 permissions:
   issues: write
+  contents: write
 
 jobs:
   build:
@@ -109,3 +110,17 @@ jobs:
           name: moxsh-apk
           path: moxsh/app/build/outputs/apk/release/*.apk
           retention-days: 30
+
+      # 构建成功后直接用本地 APK 文件发布到 v0.5.1（不走 artifact 下载，沙箱/runner 均无法下载 artifacts）
+      - name: 发布到 v0.5.1 Release
+        if: ${{ steps.build.outcome == 'success' }}
+        working-directory: moxsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for f in app/build/outputs/apk/release/*.apk; do
+            [ -e "$f" ] || continue
+            gh release delete-asset v0.5.1 "$(basename "$f")" --yes 2>/dev/null || true
+            gh release upload v0.5.1 "$f"
+          done
+          gh release view v0.5.1 --json assets --jq '.assets[] | {name, size, state}'
