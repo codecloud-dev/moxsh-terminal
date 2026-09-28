@@ -1,11 +1,17 @@
-# 更新日志
+# 📜 更新日志
+
+<p align="center">
+  <img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=最新版本&color=8a7bff" alt="最新版本">
+  <img src="https://img.shields.io/badge/格式-Keep%20a%20Changelog-8a7bff" alt="Keep a Changelog">
+  <img src="https://img.shields.io/badge/版本号-语义化-3DDC84" alt="语义化版本">
+</p>
 
 本项目的所有显著变更都记录在此文件中。
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [Unreleased] 🔮
 
 ### 计划中
 
@@ -13,7 +19,22 @@
 - 本地小模型接入（llama.cpp 端侧）
 - 插件售卖支付流程（manifest 中 author/price/purchased 字段已预留）
 
-## [0.5.0] - 2026-09-27
+## [0.5.1] - 2026-09-28 ✨
+
+### 新增
+
+- **GitHub 账号登录**：OAuth 全流程（App 深链 `moxsh://auth.callback` 回跳 + 后端换发 JWT），`EncryptedSharedPreferences` 加密存取 token
+- **轻量后端 mox-id**：Cloudflare Workers + D1（边缘 SQLite），schema 预留会员 / 云同步 / 付费插件市场
+- **官网三板块**：路线图、Mox 系列愿景、社区（Discussions）+ 登录入口
+
+### 修复
+
+- `LoginActivity` 缺失 `setContent` 导入导致 compileReleaseKotlin 失败（登录模块首个真实编译通过版本）
+- CI 构建加重试与失败诊断（自动建 issue 暴露尾部日志）
+
+[0.5.1]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.5.1
+
+## [0.5.0] - 2026-09-27 🚀
 
 首个以 GitHub Actions 流水线构建 APK 的版本：终端内核到图形化管理全家桶全链路落地；真机长测与打磨持续进行中。
 
@@ -35,5 +56,5 @@
 - 项目为 100% clean-room 实现：包层面兼容 Termux 生态，代码层面零复用
 - 与 Termux 的关系详见 [README](README.md#和-termux-是什么关系)
 
-[Unreleased]: https://github.com/zyr15555086235/moxsh-terminal/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/zyr15555086235/moxsh-terminal/releases/tag/v0.5.0
+[Unreleased]: https://github.com/codecloud-dev/moxsh-terminal/compare/v0.5.1...HEAD
+[0.5.0]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.5.0

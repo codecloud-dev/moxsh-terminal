@@ -5,10 +5,10 @@
 </p>
 
 <p align="center">
-  <a href="../../actions"><img src="https://img.shields.io/github/actions/workflow/status/zyr15555086235/moxsh-terminal/build.yml?branch=main&label=CI%20Build" alt="CI Build"></a>
-  <a href="../../releases"><img src="https://img.shields.io/github/v/release/zyr15555086235/moxsh-terminal" alt="最新版本"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/zyr15555086235/moxsh-terminal" alt="许可证"></a>
-  <a href="../../discussions"><img src="https://img.shields.io/github/discussions/zyr15555086235/moxsh-terminal" alt="社区讨论"></a>
+  <a href="../../actions"><img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&label=CI%20Build" alt="CI Build"></a>
+  <a href="../../releases"><img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal" alt="最新版本"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/codecloud-dev/moxsh-terminal" alt="许可证"></a>
+  <a href="../../discussions"><img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal" alt="社区讨论"></a>
   <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9+">
   <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust&logoColor=white" alt="Rust 内核">
   <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="液态玻璃 UI">
