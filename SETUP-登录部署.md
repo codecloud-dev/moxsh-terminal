@@ -38,7 +38,8 @@ cd mox-id
 npm install
 wrangler login
 wrangler d1 create mox-id                 # 把输出的 id 填进 wrangler.toml 的 database_id
-wrangler d1 execute mox-id --file=./migrations/0001_init.sql --remote
+wrangler d1 execute mox-id --file=./migrations/0001_init.sql --remote   # 用户/设备/会话表
+wrangler d1 execute mox-id --file=./migrations/0002_sync.sql --remote   # 命令云同步表（sync_objects）
 wrangler secret put CLIENT_ID             # 步骤 2 建 OAuth App 后拿
 wrangler secret put CLIENT_SECRET         # 同上
 wrangler secret put JWT_SECRET            # openssl rand -hex 32
