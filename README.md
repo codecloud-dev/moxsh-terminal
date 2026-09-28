@@ -142,7 +142,7 @@ moxsh 的插件、AI 技能、主题、发行版镜像统一使用 **`.mox`** �
 - [架构白皮书](docs/architecture.md) —— 设计与实现原理
 - [插件开发指南](docs/plugins.md) —— 编写、打包、签名、上架
 - [命令体系](docs/commands.md) —— 支持的命令清单
-- [开发路线图](docs/roadmap.md) —— 进度与规划
+- [产品路线图](docs/roadmap.md) —— 对外分享的方向，规划类均「待定」
 
 ---
 
