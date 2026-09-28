@@ -1,5 +1,6 @@
 package com.moxsh
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -44,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.moxsh.auth.LoginActivity
 import com.moxsh.plugin.distro.DistroManagerScreen
 import com.moxsh.shared.BootstrapState
 import com.moxsh.shared.ExecutionEngine
@@ -258,6 +260,11 @@ fun MoxshRoot() {
                             }
                         }
                         Spacer(Modifier.width(8.dp))
+                        // 账号入口：GitHub 登录 / 会话管理（LoginActivity 内展示登录态）
+                        GlassIconButton("👤") {
+                            context.startActivity(Intent(context, LoginActivity::class.java))
+                        }
+                        Spacer(Modifier.width(6.dp))
                         // 插件面板入口（D5 体系②）：玻璃小按钮 → 已注册插件卡片
                         GlassIconButton("✦") { showPlugins = true }
                         Spacer(Modifier.width(6.dp))

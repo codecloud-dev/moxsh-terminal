@@ -2,7 +2,11 @@ package com.moxsh
 
 import android.app.Application
 import android.content.Intent
+import com.moxsh.auth.SessionStore
+import com.moxsh.cloud.CommandHistoryStore
 import com.moxsh.shared.BootstrapState
+import com.moxsh.shared.ExecutionEngine
+import com.moxsh.ui.settings.MoxshPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +46,14 @@ class MoxshApplication : Application() {
 
         // 插件宿主装配（D5 体系②）：内置原生玻璃插件注册 + 会话事件桥
         PluginManager.init(this)
+
+        // 云同步命令捕获（云同步 MVP）：仅「已登录 + 用户开启」时入队；
+        // 捕获在输入写入 PTY 成功后透传，任何异常不影响终端输入主路径。
+        ExecutionEngine.inputRecorder = { data ->
+            if (MoxshPrefs.cloudSync(this) && SessionStore.isLoggedIn(this)) {
+                runCatching { CommandHistoryStore.onInput(this, data) }
+            }
+        }
 
         // 运行环境就绪流水线：幂等（已就绪直接 Ready；失败进 BootstrapState.Failed，
         // UI 可引导重试或走 BootstrapInstaller.installFromLocal 离线导入）

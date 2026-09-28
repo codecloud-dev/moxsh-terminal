@@ -23,13 +23,26 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.moxsh.auth.GitHubLogin
+import com.moxsh.auth.SessionStore
+import com.moxsh.cloud.SyncClient
 import com.moxsh.ui.component.GlassSurface
 import com.moxsh.ui.component.GlassTokens
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------
@@ -42,6 +55,7 @@ object MoxshPrefs {
     private const val KEY_ACCENT = "accent_color"
     private const val KEY_REALTIME_BLUR = "realtime_blur"   // true=开实时模糊（性能模式关）
     private const val KEY_MIRROR = "apt_mirror"
+    private const val KEY_CLOUD_SYNC = "cloud_sync_enabled"   // 命令云同步开关（云同步 MVP）
 
     const val DEFAULT_FONT_SIZE = 14f
     val DEFAULT_ACCENT = 0xFF7CF9E5.toInt() // toInt() 非编译期常量，故 val（object 内等价用法）
@@ -76,6 +90,10 @@ object MoxshPrefs {
     /** APT 镜像源名称。 */
     fun mirror(ctx: Context): String = sp(ctx).getString(KEY_MIRROR, DEFAULT_MIRROR) ?: DEFAULT_MIRROR
     fun setMirror(ctx: Context, v: String) { sp(ctx).edit().putString(KEY_MIRROR, v).apply() }
+
+    /** 命令云同步开关（默认关：隐私优先，用户显式开启后才捕获命令历史）。 */
+    fun cloudSync(ctx: Context): Boolean = sp(ctx).getBoolean(KEY_CLOUD_SYNC, false)
+    fun setCloudSync(ctx: Context, v: Boolean) { sp(ctx).edit().putBoolean(KEY_CLOUD_SYNC, v).apply() }
 }
 
 /**
@@ -242,6 +260,87 @@ fun SettingsScreen(
                             name,
                             color = if (selected) GlassTokens.onGlass else GlassTokens.onGlassDim,
                         )
+                    }
+                }
+            }
+
+            // ---- 账号与云同步（GitHub 登录 + 命令历史云同步 MVP）----
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            var loggedIn by remember { mutableStateOf(SessionStore.isLoggedIn(context)) }
+            var cloudOn by remember { mutableStateOf(MoxshPrefs.cloudSync(context)) }
+            var syncMsg by remember { mutableStateOf("未同步") }
+            var syncing by remember { mutableStateOf(false) }
+
+            // 登录态可能因 LoginActivity 刚完成而变化：回到本页时刷新
+            LaunchedEffect(Unit) { loggedIn = SessionStore.isLoggedIn(context) }
+
+            GlassSurface(Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("账号", color = GlassTokens.onGlass)
+                        Text(
+                            if (loggedIn) "已通过 GitHub 登录" else "未登录——登录后可云同步命令历史",
+                            color = GlassTokens.onGlassDim,
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    if (loggedIn) {
+                        GlassIconButton("退出") {
+                            SessionStore.clear(context)
+                            MoxshPrefs.setCloudSync(context, false)
+                            loggedIn = false
+                            cloudOn = false
+                        }
+                    } else {
+                        GlassIconButton("登录") { GitHubLogin.start(context) }
+                    }
+                }
+
+                Spacer(Modifier.size(10.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("命令云同步", color = GlassTokens.onGlass)
+                        Text(
+                            "把终端命令历史同步到你的账号（mox-id 后端）。开启后新输入的命令会加密上传；需先登录。",
+                            color = GlassTokens.onGlassDim,
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Switch(
+                        checked = cloudOn,
+                        // 未登录时强制走登录，不允许直接开
+                        enabled = loggedIn,
+                        onCheckedChange = {
+                            cloudOn = it
+                            MoxshPrefs.setCloudSync(context, it)
+                        },
+                    )
+                }
+
+                Spacer(Modifier.size(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        syncMsg,
+                        color = GlassTokens.onGlassDim,
+                        modifier = Modifier.weight(1f),
+                    )
+                    GlassIconButton("同步") {
+                        if (!syncing) {
+                            syncing = true
+                            syncMsg = "同步中…"
+                            scope.launch {
+                                val r = withContext(Dispatchers.IO) { SyncClient.syncNow(context) }
+                                syncing = false
+                                syncMsg = when (r) {
+                                    is SyncClient.SyncResult.Ok ->
+                                        "同步成功：上传 ${r.pushed} 条，拉回 ${r.pulled} 条"
+                                    is SyncClient.SyncResult.Error -> "同步失败：${r.message}"
+                                }
+                            }
+                        }
                     }
                 }
             }

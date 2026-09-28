@@ -81,6 +81,15 @@ object ExecutionEngine {
     var sessionListener: SessionListener? = null
 
     /**
+     * 输入捕获钩子（云同步命令历史用；app 侧注册，null=未开启）。
+     * 方向设计与 [sessionListener] 一致：shared 不感知 app 层，app 在
+     * [com.moxsh.MoxshApplication] 里按「已登录 + 用户开关」决定是否喂入队列。
+     * 每次成功写入 PTY 的原始输入字节都会透传（含控制序列，由消费方自行过滤）。
+     */
+    @Volatile
+    var inputRecorder: ((ByteArray) -> Unit)? = null
+
+    /**
      * 创建一个终端会话。
      * @param command 要执行的命令（默认 [DEFAULT_SHELL]）。
      * @param cols 初始列数。
@@ -124,6 +133,8 @@ object ExecutionEngine {
     fun write(id: Long, data: ByteArray): Boolean {
         val s = sessions[id] ?: return false
         s.write(data)
+        // 云同步命令捕获：写入成功后透传（捕获失败绝不影响输入主路径）
+        runCatching { inputRecorder?.invoke(data) }
         return true
     }
 
