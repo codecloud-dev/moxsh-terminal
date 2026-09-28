@@ -2,8 +2,7 @@ package com.moxsh.ui.component
 
 import android.os.Build
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -11,27 +10,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -44,10 +31,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.pointer.awaitPointerEvent
-import androidx.compose.ui.input.pointer.awaitPointerEventScope
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 
 /**
@@ -63,12 +47,11 @@ import androidx.compose.ui.unit.dp
  *  - 主题色流动：设置页换 accent 后，玻璃描边/染色/背景随之变化
  *    （[LocalGlassAccent] 由 MoxshGlassTheme 提供；未提供时回退中性玻璃）。
  *  - 液态动效：所有可点玻璃组件带按压缩放（[glassPress]），
- *    材质带顶部斜向高光（glassSheen）与移动高光（GlassSpecular），
- *    构成贴近 iOS 液态玻璃的基础手感。
- *  - 真机实感增强（iOS 26/27 风格）：
- *      · GlassSurface 默认开启移动高光（沿对角线缓慢扫过）
+ *    材质带顶部斜向高光（glassSheen），构成"液态玻璃"的基础手感。
+ *  - 真机实感增强（贴近 iOS 液态玻璃）：
+ *      · [GlassSurface] 默认开启移动高光（[GlassSpecular] 沿对角线缓慢扫过）
  *      · 顶部高光带（glassTopHighlight）+ 折射内圈（enableRefraction）
- *      · 卡片类可开 enableTilt，随指针产生视差倾斜，像真玻璃随视角反光
+ *      · 装饰卡片可开 enableTilt，随指针拖动产生视差倾斜，像真玻璃随视角反光
  *
  * 生产注意：GlassBackdrop 应在实时壁纸/实况层之上做模糊，这里用渐变示意。
  */
@@ -125,68 +108,29 @@ fun Modifier.glassPress(
     }
 }
 
-/**
- * 指针视差倾斜：卡片随指针位置产生轻微 3D 旋转，像真玻璃会随视角变化反光。
- * 仅在 enabled=true 时挂载；用于非点击型装饰卡片，避免与 clickable 抢事件。
- */
-fun Modifier.glassTilt(
-    maxTiltDeg: Float = 6f,
-    enabled: Boolean = true,
-): Modifier = if (!enabled) this else composed {
-    var tiltX by remember { mutableStateOf(0f) }
-    var tiltY by remember { mutableStateOf(0f) }
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    this
-        .onSizeChanged { size = it }
-        .pointerInput(Unit) {
-            awaitPointerEventScope {
-                while (true) {
-                    val event = awaitPointerEvent()
-                    val change = event.changes.firstOrNull() ?: continue
-                    val w = size.width
-                    val h = size.height
-                    if (w > 0 && h > 0) {
-                        val nx = (change.position.x / w - 0.5f) * 2f
-                        val ny = (change.position.y / h - 0.5f) * 2f
-                        tiltX = (ny * maxTiltDeg).coerceIn(-maxTiltDeg, maxTiltDeg)
-                        tiltY = (-nx * maxTiltDeg).coerceIn(-maxTiltDeg, maxTiltDeg)
-                    }
-                    if (change.changedToUpIgnoreConsumed()) {
-                        tiltX = 0f
-                        tiltY = 0f
-                    }
-                }
-            }
-        }
-        .graphicsLayer {
-            rotationX = tiltX
-            rotationY = tiltY
-            cameraDistance = 12f
-            transformOrigin = TransformOrigin(0.5f, 0.5f)
-        }
-}
-
 /** 玻璃高光层：左上斜向的柔光渐变，叠加在染色之上、内容之下，模拟玻璃反光。 */
 private fun glassSheenBrush(): Brush = Brush.linearGradient(
-    0f to Color.White.copy(alpha = 0.13f),
-    0.35f to Color.White.copy(alpha = 0.04f),
-    0.6f to Color.Transparent,
+    listOf(
+        0f to Color.White.copy(alpha = 0.13f),
+        0.35f to Color.White.copy(alpha = 0.04f),
+        0.6f to Color.Transparent,
+    ),
     start = Offset.Zero,
     end = Offset.Infinite,
 )
 
-/** 顶部高光带：玻璃上沿那条紧实的亮边，是"真玻璃"最关键的识别特征。 */
+/** 玻璃顶部高光带：上沿一道亮边，是"真玻璃"最直接的识别特征。 */
 private fun glassTopHighlight(): Brush = Brush.verticalGradient(
-    colorStops = listOf(
-        0f to Color.White.copy(alpha = 0.18f),
-        0.09f to Color.White.copy(alpha = 0.05f),
-        0.22f to Color.Transparent,
-    ),
+    listOf(
+        Color.White.copy(alpha = 0.18f),
+        Color.White.copy(alpha = 0.05f),
+        Color.Transparent,
+    )
 )
 
 /**
- * 移动高光（iOS 液态玻璃质感核心）：一条柔光带沿对角线缓慢扫过玻璃表面，
- * 不依赖答题/交互，纯氛围动效，模拟环境光在玻璃上的流动反光。
+ * 移动高光（iOS 玻璃质感核心）：一条柔光带沿对角线缓慢扫过玻璃表面，
+ * 不依赖交互，纯氛围动效，模拟环境光在玻璃上的流动反光。
  */
 @Composable
 fun GlassSpecular(
@@ -194,26 +138,58 @@ fun GlassSpecular(
     tint: Color = Color.White,
     durationMs: Int = 4200,
 ) {
-    val transition = rememberInfiniteTransition(label = "glassSpecular")
-    val pos by transition.animateFloat(
-        initialValue = -0.2f,
-        targetValue = 1.2f,
+    val transition = rememberInfiniteTransition(label = "GlassSpecular")
+    val t by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(durationMs, easing = LinearEasing)),
-        label = "specPos",
+        label = "specularT",
     )
     Box(
         modifier.background(
             Brush.linearGradient(
-                colorStops = listOf(
-                    0f to Color.Transparent,
-                    pos.coerceIn(0.001f, 0.999f) to tint.copy(alpha = 0.10f),
-                    1f to Color.Transparent,
+                listOf(
+                    Color.Transparent,
+                    tint.copy(alpha = 0.08f),
+                    Color.Transparent,
                 ),
-                start = Offset.Zero,
-                end = Offset.Infinite,
-            ),
-        ),
+                start = Offset(t, t),
+                end = Offset(t + 1f, t + 1f),
+            )
+        )
     )
+}
+
+/**
+ * 指针视差倾斜：卡片随指针拖动产生轻微 3D 旋转，像真玻璃会随视角变化反光。
+ * 用于装饰型卡片（默认关闭）；与 clickable 抢事件，需留意层级。
+ */
+fun Modifier.glassTilt(
+    maxTiltDeg: Float = 6f,
+    enabled: Boolean = true,
+): Modifier = if (!enabled) this else composed {
+    var tiltX by remember { mutableStateOf(0f) }
+    var tiltY by remember { mutableStateOf(0f) }
+    this
+        .pointerInput(Unit) {
+            detectDragGestures(
+                onDrag = { change, dragAmount ->
+                    change.consume()
+                    tiltX = (tiltX + dragAmount.y * 0.25f).coerceIn(-maxTiltDeg, maxTiltDeg)
+                    tiltY = (tiltY - dragAmount.x * 0.25f).coerceIn(-maxTiltDeg, maxTiltDeg)
+                },
+                onDragEnd = {
+                    tiltX = 0f
+                    tiltY = 0f
+                },
+            )
+        }
+        .graphicsLayer {
+            rotationX = tiltX
+            rotationY = tiltY
+            cameraDistance = 12f
+            transformOrigin = TransformOrigin(0.5f, 0.5f)
+        }
 }
 
 /** 全局玻璃背景层：在内容之下铺一层渐变 +（可选）实时模糊；有 accent 时底部微染主题色。 */
@@ -244,13 +220,13 @@ fun GlassBackdrop(performantBlur: Boolean, modifier: Modifier = Modifier) {
  * 其他玻璃组件（TopBar/BottomBar/FAB/Dialog）均以其为基础叠加，保证视觉一致。
  *
  * 描边为上亮下暗的渐变（真玻璃边缘反光特征）；注入 accent 后描边随主题色流动。
- * 真机实感增强：默认开启 [GlassSpecular] 移动高光 + [glassTopHighlight] 顶部亮边 +
- * 折射内圈；卡片类可开 [enableTilt] 获得指针视差倾斜。
+ *
+ * 真机实感增强：默认开启 [GlassSpecular] 移动高光 + 顶部亮边（glassTopHighlight）
+ * + 折射内圈（enableRefraction）；装饰卡片可开 enableTilt 获得指针视差倾斜。
  *
  * @param tint    玻璃染色；终端面板用 [GlassTokens.termTint]，普通面板用 [GlassTokens.surfaceTint]。
- * @param shape   圆角形状（默认 20.dp）。
  * @param enableSpecular  是否开启移动高光（默认开）。
- * @param enableRefraction 是否开启折射内圈亮边（默认开）。
+ * @param enableRefraction 是否开启顶部亮边 + 折射内圈（默认开）。
  * @param enableTilt 是否随指针视差倾斜（默认关，装饰卡片可开）。
  * @param content 面板内的 Compose 内容（ColumnScope）。
  */
@@ -258,51 +234,47 @@ fun GlassBackdrop(performantBlur: Boolean, modifier: Modifier = Modifier) {
 fun GlassSurface(
     modifier: Modifier = Modifier,
     tint: Color = GlassTokens.surfaceTint,
-    shape: RoundedCornerShape = RoundedCornerShape(20.dp),
     enableSpecular: Boolean = true,
     enableRefraction: Boolean = true,
     enableTilt: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val accent = LocalGlassAccent.current
-    val strokeTop = if (accent.isSpecified) accent.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.34f)
-    val strokeBottom = if (accent.isSpecified) accent.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.07f)
-    val rim = if (accent.isSpecified) accent.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.12f)
+    val strokeTop = if (accent.isSpecified) accent.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.32f)
+    val strokeBottom = if (accent.isSpecified) accent.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.08f)
     Box(
         modifier
             .then(if (enableTilt) Modifier.glassTilt() else Modifier)
-            .clip(shape),
+            .clip(RoundedCornerShape(20.dp)),
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(tint, shape)
-                .background(glassSheenBrush(), shape)
+                .background(tint, RoundedCornerShape(20.dp))
+                .background(glassSheenBrush(), RoundedCornerShape(20.dp))
                 .border(
-                    if (enableRefraction) 1.5.dp else 1.dp,
+                    1.dp,
                     Brush.verticalGradient(listOf(strokeTop, strokeBottom)),
-                    shape,
+                    RoundedCornerShape(20.dp),
                 )
                 .padding(14.dp),
             content = content,
         )
         // 顶部高光带 + 折射内圈：真玻璃的"亮边"与"内反光"
-        Box(
-            Modifier
-                .matchParentSize()
-                .clip(shape)
-                .background(glassTopHighlight(), shape),
-        )
         if (enableRefraction) {
             Box(
                 Modifier
                     .matchParentSize()
-                    .clip(shape)
-                    .border(1.dp, Brush.verticalGradient(listOf(rim, Color.Transparent)), shape),
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(glassTopHighlight(), RoundedCornerShape(20.dp)),
             )
         }
         if (enableSpecular) {
-            GlassSpecular(Modifier.matchParentSize().clip(shape))
+            GlassSpecular(
+                Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(20.dp)),
+            )
         }
     }
 }
