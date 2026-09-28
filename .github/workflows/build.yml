@@ -6,6 +6,10 @@ on:
   workflow_dispatch:
   pull_request:
 
+# 允许诊断步骤创建 issue 暴露构建错误（仓库默认 workflow 权限为 read-only）
+permissions:
+  issues: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
