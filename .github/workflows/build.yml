@@ -91,18 +91,16 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      # 临时诊断：构建失败时 clean 重编译并把 gradle 错误写入 issue（沙箱无法下载 Actions 日志）
+      # 临时诊断：构建失败时 clean 重编译并把 gradle 错误写入 step summary（沙箱无法下载 Actions 日志）
       - name: 诊断构建错误
         if: ${{ steps.build.outcome == 'failure' }}
         working-directory: moxsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
           gradle clean assembleRelease --stacktrace > /tmp/ci_err.txt 2>&1
-          TITLE="CI build 诊断 $(date -u +%Y%m%dT%H%M%SZ)"
-          jq -n --arg t "$TITLE" --rawfile b /tmp/ci_err.txt '{title: $t, body: $b}' > /tmp/issue.json
-          gh api -X POST /repos/zyr15555086235/moxsh-terminal/issues --input /tmp/issue.json
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          head -c 60000 /tmp/ci_err.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK
         if: always()
