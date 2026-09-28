@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -112,6 +114,12 @@ jobs:
           done
           echo "BUILD_OK=0" >> "$GITHUB_OUTPUT"
           echo "3 次重试后仍失败"
+          # 诊断：打印 CI 实际 checkout 落到工作树的关键文件真实状态（进入 /tmp/build.log 末尾，供诊断 issue 抓取）
+          DIAGF=moxsh/app/src/main/java/com/moxsh/cloud/CommandHistoryStore.kt
+          echo "CHECKOUT_DIAG_SHA256=$(sha256sum "$DIAGF")"
+          echo "CHECKOUT_DIAG_L21=[$(sed -n '21p' "$DIAGF")]"
+          echo "CHECKOUT_DIAG_L25=[$(sed -n '25p' "$DIAGF")]"
+          echo "CHECKOUT_DIAG_L102_103=[$(sed -n '102,103p' "$DIAGF")]"
           exit 1
 
       # 诊断：仅在 3 次重试全部失败后才触发。直接读 /tmp/build.log（已落盘），
@@ -132,14 +140,17 @@ jobs:
           SUMMARY=$(grep -v -e "prefer settings repositories over project repositories" \
                             -e "UP-TO-DATE" -e "NO-SOURCE" /tmp/build.log 2>/dev/null \
                             | tail -c 60000 || echo "（/tmp/build.log 不存在）")
+          DIAG=$(grep "CHECKOUT_DIAG_" /tmp/build.log 2>/dev/null || echo "(无 checkout 诊断)")
           {
             echo '```'
             echo "$SUMMARY"
             echo '```'
+            echo "--- CI checkout 诊断 ---"
+            echo "$DIAG"
           } >> "$GITHUB_STEP_SUMMARY"
           SHA7=$(echo '${{ github.sha }}' | cut -c1-7)
-          printf 'CI 构建失败（3 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n' \
-            "$SHA7" "${{ github.run_id }}" "$SUMMARY" \
+          printf 'CI 构建失败（3 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n\n%s\n' \
+            "$SHA7" "${{ github.run_id }}" "$SUMMARY" "$DIAG" \
             > /tmp/diag.md
           # 建 issue（可见性好；仓库无 ci 标签，故不带 --label）
           gh issue create \
