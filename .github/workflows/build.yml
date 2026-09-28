@@ -124,7 +124,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          SUMMARY=$(head -c 60000 /tmp/build.log 2>/dev/null || echo "（/tmp/build.log 不存在）")
+          # 抓尾部 60KB：头部是 PREFER_SETTINGS 的仓库警告噪音，真正的失败原因（cargo/依赖解析）
+          # 在日志末尾，必须看 tail 才能定位。
+          SUMMARY=$(tail -c 60000 /tmp/build.log 2>/dev/null || echo "（/tmp/build.log 不存在）")
           {
             echo '```'
             echo "$SUMMARY"
