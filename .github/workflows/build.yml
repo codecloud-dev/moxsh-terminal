@@ -80,26 +80,62 @@ jobs:
         if: ${{ env.KEYSTORE_BASE64 != '' }}
         run: echo "$KEYSTORE_BASE64" | base64 -d > moxsh/release.jks
 
-      - name: Build Release APK
+      # Rust/NDK/cargo 交叉编译链偶发网络超时（crates.io / maven 抖动）会直接打挂整个构建。
+      # 这里加重试：最多 4 次，每次把完整日志 tee 到 /tmp/build.log，最后失败时诊断步骤直接读该文件，
+      # 不必再 clean 全量重编译（既慢又可能再次撞网络）。
+      - name: Build Release APK (with retry)
+        id: build
         working-directory: moxsh
-        run: gradle assembleRelease
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
           KEYSTORE_PATH: ${{ github.workspace }}/moxsh/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-
-      # 临时诊断：构建失败时 clean 重编译并把 gradle 错误写入 step summary（沙箱无法下载 Actions 日志）
-      - name: 诊断构建错误
-        if: failure()
-        working-directory: moxsh
         run: |
           set +e
-          gradle clean assembleRelease --stacktrace > /tmp/ci_err.txt 2>&1
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          head -c 60000 /tmp/ci_err.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          n=0
+          max=4
+          until [ "$n" -ge "$max" ]; do
+            n=$((n+1))
+            echo "=== Build attempt $n/$max ==="
+            gradle assembleRelease --stacktrace 2>&1 | tee /tmp/build.log
+            rc=${PIPESTATUS[0]}
+            if [ "$rc" -eq 0 ]; then
+              echo "BUILD_OK=1" >> "$GITHUB_OUTPUT"
+              echo "构建成功（第 $n 次尝试）"
+              exit 0
+            fi
+            echo "第 $n 次尝试失败（rc=$rc），20s 后重试…"
+            sleep 20
+          done
+          echo "BUILD_OK=0" >> "$GITHUB_OUTPUT"
+          echo "4 次重试后仍失败"
+          exit 1
+
+      # 诊断：仅在 4 次重试全部失败后才触发。直接读 /tmp/build.log（已落盘），
+      # 把错误同时写 step summary 与创建一个 GitHub Issue（沙箱无法下载日志 zip，
+      # 但 issue 可经 gh api 读取），便于定位是网络抖动还是真实代码/配置错误。
+      - name: 诊断构建错误（issue 暴露）
+        if: failure()
+        working-directory: moxsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          SUMMARY=$(head -c 60000 /tmp/build.log 2>/dev/null || echo "（/tmp/build.log 不存在）")
+          {
+            echo '```'
+            echo "$SUMMARY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf 'CI 构建失败（4 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n' \
+            "$(echo '${{ github.sha }}' | cut -c1-7)" "${{ github.run_id }}" "$SUMMARY" \
+            > /tmp/issue_body.md
+          gh issue create \
+            --title "CI 构建失败 $(echo '${{ github.sha }}' | cut -c1-7) · run ${{ github.run_id }}" \
+            --body-file /tmp/issue_body.md \
+            --label ci || echo "issue 创建失败（不影响主流程）"
 
       - name: Upload APK
         if: always()
@@ -110,7 +146,9 @@ jobs:
           retention-days: 30
 
       # 构建成功后直接用本地 APK 文件发布到 v0.5.1（不走 artifact 下载，沙箱/runner 均无法下载 artifacts）
+      # 仅依赖 Build 是否成功，与 Upload APK 步骤结果解耦（artifact 上传抖动不应阻断发布）。
       - name: 发布到 v0.5.1 Release
+        if: steps.build.outcome == 'success'
         working-directory: moxsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
