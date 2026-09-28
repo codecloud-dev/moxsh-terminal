@@ -95,13 +95,13 @@ private fun LoginScreen() {
 }
 
 @Composable
-private fun GlassCard(content: @Composable ColumnScope.() -> Unit) {
+private fun GlassCard(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.clip(RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.12f)),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
     ) {
-        Column(Modifier.padding(28.dp), content = content)
+        Column(Modifier.padding(28.dp)) { content() }
     }
 }
