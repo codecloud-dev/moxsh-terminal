@@ -10,6 +10,7 @@ extern "C" {
     long  moxsh_write(void* sess, const uint8_t* buf, size_t len);
     int   moxsh_resize(void* sess, int cols, int rows);
     void  moxsh_close(void* sess);
+    int   moxsh_session_exit_status(void* sess);
     int   moxsh_screen_rows(void* sess);
     int   moxsh_screen_cols(void* sess);
     int   moxsh_total_rows(void* sess);
@@ -65,6 +66,11 @@ Java_com_moxsh_core_TerminalCore_nativeResize(JNIEnv*, jobject,
 extern "C" JNIEXPORT void JNICALL
 Java_com_moxsh_core_TerminalCore_nativeClose(JNIEnv*, jobject, jlong sess) {
     moxsh_close(reinterpret_cast<void*>(sess));
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_moxsh_core_TerminalCore_nativeSessionExitStatus(JNIEnv*, jobject, jlong sess) {
+    return moxsh_session_exit_status(reinterpret_cast<void*>(sess));
 }
 
 extern "C" JNIEXPORT jint JNICALL

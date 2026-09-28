@@ -27,6 +27,7 @@ class TerminalCore {
     external fun nativeWrite(sess: Long, buf: ByteArray): Int
     external fun nativeResize(sess: Long, cols: Int, rows: Int): Int
     external fun nativeClose(sess: Long)
+    external fun nativeSessionExitStatus(sess: Long): Int
     external fun nativeScreenRows(sess: Long): Int
     external fun nativeScreenCols(sess: Long): Int
     external fun nativeTotalRows(sess: Long): Int
@@ -62,6 +63,13 @@ class TerminalCore {
         }
 
         fun close() = core.nativeClose(ptr)
+
+        /**
+         * 非阻塞轮询子进程退出状态（WNOHANG 收割）。
+         * @return `>=0` 已退出（信号退出为 128+sig）；`-1` 仍在运行；`-2` 空指针。
+         * 幂等：收割后重复调用返回同一退出码。
+         */
+        fun exitStatus(): Int = core.nativeSessionExitStatus(ptr)
 
         /** 总行数 = 可见行 + 历史回滚行，供滚动视图定位。 */
         val totalRows: Int get() = core.nativeTotalRows(ptr)

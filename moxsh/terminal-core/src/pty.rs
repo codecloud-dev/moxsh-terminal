@@ -46,13 +46,20 @@ impl Pty {
                 return Err(e);
             }
         }
-        let slave_path = unsafe { libc::ptsname(master) };
-        if slave_path.is_null() {
-            let e = io::Error::last_os_error();
+        // glibc/bionic 的 ptsname() 返回静态缓冲区指针，**非线程安全**：
+        // 并发 open 多个会话时（App 的 IO 协程完全可能），两个线程会拿到互相
+        // 踩踏的 slave 路径，fork 出的子进程打开/抢占对方的从设备后 _exit(1)。
+        // 改用可重入的 ptsname_r，从根上消除竞态。
+        let mut slave_buf = [0u8; 128];
+        let prc = unsafe {
+            libc::ptsname_r(master, slave_buf.as_mut_ptr() as *mut c_char, slave_buf.len())
+        };
+        if prc != 0 {
+            let e = io::Error::from_raw_os_error(prc);
             unsafe { libc::close(master) };
             return Err(e);
         }
-        let slave_cstr = unsafe { CStr::from_ptr(slave_path) };
+        let slave_cstr = unsafe { CStr::from_ptr(slave_buf.as_ptr() as *const c_char) };
 
         let pid = unsafe { libc::fork() };
         if pid < 0 {
@@ -148,12 +155,26 @@ impl Pty {
             )
         };
         if n < 0 {
-            return Err(io::Error::last_os_error());
+            let e = io::Error::last_os_error();
+            // Linux PTY 语义：子进程退出（slave 全部关闭）后读 master 返回 EIO，
+            // 而不是 0 字节 EOF。在 read 这一层把它折叠为 Ok(0)（干净 EOF），
+            // pump/pump_into/C-ABI 三层因此统一"会话正常结束"语义，
+            // 上层用 poll_exit / exitStatus 区分退出码即可。
+            if e.raw_os_error() == Some(libc::EIO) {
+                return Ok(0);
+            }
+            return Err(e);
         }
         Ok(n as usize)
     }
 
+    /// 全量写入 `buf`。master 是 O_NONBLOCK（见 [`Pty::open`] 的 P1 注释），
+    /// 当 PTY 输入缓冲写满（子进程未及时消费，典型场景：粘贴大段文本、vim 流控）
+    /// 会返回 EAGAIN——这里用 poll(POLLOUT) 等待可写后重试，总超时 3s，
+    /// 超时后报错（防泵线程永久卡死），不再像旧实现那样把 EAGAIN 直接当错误丢弃。
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
+        const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + WRITE_TIMEOUT;
         let mut written = 0;
         while written < buf.len() {
             let n = unsafe {
@@ -165,10 +186,39 @@ impl Pty {
             };
             if n < 0 {
                 let e = io::Error::last_os_error();
-                if e.kind() == io::ErrorKind::Interrupted {
-                    continue;
+                match e.kind() {
+                    io::ErrorKind::Interrupted => continue,
+                    io::ErrorKind::WouldBlock => {
+                        // 输入缓冲已满：等待 POLLOUT（最多到 deadline），再重试写入
+                        if std::time::Instant::now() >= deadline {
+                            return Err(e);
+                        }
+                        let mut pfd = libc::pollfd {
+                            fd: self.master_fd,
+                            events: libc::POLLOUT,
+                            revents: 0,
+                        };
+                        let remain =
+                            deadline.saturating_duration_since(std::time::Instant::now());
+                        let rc = unsafe {
+                            libc::poll(
+                                &mut pfd as *mut libc::pollfd,
+                                1,
+                                remain.as_millis() as c_int,
+                            )
+                        };
+                        if rc < 0 {
+                            let pe = io::Error::last_os_error();
+                            if pe.kind() == io::ErrorKind::Interrupted {
+                                continue; // poll 被 signal 打断：回 write 重试
+                            }
+                            return Err(pe);
+                        }
+                        // rc == 0 超时：回 write 再探一次，撞 deadline 收敛退出
+                        continue;
+                    }
+                    _ => return Err(e),
                 }
-                return Err(e);
             }
             written += n as usize;
         }

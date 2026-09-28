@@ -384,6 +384,8 @@ unsafe extern "C" fn moxsh_pump_impl(
         // 新契约：-2 = 暂无数据（master 非阻塞 EAGAIN）。调用方应继续循环，
         // 不得当作 EOF/错误处理。
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => -2,
+        // 子进程退出后的 EIO 已在 Pty::read 层折叠为干净 EOF（Ok(0)），
+        // 这里只剩真实 IO 错误。
         Err(_) => -1,
     }
 }
@@ -470,6 +472,32 @@ unsafe extern "C" fn moxsh_close_impl(sess: *mut TerminalSession) {
     unsafe {
     if !sess.is_null() {
         drop(Box::from_raw(sess));
+    }
+}
+}
+
+/// 非阻塞轮询会话子进程的退出状态（WNOHANG 收割，绝不挂起调用方）。
+///
+/// 返回：`>=0` = 已退出（正常退出码，或信号退出的 `128+sig`）；
+/// `-1` = 仍在运行；`-2` = 空指针。幂等：收割后重复调用返回同一退出码。
+///
+/// # Safety
+/// `sess` 必须来自 [`moxsh_open_pty`] 且未被释放。
+#[no_mangle]
+pub unsafe extern "C" fn moxsh_session_exit_status(sess: *mut TerminalSession) -> c_int {
+    // P3 panic 屏障：C-ABI 入口禁止 unwind，异常折叠为 -99（MOXSH_ERR_PANIC）。
+    ffi_guard_ex(move || unsafe { moxsh_session_exit_status_impl(sess) }, MOXSH_ERR_PANIC)
+}
+
+unsafe extern "C" fn moxsh_session_exit_status_impl(sess: *mut TerminalSession) -> c_int {
+    // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
+    unsafe {
+    if sess.is_null() {
+        return -2;
+    }
+    match (*sess).poll_exit() {
+        Some(code) => code as c_int,
+        None => -1,
     }
 }
 }

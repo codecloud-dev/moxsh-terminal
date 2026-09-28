@@ -138,6 +138,15 @@ object ExecutionEngine {
      */
     fun pump(id: Long): Int = sessions[id]?.pump() ?: -1
 
+    /**
+     * 非阻塞查询会话子进程退出状态（WNOHANG 收割，绝不挂起）。
+     * @return `>=0` 已退出（信号退出为 128+sig）；`-1` 仍在运行或无此会话。
+     *
+     * 泵循环在 pump 返回 0（干净 EOF——含子进程退出后的 EIO 折叠）时自然停止，
+     * 随后可用本 API 取退出码驱动"会话已结束"的 UI 提示。
+     */
+    fun exitStatus(id: Long): Int = sessions[id]?.exitStatus() ?: -1
+
     /** 总行数（可见行 + 历史回滚行），供滚动视图定位。 */
     fun totalRows(id: Long): Int = sessions[id]?.totalRows ?: 0
 
