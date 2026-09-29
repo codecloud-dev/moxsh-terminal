@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Login screen (bilingual, aligned with the website) -->
+    <string name="mox_login_title">mox Account</string>
+    <string name="mox_login_subtitle_logged_out">Sign in with GitHub to sync settings and unlock plugins</string>
+    <string name="mox_login_button">Sign in with GitHub</string>
+    <string name="mox_login_logged_in">Signed in</string>
+    <string name="mox_login_logged_in_desc">Session and profile stored in on-device encrypted storage</string>
+    <string name="mox_login_logout">Sign out</string>
+    <string name="mox_login_logging_in">Signing in…</string>
+    <string name="mox_login_success">Signed in with GitHub</string>
+    <string name="mox_login_error_prefix">Sign-in failed: </string>
+    <string name="mox_login_manage_github">Manage authorization on GitHub</string>
+    <!-- Device Flow additions -->
+    <string name="mox_login_device_code_label">Your verification code (enter it in the browser)</string>
+    <string name="mox_login_device_open">Open in browser &amp; authorize</string>
+    <string name="mox_login_device_waiting">Waiting for you to authorize in the browser… (keep this screen open)</string>
+    <string name="mox_login_device_slow">Slowing down polling…</string>
+    <string name="mox_login_device_not_configured">GitHub client_id not configured: fill it in local.properties and rebuild</string>
+    <string name="mox_login_view_config">View setup guide</string>
+    <string name="mox_login_retry">Retry</string>
+</resources>

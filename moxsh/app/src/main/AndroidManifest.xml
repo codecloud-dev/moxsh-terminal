@@ -11,6 +11,8 @@
     <application
         android:name=".MoxshApplication"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="moxsh"
         android:supportsRtl="true"
         android:theme="@style/Theme.Moxsh.Glass">
@@ -40,7 +42,7 @@
                 android:value="terminal_session_keepalive" />
         </service>
 
-        <!-- GitHub 登录页：被深链 moxsh://auth.callback 拉起，承接后端回跳的会话 token -->
+        <!-- GitHub 登录页：被深链 moxsh://oauth.callback 拉起，承接 PKCE 回跳的授权码 -->
         <activity
             android:name=".auth.LoginActivity"
             android:exported="true"
@@ -51,7 +53,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="moxsh"
-                    android:host="auth.callback" />
+                    android:host="oauth.callback" />
             </intent-filter>
         </activity>
 

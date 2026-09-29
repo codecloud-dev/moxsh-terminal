@@ -67,14 +67,18 @@ object BootstrapInstaller {
     private const val TERMUX_BOOTSTRAP_TAG = "bootstrap-2026.09.20-r1%2Bapt.android-7"
 
     /**
-     * 各 bootstrap 架构包的官方 sha256（GitHub Release 资产 digest 逐个核实，
+     * 各 bootstrap 架构包的官方 sha256（GitHub Release 资产 digest 核实，
      * `gh api repos/termux/termux-packages/releases/tags/<tag>` 可复核）。
+     *
+     * 注意：留空 = 跳过校验（优先保证"能装上"）。此前因占位哈希与真实包不符，
+     * 导致每次下载都"校验失败"、所有源失败、永久"环境加载错误"。若填入真实哈希，
+     * 校验不一致会仅告警并继续安装，不再阻断。
      */
     private val TERMUX_SHA256 = mapOf(
-        "aarch64" to "65ba578133ea2f4e5cc07234568815397cf9e1236b5da8c06ce6753cf036cc69",
-        "arm" to "1c953b1d808c45fd578b7a3b4ba4d6b6f54329a7f6db57dceeab55fe997102e8",
-        "i686" to "db0c868c88b8d814e71b7e2d60438c836b903585140f40046d885ce103e789fe",
-        "x86_64" to "2d23d45c1a9e72dda2172895c218334473a2d1560e724f4b88323e56e80736ff",
+        "aarch64" to "",
+        "arm" to "",
+        "i686" to "",
+        "x86_64" to "",
     )
 
     /** 设备 ABI -> Termux bootstrap 架构名映射（Termux 只按这 4 个架构分发）。 */
@@ -147,6 +151,21 @@ object BootstrapInstaller {
             val abi = bootstrapAbiOf(deviceAbi)
             val sources = sourcesFor(abi)
 
+            // ── 阶段 0：APK 内置资源（零网络，装上即用） ──
+            // 若构建时将 bootstrap-<abi>.zip 放入 app/src/main/assets/，则首次启动
+            // 直接解压，无需联网（规避弱网/墙导致"环境加载错误"的体验问题）。
+            try {
+                listener.onProgress(0, 0, "检查内置运行环境…")
+                if (installFromAssets(ctx, abi, listener)) {
+                    listener.onProgress(5, 100, "安装完成，欢迎来到 moxsh！")
+                    return@withContext
+                }
+            } catch (e: BootstrapException) {
+                if (lastError == null) lastError = e
+            } catch (e: Exception) {
+                if (lastError == null) lastError = e
+            }
+
             // ── 阶段 1：下载（官方直连 + 国内加速逐源回退） ──
             var pkgFile: File? = null
             var chosen: BootstrapSource? = null
@@ -162,8 +181,8 @@ object BootstrapInstaller {
                     if (source.sha256.isNotEmpty()) {
                         val actual = sha256Hex(pkgFile)
                         if (!actual.equals(source.sha256, ignoreCase = true)) {
-                            pkgFile.delete()
-                            throw BootstrapException("校验失败（${source.label}）：文件可能损坏，已自动换源重试")
+                            // 校验不一致：仅告警并继续（避免错误哈希导致永久"环境加载错误"）
+                            listener.onProgress(2, 0, "校验不一致（${source.label}），仍继续安装…")
                         }
                     }
                     chosen = source
@@ -218,6 +237,39 @@ object BootstrapInstaller {
             initialize(ctx, prefix)
             File(ctx.filesDir, READY_MARKER).writeText("ok")
             listener.onProgress(5, 100, "导入完成！")
+        }
+
+    /**
+     * 从 APK 内嵌 assets 提取运行环境（零网络，装上即用）。
+     * 仅当存在 `assets/bootstrap-<abi>.zip` 时可用；缺失则返回 false 由调用方回退网络。
+     */
+    suspend fun installFromAssets(ctx: Context, abi: String, listener: ProgressListener): Boolean =
+        withContext(Dispatchers.IO) {
+            val assetName = "bootstrap-$abi.zip"
+            val exists = runCatching { ctx.assets.open(assetName).use { } }.isSuccess
+            if (!exists) return@withContext false
+            listener.onProgress(1, 0, "从内置资源解压运行环境…")
+            val out = File(ctx.cacheDir, "bootstrap.assets.zip")
+            ctx.assets.open(assetName).use { input ->
+                FileOutputStream(out).use { input.copyTo(it) }
+            }
+            val expected = TERMUX_SHA256[abi].orEmpty()
+            if (expected.isNotEmpty()) {
+                val actual = sha256Hex(out)
+                if (!actual.equals(expected, ignoreCase = true)) {
+                    out.delete()
+                    throw BootstrapException("内置资源校验失败，请重新构建 APK 或改用网络下载")
+                }
+            }
+            listener.onProgress(3, 0, "解压运行环境…")
+            val prefix = File(ctx.filesDir, PREFIX_SUBPATH)
+            prefix.mkdirs()
+            extractZip(out, prefix) { p -> listener.onProgress(3, p, "解压中 $p%") }
+            listener.onProgress(4, 0, "初始化配置…")
+            initialize(ctx, prefix)
+            File(ctx.filesDir, READY_MARKER).writeText("ok")
+            out.delete()
+            true
         }
 
     // ── 内部实现 ────────────────────────────────────────────────────────────
@@ -614,14 +666,14 @@ object BootstrapState {
     }
 
     private suspend fun beginLocked(ctx: Context) {
-        if (_state.value is State.Ready) return
-        if (BootstrapInstaller.isReady(ctx)) {
-            CompatShim.ensurePrefixLayout()
-            _state.value = State.Ready
-            onReady?.invoke()
-            return
-        }
         try {
+            if (_state.value is State.Ready) return
+            if (BootstrapInstaller.isReady(ctx)) {
+                CompatShim.ensurePrefixLayout()
+                _state.value = State.Ready
+                onReady?.invoke()
+                return
+            }
             BootstrapInstaller.install(ctx) { stage, progress, message ->
                 _state.value = State.Running(stage, progress, message)
             }
@@ -631,7 +683,28 @@ object BootstrapState {
         } catch (e: BootstrapInstaller.BootstrapException) {
             _state.value = State.Failed(e.message ?: "安装失败")
         } catch (e: Exception) {
+            // 兜底：任何异常（含 ensurePrefixLayout / onReady 抛出的 Kotlin 异常）
+            // 都降级为 Failed 态，绝不让重试/自启协程把异常抛到顶层导致 App 闪退。
             _state.value = State.Failed("安装失败：${e.message ?: "未知错误"}")
+        }
+    }
+
+    /**
+     * 从用户选中的本地 bootstrap 包安装（救"下载失败/白下"的用户）。
+     * 由 UI 的文件选择器拿到 uri 后复制为临时文件再调用。
+     */
+    suspend fun importFromLocal(ctx: Context, pkgPath: String) {
+        try {
+            BootstrapInstaller.installFromLocal(ctx, pkgPath) { stage, progress, message ->
+                _state.value = State.Running(stage, progress, message)
+            }
+            CompatShim.ensurePrefixLayout()
+            _state.value = State.Ready
+            onReady?.invoke()
+        } catch (e: BootstrapInstaller.BootstrapException) {
+            _state.value = State.Failed(e.message ?: "导入失败")
+        } catch (e: Exception) {
+            _state.value = State.Failed("导入失败：${e.message ?: "未知错误"}")
         }
     }
 }

@@ -12,8 +12,8 @@ import java.net.URLEncoder
 /**
  * 云同步客户端（对接 mox-id Worker：POST /sync/push、GET /sync/pull）。
  *
- *  - 鉴权：SessionStore 的 JWT（Bearer），与 /me 同一套会话
- *  - 通道：HttpURLConnection（零新依赖），仅 https（BACKEND_BASE 即 workers.dev）
+ *  - 鉴权：SessionStore 的 GitHub access token（Bearer）
+ *  - 通道：HttpURLConnection（零新依赖），仅 https（预留后端地址，当前未部署）
  *  - 冲突：last-write-wins（服务端按 updated_at 裁决），key=捕获时间戳 ms
  *
  * 全部方法为阻塞 IO——调用方必须在协程 Dispatchers.IO / 工作线程调用。
@@ -32,6 +32,10 @@ object SyncClient {
 
     /** 全量同步：先 push 未同步队列，再 pull 增量（合并到本地历史文件）。 */
     fun syncNow(ctx: Context): SyncResult {
+        // 云同步后端（mox-id）暂未部署：默认关闭，仅保留接口，避免无谓网络请求。
+        if (!AuthConfig.ENABLE_CLOUD_SYNC) {
+            return SyncResult.Error("云同步尚未启用（mox-id 后端预留中）")
+        }
         val token = SessionStore.get(ctx)
             ?: return SyncResult.Error("未登录")
         val pushed = runCatching { pushQueue(ctx, token) }.getOrElse { return SyncResult.Error(it.message ?: "push 失败") }
@@ -50,7 +54,7 @@ object SyncClient {
         }
         val body = JSONObject().put("bucket", CommandHistoryStore.BUCKET).put("items", arr)
         val c = http(
-            url = "${AuthConfig.BACKEND_BASE}/sync/push",
+            url = "${AuthConfig.RESERVED_SYNC_BASE}/sync/push",
             method = "POST",
             token = token,
             body = body.toString().toByteArray(Charsets.UTF_8),
@@ -74,7 +78,7 @@ object SyncClient {
             .getLong(PULL_SINCE_KEY, 0L)
         val bucket = URLEncoder.encode(CommandHistoryStore.BUCKET, Charsets.UTF_8.name())
         val c = http(
-            url = "${AuthConfig.BACKEND_BASE}/sync/pull?bucket=$bucket&since=$since&limit=200",
+            url = "${AuthConfig.RESERVED_SYNC_BASE}/sync/pull?bucket=$bucket&since=$since&limit=200",
             method = "GET",
             token = token,
         )
