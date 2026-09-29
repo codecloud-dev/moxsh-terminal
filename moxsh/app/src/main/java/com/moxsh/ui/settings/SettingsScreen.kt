@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.moxsh.auth.GitHubLogin
 import com.moxsh.auth.SessionStore
+import com.moxsh.auth.UserProfileStore
 import com.moxsh.cloud.SyncClient
 import com.moxsh.ui.component.GlassSurface
 import com.moxsh.ui.component.GlassTokens
@@ -288,12 +289,21 @@ fun SettingsScreen(
                     if (loggedIn) {
                         GlassIconButton("退出") {
                             SessionStore.clear(context)
+                            UserProfileStore.clear(context)
                             MoxshPrefs.setCloudSync(context, false)
                             loggedIn = false
                             cloudOn = false
                         }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "在 GitHub 撤销授权",
+                            color = GlassTokens.onGlassDim,
+                            modifier = Modifier.clickable {
+                                GitHubLogin.openUrl(context, GitHubLogin.revokeManagementUrl())
+                            },
+                        )
                     } else {
-                        GlassIconButton("登录") { GitHubLogin.start(context) }
+                        GlassIconButton("登录") { GitHubLogin.startLogin(context) }
                     }
                 }
 

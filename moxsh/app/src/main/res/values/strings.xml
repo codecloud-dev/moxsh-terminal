@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 登录页（中英双语，对齐官网） -->
+    <string name="mox_login_title">mox 账号</string>
+    <string name="mox_login_subtitle_logged_out">使用 GitHub 登录以同步配置、解锁插件</string>
+    <string name="mox_login_button">使用 GitHub 登录</string>
+    <string name="mox_login_logged_in">已登录</string>
+    <string name="mox_login_logged_in_desc">会话与资料保存在本机加密存储</string>
+    <string name="mox_login_logout">退出登录</string>
+    <string name="mox_login_logging_in">正在登录…</string>
+    <string name="mox_login_success">已使用 GitHub 登录</string>
+    <string name="mox_login_error_prefix">登录失败：</string>
+    <string name="mox_login_manage_github">在 GitHub 管理授权</string>
+    <!-- 设备流（Device Flow）新增 -->
+    <string name="mox_login_device_code_label">你的授权码（在浏览器中输入）</string>
+    <string name="mox_login_device_open">在浏览器打开并授权</string>
+    <string name="mox_login_device_waiting">正在等待你在浏览器中授权…（保持本页面打开）</string>
+    <string name="mox_login_device_slow">正在放慢轮询…</string>
+    <string name="mox_login_device_not_configured">未配置 GitHub client_id：请在 local.properties 填入后重新构建</string>
+    <string name="mox_login_view_config">查看配置方法</string>
+    <string name="mox_login_retry">重试</string>
+</resources>

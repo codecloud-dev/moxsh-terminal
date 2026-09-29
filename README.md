@@ -32,6 +32,7 @@
 - [核心特性](#核心特性)
 - [它是怎么工作的](#它是怎么工作的)
 - [快速上手](#快速上手)
+- [GitHub 登录](#github-登录)
 - [插件体系](#插件体系)
 - [和 Termux 的关系](#和-termux-的关系)
 - [文档](#文档)
@@ -118,6 +119,31 @@ echo $PREFIX                  # 查看当前 prefix 路径
 ### 获取 APK
 
 正式签名包在 [Releases](../../releases) 页面；CI 每次成功构建也会产出最新 APK。安装时如系统提示「未知来源」，允许即可。
+
+---
+
+## GitHub 登录
+
+moxsh 支持用 **GitHub 账号一键登录**（同步 shell 配置/历史、解锁插件商店）。登录走 **设备流（Device Flow）**：app 只需一个公开安全的 `client_id`，**不含任何 client_secret / private key**，无后端依赖。
+
+> 为什么不是网页回调流：OAuth App 的网页流即使带 PKCE 也强制要求 `client_secret`，而密钥绝不能进 APK。设备流是 GitHub 给原生/CLI 应用的无密钥标准方案（gh CLI 同款）。
+
+### 配置步骤（约 30 秒，只需做一次）
+
+1. 打开 GitHub → **Settings → Developer settings**
+   - 选 **OAuth Apps → New OAuth App**，**或**
+   - 选 **GitHub Apps → New GitHub App**
+2. 应用名随意（如 `moxsh-login`），**Homepage / Callback URL 随便填**（设备流不回跳）。
+3. 建好后复制页面上的 **Client ID**。
+4. 在仓库根目录把 `local.properties.sample` 复制为 `local.properties`，把 Client ID 粘进去：
+
+   ```properties
+   github_client_id=你的_client_id
+   ```
+
+5. 重新构建（`local.properties` 已被 `.gitignore` 忽略，**不会**进公开仓库）。
+
+之后在 App 内「设置 → 账号 → 登录」会显示一个授权码，点按钮在浏览器输入并授权即可。
 
 ---
 

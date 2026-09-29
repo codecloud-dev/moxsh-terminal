@@ -18,6 +18,9 @@ release.jks
 *.jks
 *.keystore
 
+# ── 构建时拉取的 bootstrap 运行环境包（40MB/架构，由 Gradle fetchBootstrap 生成，不入库）──
+**/assets/bootstrap-*.zip
+
 # ── Rust (keep Cargo.lock for reproducible CI builds) ──────────
 **/target/
 

@@ -39,6 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -117,6 +119,8 @@ fun MoxshRoot() {
         var showManager by remember { mutableStateOf(false) }
         // 插件面板入口（D5 体系②）：整屏渲染已注册原生玻璃插件卡片。
         var showPlugins by remember { mutableStateOf(false) }
+        // 重试中标记：避免连点 + 让按钮显示"重试中"，重试结束自动复位
+        var retrying by remember { mutableStateOf(false) }
 
         // ---- 多会话标签 ----
         var tabs by remember { mutableStateOf(listOf<TermTab>()) }
@@ -159,9 +163,27 @@ fun MoxshRoot() {
         // 未就绪期间终端区显示玻璃进度卡，Failed 态提供重试按钮）
         val bootState by BootstrapState.state.collectAsState()
         val retryScope = rememberCoroutineScope()
+        // 本地包导入：用户用文件选择器选一个 bootstrap zip（曾下载失败/白下的包可复用）
+        val importLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            retryScope.launch {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { ins ->
+                        val tmp = File(context.cacheDir, "bootstrap.import.zip")
+                        FileOutputStream(tmp).use { ins.copyTo(it) }
+                        BootstrapState.importFromLocal(context, tmp.absolutePath)
+                    }
+                }
+            }
+        }
         LaunchedEffect(Unit) {
             BootstrapState.state.collect { s ->
-                if (s is BootstrapState.State.Ready && tabs.isEmpty()) newSession()
+                if (s is BootstrapState.State.Ready && tabs.isEmpty()) {
+                    // 会话创建可能触及原生层；包住 Kotlin 异常，避免协程顶层崩溃闪退
+                    runCatching { newSession() }
+                }
             }
         }
 
@@ -327,11 +349,20 @@ fun MoxshRoot() {
                                     Spacer(Modifier.height(8.dp))
                                     Text(s.message, color = GlassTokens.onGlassDim)
                                     Spacer(Modifier.height(14.dp))
-                                    Button(onClick = {
-                                        retryScope.launch {
-                                            BootstrapState.begin(context)
-                                        }
-                                    }) { Text("重试") }
+                                    Button(
+                                        enabled = !retrying,
+                                        onClick = {
+                                            retrying = true
+                                            retryScope.launch {
+                                                try { BootstrapState.begin(context) }
+                                                finally { retrying = false }
+                                            }
+                                        },
+                                    ) { Text(if (retrying) "重试中…" else "重试") }
+                                    Spacer(Modifier.height(8.dp))
+                                    Button(onClick = { importLauncher.launch(arrayOf("application/zip")) }) {
+                                        Text("从本地包导入")
+                                    }
                                 }
                                 else -> Text(
                                     "没有活动会话，点击右下角 + 新建",

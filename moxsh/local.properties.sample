@@ -1,0 +1,12 @@
+# moxsh 本地配置模板
+# 用法：复制本文件为 local.properties，填入真值后保存。
+# local.properties 已被仓库根 .gitignore 忽略，【不会】提交到公开仓库。
+#
+# GitHub 登录 client_id（公开安全，设备流 Device Flow 只需 client_id，
+# 不需要任何 client_secret / private key，APK 与仓库里都不会出现秘密）：
+#   获取（二选一，都只需复制 client_id）：
+#     · OAuth App：GitHub → Settings → Developer settings → OAuth Apps → New OAuth App
+#     · GitHub App：GitHub → Settings → Developer settings → GitHub Apps → New GitHub App
+#   应用 Homepage / Callback 随意填即可（设备流不回跳），复制页面上的 client_id 粘到下面。
+#   注意：不要把任何 secret 放进仓库；client_id 本就可公开。
+github_client_id=REPLACE_WITH_YOUR_GITHUB_OAUTH_CLIENT_ID
