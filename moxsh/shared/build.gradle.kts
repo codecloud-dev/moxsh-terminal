@@ -20,7 +20,7 @@ android {
 
 dependencies {
     implementation(project(":terminal-core"))
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-ktx:1.19.1")
     // 执行引擎的泵循环（startPump）使用 kotlinx.coroutines 在 Dispatchers.IO 上调度。
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
