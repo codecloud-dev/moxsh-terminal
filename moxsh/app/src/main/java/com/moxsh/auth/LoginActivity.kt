@@ -28,6 +28,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+// R 类生成在 applicationId 包（com.moxsh）下；本文件 package 是 com.moxsh.auth，
+// 不同包不会自动解析到父包的 R，必须显式导入。
+import com.moxsh.R
 import com.moxsh.ui.component.GlassSurface
 import com.moxsh.ui.component.GlassTokens
 import kotlinx.coroutines.Dispatchers
