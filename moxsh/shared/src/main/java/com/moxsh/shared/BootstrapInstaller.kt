@@ -151,6 +151,11 @@ object BootstrapInstaller {
             val abi = bootstrapAbiOf(deviceAbi)
             val sources = sourcesFor(abi)
 
+            // 汇总最后一次失败原因：阶段 0（内置包）失败不致命，会继续走网络下载，
+            // 两个阶段的错误都记在这里，全链路失败时用于给出准确提示。
+            // 注意：声明必须早于下面阶段 0 的 catch——Kotlin 要求先声明后使用。
+            var lastError: Exception? = null
+
             // ── 阶段 0：APK 内置资源（零网络，装上即用） ──
             // 若构建时将 bootstrap-<abi>.zip 放入 app/src/main/assets/，则首次启动
             // 直接解压，无需联网（规避弱网/墙导致"环境加载错误"的体验问题）。
@@ -169,7 +174,6 @@ object BootstrapInstaller {
             // ── 阶段 1：下载（官方直连 + 国内加速逐源回退） ──
             var pkgFile: File? = null
             var chosen: BootstrapSource? = null
-            var lastError: Exception? = null
             for ((index, source) in sources.withIndex()) {
                 try {
                     listener.onProgress(1, 0, "正在下载运行环境（${source.label}）…")
