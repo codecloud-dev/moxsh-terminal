@@ -231,7 +231,7 @@ fun AdaptiveContainer(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = maxWidthDp)
-                .padding(horizontal = if (isWide) MoxshTokens.XL2 else MoxshTokens.XL),
+                .padding(horizontal = if (isWide) MoxshTokens.Spacing.XL2 else MoxshTokens.Spacing.XL),
         ) {
             content()
         }

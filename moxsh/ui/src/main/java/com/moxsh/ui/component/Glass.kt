@@ -2,7 +2,9 @@ package com.moxsh.ui.component
 
 import android.os.Build
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -110,11 +112,9 @@ fun Modifier.glassPress(
 
 /** 玻璃高光层：左上斜向的柔光渐变，叠加在染色之上、内容之下，模拟玻璃反光。 */
 private fun glassSheenBrush(): Brush = Brush.linearGradient(
-    listOf(
-        0f to Color.White.copy(alpha = 0.13f),
-        0.35f to Color.White.copy(alpha = 0.04f),
-        0.6f to Color.Transparent,
-    ),
+    0f to Color.White.copy(alpha = 0.13f),
+    0.35f to Color.White.copy(alpha = 0.04f),
+    0.6f to Color.Transparent,
     start = Offset.Zero,
     end = Offset.Infinite,
 )
