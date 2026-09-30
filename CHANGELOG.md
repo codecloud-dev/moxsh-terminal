@@ -19,6 +19,25 @@
 - 本地小模型接入（llama.cpp 端侧）
 - 插件售卖支付流程（manifest 中 author/price/purchased 字段已预留）
 
+## [0.6.1] - 2026-09-30
+
+### 修复
+
+打通 release 全链路：main 分支 `Build moxsh APK` 由连续 5 次失败转为成功。
+
+- **Gradle Kotlin DSL 脚本编译失败**：`app/build.gradle.kts` 里裸写 `java.util.Properties` / `java.net.URL`，部分 Gradle 版本的脚本编译环境无法解析根标识符 `java`，报 `Unresolved reference: util / net`；改为显式 `import`
+- **自适应图标资源非法**：`ic_launcher_background.xml` 用了 VectorDrawable 不支持的 `<defs>` / `linearGradient android:id` 引用与 `<rect android:rx>`，且 `android:width/height` 缺 dp 单位；重写为合规写法（`<path>` + `<aapt:attr>` + `<gradient>`）
+- **Compose 1.6.8 API 不匹配**：`Brush.linearGradient` 没有接收 `List<Pair>` 的重载，改传 vararg `Pair`；补 `Spring` / `animateFloatAsState` 导入；`MoxshTokens.XL2/XL` 修正为 `MoxshTokens.Spacing.XL2/XL`
+- **Kotlin 变量先声明后使用**：`BootstrapInstaller.kt` 中 `lastError` 的声明晚于阶段 0 的 `catch`，导致 4 处 `Unresolved reference`
+- **缺失导入**：补 `MainActivity.kt` 的 `java.io.File` / `java.io.FileOutputStream`，以及 `LoginActivity.kt` 的 `com.moxsh.R`（R 生成在 `applicationId` 包，子包文件不会自动解析）
+- **R8 中止打包**：`androidx.security:security-crypto` 传递依赖 Tink，引用 `com.google.errorprone.annotations.*` 与 `javax.annotation.*` 两组仅编译期可见的注解，release classpath 中没有它们，R8 视为硬错误；按 R8 生成的 `missing_rules.txt` 建议以 `-dontwarn` 精确抑制
+
+### 变更
+
+- `.gitignore` 补充 `node_modules/` 与本地仓库副本目录，避免 `git add -A` 将其以 gitlink(160000) 形式误纳入索引
+
+[0.6.1]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.0
+
 ## [0.6.0] - 2026-09-28
 
 ### 新增
