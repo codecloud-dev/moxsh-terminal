@@ -3,9 +3,17 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Gradle Kotlin DSL 脚本里直接写 `java.util.Properties` / `java.net.URL` 这类限定名，
+// 在部分 Gradle 版本的脚本编译环境下会因根标识符 `java` 解析失败而报
+// "Unresolved reference: util / net"（连带类型推断失败导致 `load` 也 unresolved）。
+// 改用显式 import：由编译器从 classpath 直接解析类型，规避该问题。
+import java.util.Properties
+import java.net.HttpURLConnection
+import java.net.URL
+
 // 读取 local.properties（已被 .gitignore 忽略，不进 git）注入 GitHub client_id
 // 设备流（Device Flow）只需 client_id，无需任何 client_secret / private key
-val localProps = java.util.Properties().apply {
+val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
@@ -95,7 +103,7 @@ tasks.register("fetchBootstrap") {
             }
             val url = "$bootstrapBase$abi.zip"
             runCatching {
-                val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                val conn = URL(url).openConnection() as HttpURLConnection
                 conn.connectTimeout = 30_000
                 conn.readTimeout = 180_000
                 conn.instanceFollowRedirects = true
