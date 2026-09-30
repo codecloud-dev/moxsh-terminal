@@ -30,6 +30,19 @@ termux-src/
 # ── Agent / IDE internals ──────────────────────────────────────
 .codebuddy/
 
+# ── Node deps（本地脚本用，不入库）────────────────────────────
+node_modules/
+
+# ── 本地参考/副本目录（非本仓库源码，禁止 git add -A 误纳为 gitlink）──
+# 这些是子仓库 clone 或设计稿导出，git rm --cached 后仅保留本地文件
+podroid-ref/
+podroid-ui-src/
+termux-src/
+moxsh-plugins/
+moxsh-suite/
+moxsh-terminal/
+research/
+
 # ── OS / editor noise ──────────────────────────────────────────
 Thumbs.db
 *~
