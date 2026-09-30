@@ -1,0 +1,78 @@
+name: Upload APK to R2
+
+# 把最新 Release 里的 app-release.apk 上传到 Cloudflare R2（桶 moxsh），
+# 并启用 r2.dev 公共访问，作为 APK / 插件包的分发 CDN。
+# 触发：Release 发布后自动；也可手动 workflow_dispatch（默认取 v0.6.0）。
+# 鉴权：仓库 Secrets CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID（与 Pages 同源）。
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag（APK 来源）'
+        required: false
+        default: 'v0.6.0'
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    env:
+      BUCKET: moxsh
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download APK from Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          echo "下载 Release $TAG 的 app-release.apk"
+          gh release download "$TAG" \
+            --repo codecloud-dev/moxsh-terminal \
+            --pattern "app-release.apk" --dir ./dist --clobber
+          ls -la ./dist
+
+      - name: Upload to R2 + enable public
+        id: up
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm i -g wrangler@3 2>&1 | tail -1 | tee /tmp/r2.log
+          echo "### ensure bucket $BUCKET" | tee -a /tmp/r2.log
+          npx wrangler r2 bucket create "$BUCKET" 2>&1 | tee -a /tmp/r2.log || true
+          echo "### enable public (r2.dev)" | tee -a /tmp/r2.log
+          # 启用桶的公共访问，得到 https://$BUCKET.<subdomain>.r2.dev/<key>
+          curl -sS -X PATCH \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$BUCKET" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"public":true}' 2>&1 | tee -a /tmp/r2.log || true
+          echo "### upload apk -> $BUCKET/apk/app-release.apk" | tee -a /tmp/r2.log
+          set +e
+          npx wrangler r2 object put "$BUCKET/apk/app-release.apk" \
+            --file=./dist/app-release.apk --remote 2>&1 | tee -a /tmp/r2.log
+          rc=${PIPESTATUS[0]}
+          echo "R2_RC=$rc" | tee -a /tmp/r2.log
+          exit $rc
+
+      - name: 诊断失败（建 issue 暴露 r2 日志）
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SUMMARY=$(tail -c 20000 /tmp/r2.log 2>/dev/null || echo "(无日志)")
+          gh issue create \
+            --title "R2 上传失败 $(date -u +%FT%TZ)" \
+            --body "$SUMMARY" 2>&1 | head -2 || true
