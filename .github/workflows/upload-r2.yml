@@ -39,7 +39,7 @@ jobs:
           echo "下载 Release $TAG 的 app-release.apk"
           gh release download "$TAG" \
             --repo codecloud-dev/moxsh-terminal \
-            --pattern "app-release.apk" --dir ./dist --clobber
+            --pattern "app-release.apk" --dir ./dist
           ls -la ./dist
 
       - name: Upload to R2 + enable public
@@ -62,7 +62,8 @@ jobs:
           echo "### upload apk -> $BUCKET/apk/app-release.apk" | tee -a /tmp/r2.log
           set +e
           npx wrangler r2 object put "$BUCKET/apk/app-release.apk" \
-            --file=./dist/app-release.apk --remote 2>&1 | tee -a /tmp/r2.log
+            --file=./dist/app-release.apk --remote \
+            --content-type application/vnd.android-package-archive 2>&1 | tee -a /tmp/r2.log
           rc=${PIPESTATUS[0]}
           echo "R2_RC=$rc" | tee -a /tmp/r2.log
           exit $rc
@@ -72,7 +73,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SUMMARY=$(tail -c 20000 /tmp/r2.log 2>/dev/null || echo "(无日志)")
-          gh issue create \
-            --title "R2 上传失败 $(date -u +%FT%TZ)" \
-            --body "$SUMMARY" 2>&1 | head -2 || true
+          # 去除 wrangler 的 ANSI 颜色码，否则 gh issue create 会因 body 含转义序列失败
+          SUMMARY=$(tail -c 20000 /tmp/r2.log 2>/dev/null | sed -E 's/\x1b\[[0-9;]*[a-zA-Z]//g' | sed -E 's/\x1b[()][AB0]//g' || echo "(无日志)")
+          EXISTING=$(gh issue list --repo codecloud-dev/moxsh-terminal --search "R2 上传诊断" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$SUMMARY" 2>&1 | head -1
+          else
+            gh issue create --repo codecloud-dev/moxsh-terminal \
+              --title "R2 上传诊断" --body "$SUMMARY" 2>&1 | head -1
+          fi
