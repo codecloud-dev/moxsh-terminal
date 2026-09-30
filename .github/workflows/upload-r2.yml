@@ -61,8 +61,9 @@ jobs:
             --data '{"public":true}' 2>&1 | tee -a /tmp/r2.log || true
           echo "### upload apk -> $BUCKET/apk/app-release.apk" | tee -a /tmp/r2.log
           set +e
+          # wrangler 3.x 的 r2 object put 已默认走真实 R2，不再需要（也不支持）--remote
           npx wrangler r2 object put "$BUCKET/apk/app-release.apk" \
-            --file=./dist/app-release.apk --remote \
+            --file=./dist/app-release.apk \
             --content-type application/vnd.android-package-archive 2>&1 | tee -a /tmp/r2.log
           rc=${PIPESTATUS[0]}
           echo "R2_RC=$rc" | tee -a /tmp/r2.log
