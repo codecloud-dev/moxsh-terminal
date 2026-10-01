@@ -50,15 +50,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm i -g wrangler@3 2>&1 | tail -1 | tee /tmp/r2.log
+          echo "### 权限探针：列出 R2 桶（若 403 => API token 缺 R2 权限，需去 CF Dashboard 重签 token）" | tee -a /tmp/r2.log
+          curl -sS -o /tmp/probe.json -w 'LIST_BUCKETS_HTTP=%{http_code}\n' \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | tee -a /tmp/r2.log
+          head -c 600 /tmp/probe.json | tee -a /tmp/r2.log; echo | tee -a /tmp/r2.log
           echo "### ensure bucket $BUCKET" | tee -a /tmp/r2.log
           npx wrangler r2 bucket create "$BUCKET" 2>&1 | tee -a /tmp/r2.log || true
-          echo "### enable public (r2.dev)" | tee -a /tmp/r2.log
-          # 启用桶的公共访问，得到 https://$BUCKET.<subdomain>.r2.dev/<key>
-          curl -sS -X PATCH \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$BUCKET" \
+          echo "### enable public (r2.dev)：POST domains/managed" | tee -a /tmp/r2.log
+          # 官方端点：managed domain 开关（PATCH /r2/buckets 的 {"public":true} 不是有效 REST 格式）
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$BUCKET/domains/managed" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json" \
-            --data '{"public":true}' 2>&1 | tee -a /tmp/r2.log || true
+            --data '{"enabled":true}' 2>&1 | tee -a /tmp/r2.log || true
           echo "### upload apk -> $BUCKET/apk/app-release.apk" | tee -a /tmp/r2.log
           set +e
           # wrangler 3.x 的 r2 object put 已默认走真实 R2，不再需要（也不支持）--remote
@@ -70,16 +75,21 @@ jobs:
           exit $rc
 
       - name: 诊断失败（建 issue 暴露 r2 日志）
-        if: failure()
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 去除 wrangler 的 ANSI 颜色码，否则 gh issue create 会因 body 含转义序列失败
+          # 去除 wrangler 的 ANSI 颜色码；无论成败都留档（教训：只在 failure 时发会因 search 匹配不到而丢证据）
           SUMMARY=$(tail -c 20000 /tmp/r2.log 2>/dev/null | sed -E 's/\x1b\[[0-9;]*[a-zA-Z]//g' | sed -E 's/\x1b[()][AB0]//g' || echo "(无日志)")
-          EXISTING=$(gh issue list --repo codecloud-dev/moxsh-terminal --search "R2 上传诊断" --json number --jq '.[0].number' 2>/dev/null || true)
+          STATUS=$( [ "${{ job.status }}" = "success" ] && echo "成功" || echo "失败" )
+          EXISTING=$(gh issue list --repo codecloud-dev/moxsh-terminal --state all --search "R2 上传诊断 in:title" --limit 1 --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body "$SUMMARY" 2>&1 | head -1
+            gh issue comment "$EXISTING" --body "## R2 上传$STATUS（$(date -u +%FT%TZ)）
+
+\`\`\`
+$SUMMARY
+\`\`\`" 2>&1 | head -1 || echo "(评论失败，日志已落 step 日志)"
           else
             gh issue create --repo codecloud-dev/moxsh-terminal \
-              --title "R2 上传诊断" --body "$SUMMARY" 2>&1 | head -1
+              --title "R2 上传诊断" --body "$SUMMARY" 2>&1 | head -1 || true
           fi
