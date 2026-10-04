@@ -39,4 +39,18 @@
     <string name="mox_login_with_email_action">邮箱注册 / 绑定</string>
     <string name="mox_email_action_title">邮箱注册</string>
     <string name="mox_email_action_desc">需先登录 GitHub；邮箱仅用于接收验证码与找回账号</string>
+
+    <!-- 路径 A：用 GitHub 已验证邮箱一键绑定（默认，推荐） -->
+    <string name="mox_email_fast_title">用 GitHub 已验证邮箱</string>
+    <string name="mox_email_fast_desc">推荐：直接采用你 GitHub 账号已验证的邮箱，无需收验证码，秒速完成绑定</string>
+    <string name="mox_email_fast_bind">一键绑定 GitHub 邮箱</string>
+    <string name="mox_email_fast_loading">读取中…</string>
+    <string name="mox_email_fast_none">你的 GitHub 账号还没有已验证邮箱，请先到 GitHub 设置中添加并验证</string>
+    <string name="mox_email_fast_add">打开 GitHub 邮箱设置</string>
+    <string name="mox_email_gh_badge">GitHub 已验证</string>
+    <string name="mox_email_code_badge">验证码验证</string>
+    <string name="mox_email_alt_title">用其他邮箱（需收验证码）</string>
+    <string name="mox_email_alt_desc">若你想绑定一个与 GitHub 账号不同的邮箱，才需要走此路径：后端发验证码，需先部署 mox-id 服务</string>
+    <string name="mox_email_gh_settings">GitHub 邮箱设置</string>
+    <string name="mox_email_pick">使用此邮箱</string>
 </resources>
