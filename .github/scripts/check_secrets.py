@@ -15,6 +15,7 @@ EXCLUDE_PATHS = (
     "/.git/",
     "/build/",
     "/.gradle/",
+    "/node_modules/",   # 依赖目录：含大量 crypto/password 关键字，必然误报
     "local.properties",
     ".sample",
     "/.github/scripts/",   # 脚本自身含模式字符串，避免自匹配

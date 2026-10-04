@@ -1,0 +1,21 @@
+{
+  "name": "mox-id-email",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-05",
+  // 说明：本 Worker 不发 SMTP（CF 封锁 25 端口），改用 Resend HTTPS API，
+  // 因此无需 nodejs_compat / TCP sockets。
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mox-id",
+      "database_id": "ecbd980b-f017-464f-80ec-465b124653eb",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "MAIL_FROM": "mox@REPLACE_WITH_YOUR_DOMAIN"
+  }
+}
