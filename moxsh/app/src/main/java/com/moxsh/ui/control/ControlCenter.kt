@@ -108,10 +108,10 @@ fun ControlCenter(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    CcTile("无线", wireless) { wireless = it }
-                    CcTile("AirDrop", airdrop) { airdrop = it }
-                    CcTile("热点", hotspot) { hotspot = it }
-                    CcTile("蓝牙", bt) { bt = it }
+                    CcTile("无线", wireless, Modifier.weight(1f)) { wireless = it }
+                    CcTile("AirDrop", airdrop, Modifier.weight(1f)) { airdrop = it }
+                    CcTile("热点", hotspot, Modifier.weight(1f)) { hotspot = it }
+                    CcTile("蓝牙", bt, Modifier.weight(1f)) { bt = it }
                 }
                 Spacer(Modifier.height(12.dp))
                 GlassSurface(Modifier.fillMaxWidth()) {
@@ -121,10 +121,10 @@ fun ControlCenter(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(9.dp),
                     ) {
-                        WBtn("清屏")
-                        WBtn("速连")
-                        WBtn("帮助")
-                        WBtn("截屏")
+                        WBtn("清屏", Modifier.weight(1f))
+                        WBtn("速连", Modifier.weight(1f))
+                        WBtn("帮助", Modifier.weight(1f))
+                        WBtn("截屏", Modifier.weight(1f))
                     }
                 }
             }
@@ -133,10 +133,9 @@ fun ControlCenter(
 }
 
 @Composable
-private fun CcTile(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
+private fun CcTile(label: String, on: Boolean, modifier: Modifier = Modifier, onToggle: (Boolean) -> Unit) {
     Column(
-        Modifier
-            .weight(1f)
+        modifier
             .clip(RoundedCornerShape(16.dp))
             .background(if (on) Color.White.copy(alpha = 0.20f) else GlassTokens.surfaceTint)
             .border(1.dp, GlassTokens.stroke, RoundedCornerShape(16.dp))
@@ -149,10 +148,9 @@ private fun CcTile(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun WBtn(label: String) {
+private fun WBtn(label: String, modifier: Modifier = Modifier) {
     Box(
-        Modifier
-            .weight(1f)
+        modifier
             .clip(RoundedCornerShape(13.dp))
             .background(GlassTokens.surfaceTint)
             .border(1.dp, GlassTokens.stroke, RoundedCornerShape(13.dp))

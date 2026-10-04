@@ -26,11 +26,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
@@ -341,11 +343,12 @@ private fun TerminalPage(
     onImport: () -> Unit,
 ) {
     var retrying by remember { mutableStateOf(false) }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(bottom = 84.dp),
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(bottom = 84.dp),
+        ) {
         // ---- 顶栏 ----
         Row(
             Modifier
@@ -437,14 +440,14 @@ private fun TerminalPage(
             onToggleAlt = { altActive = !altActive },
             onKey = { seq -> activeSession?.let { sendToSession(it.id, seq) } },
         )
+        }
+        // ---- 新建会话（Box 直接子节点，align 在 BoxScope 内生效）----
+        GlassFAB(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 96.dp),
+        ) { onNewSession() }
     }
-
-    // ---- 新建会话 ----
-    GlassFAB(
-        Modifier
-            .align(Alignment.BottomEnd)
-            .padding(end = 16.dp, bottom = 96.dp),
-    ) { onNewSession() }
 }
 
 /**
