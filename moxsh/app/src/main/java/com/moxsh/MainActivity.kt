@@ -5,26 +5,12 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import java.io.File
-import java.io.FileOutputStream
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
@@ -32,7 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.key
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -40,25 +26,36 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.moxsh.auth.LoginActivity
 import com.moxsh.plugin.distro.DistroManagerScreen
 import com.moxsh.shared.BootstrapState
 import com.moxsh.shared.ExecutionEngine
+import com.moxsh.ui.ai.AiPanel
 import com.moxsh.ui.component.GlassBackdrop
 import com.moxsh.ui.component.GlassBottomBar
 import com.moxsh.ui.component.GlassFAB
 import com.moxsh.ui.component.GlassSurface
 import com.moxsh.ui.component.GlassTokens
-import com.moxsh.ui.component.GlassTopBar
+import com.moxsh.ui.control.ControlCenter
+import com.moxsh.ui.containers.CategoryHub
+import com.moxsh.ui.containers.PackageManagerScreen
+import com.moxsh.ui.containers.ResourceMonitorScreen
+import com.moxsh.ui.nav.MoxshBottomNav
+import com.moxsh.ui.nav.MoxshPage
+import com.moxsh.ui.onboarding.OnboardingWizard
+import com.moxsh.ui.session.MoxSession
+import com.moxsh.ui.session.SessionDrawer
+import com.moxsh.ui.session.SessionEnv
 import com.moxsh.ui.settings.GlassIconButton
 import com.moxsh.ui.settings.MoxshPrefs
 import com.moxsh.ui.settings.SettingsScreen
@@ -66,24 +63,22 @@ import com.moxsh.ui.terminal.TerminalScreen
 import com.moxsh.ui.terminal.sendToSession
 import com.moxsh.ui.theme.MoxshGlassTheme
 import kotlinx.coroutines.launch
-
-/** 单个终端标签页：id 为 ExecutionEngine 会话句柄，title 仅用于显示。 */
-private data class TermTab(val id: Long, val title: String)
+import java.io.File
 
 /**
- * 主界面根：全应用液态玻璃外壳 + 真实终端。
+ * 主界面根：全应用液态玻璃外壳 + 真实终端 + 三页导航 + 会话抽屉 + 控制中心 + AI 面板。
  *
- * 结构：
+ * 结构（与官网在线体验原型 1:1 对齐）：
  * ```
  * Box {
- *   GlassBackdrop(...)                 // 玻璃背景层（D8：按性能/设置决定是否实时模糊）
- *   Column {
- *     GlassTopBar(标题, perfMode 切换)
- *     会话标签栏（GlassSurface 卡片，可横向滚动）+ 设置入口
- *     TerminalScreen(weight 1)         // 真实终端渲染/输入
- *     GlassBottomBar(onKey = ...)      // ExtraKeys，真发 VT 序列
+ *   GlassBackdrop(...)                       // 玻璃背景层（按性能/设置决定是否实时模糊）
+ *   when(page) {
+ *     TERMINAL -> 终端页（顶栏☰抽屉 / 终端 / ExtraKeys / ＋）
+ *     CATALOG  -> 分类页（小白专区四件套 + 更多分类 -> 发行版/包管理/资源监控/向导）
+ *     SETTINGS -> 设置页
  *   }
- *   GlassFAB(新建会话)
+ *   会话抽屉（☰）/ 控制中心（V·音量键）/ AI 面板（U）/ 新手引导  —— 覆盖层
+ *   MoxshBottomNav(终端 / 分类 / 设置)        // 设置带 AI 角标
  * }
  * ```
  *
@@ -100,72 +95,84 @@ fun MoxshRoot() {
     var fontSizeSp by remember { mutableFloatStateOf(MoxshPrefs.fontSize(context)) }
     var mirror by remember { mutableStateOf(MoxshPrefs.mirror(context)) }
 
-    // perfMode=true 即性能模式（关实时模糊）。默认按 D8 设备性能自动：
-    // API31+ 支持实时模糊则开（perfMode=false），低版本静态回退；用户在设置里选择后落盘覆盖。
     var perfMode by remember {
         val autoBlur = Build.VERSION.SDK_INT >= 31
         val userChoice = MoxshPrefs.realtimeBlur(context)
         mutableStateOf(userChoice?.let { !it } ?: !autoBlur)
     }
+    var darkTheme by remember { mutableStateOf(true) }
 
-    // 状态变化异步写盘（apply()）
     LaunchedEffect(fontSizeSp) { MoxshPrefs.setFontSize(context, fontSizeSp) }
     LaunchedEffect(accent) { MoxshPrefs.setAccent(context, accent) }
     LaunchedEffect(perfMode) { MoxshPrefs.setRealtimeBlur(context, !perfMode) }
     LaunchedEffect(mirror) { MoxshPrefs.setMirror(context, mirror) }
 
-    MoxshGlassTheme(accent = Color(accent)) {
-        var showSettings by remember { mutableStateOf(false) }
-        // 管理器入口（D13）：控制是否整屏切到发行版管理器。
-        // 简单状态切换即可；页面多了可换 Navigation-Compose（导航图见 architecture.md §6）。
-        var showManager by remember { mutableStateOf(false) }
-        // 插件面板入口（D5 体系②）：整屏渲染已注册原生玻璃插件卡片。
-        var showPlugins by remember { mutableStateOf(false) }
-        // 重试中标记：避免连点 + 让按钮显示"重试中"，重试结束自动复位
-        var retrying by remember { mutableStateOf(false) }
+    MoxshGlassTheme(accent = Color(accent), darkTheme = darkTheme) {
+        // ---- 导航与覆盖层状态 ----
+        var page by remember { mutableStateOf(MoxshPage.TERMINAL) }
+        var showDrawer by remember { mutableStateOf(false) }
+        var showControl by remember { mutableStateOf(false) }
+        var showAi by remember { mutableStateOf(false) }
+        var showWizard by remember { mutableStateOf(false) }
+        var aiBadge by remember { mutableStateOf(true) }
+        // 分类页子导航栈：hub | distro | pkgs | monitor
+        var catalogTop by remember { mutableStateOf("hub") }
+        // 插件面板覆盖层开关（终端页顶栏 ✦ 打开，未归入三页导航）
+        var showPluginsTemp by remember { mutableStateOf(false) }
 
-        // ---- 多会话标签 ----
-        var tabs by remember { mutableStateOf(listOf<TermTab>()) }
+        // ---- 多会话（富模型：名称 / 环境 / cwd / 退出码） ----
+        var sessions by remember { mutableStateOf(listOf<MoxSession>()) }
         var activeId by remember { mutableLongStateOf(-1L) }
-        // 泵重绘信号：泵循环每读到 PTY 输出即自增，驱动 TerminalScreen 的 Canvas 失效
         var frameTick by remember { mutableLongStateOf(0L) }
-        // ExtraKeys 修饰态（Ctrl/Alt），作用于下一个输入字符后由终端回调复位
         var ctrlActive by remember { mutableStateOf(false) }
         var altActive by remember { mutableStateOf(false) }
 
         /** 新建会话：先按 80x24 打开 PTY，TerminalScreen 布局完成后按真实网格 resize。 */
-        fun newSession() {
-            val id = ExecutionEngine.createSession(cols = 80, rows = 24)
+        fun newSession(
+            name: String = "本地终端",
+            env: SessionEnv = SessionEnv.NORMAL,
+            cwd: String = "~",
+            cmd: String? = null,
+        ) {
+            val id = if (cmd != null) {
+                ExecutionEngine.createSession(command = cmd, cols = 80, rows = 24)
+            } else {
+                ExecutionEngine.createSession(cols = 80, rows = 24)
+            }
             if (id <= 0L) return
-            tabs = tabs + TermTab(id, "shell $id")
+            sessions = sessions + MoxSession(id, name, env, cwd)
             activeId = id
-            // 登记 UI 持泵集合，避免 Service 兜底泵抢占（startPump 是"先停旧泵"语义）
             MoxshSessionService.uiOwnedSessions.add(id)
             ExecutionEngine.startPump(id) { frameTick++ }
         }
 
-        /** 关闭会话：停泵 + 销毁 PTY，并切到相邻标签。 */
+        /** 关闭会话：停泵 + 销毁 PTY，并切到相邻会话。 */
         fun closeSession(id: Long) {
             ExecutionEngine.stopPump(id)
             ExecutionEngine.destroySession(id)
             MoxshSessionService.uiOwnedSessions.remove(id)
-            val idx = tabs.indexOfFirst { it.id == id }
-            val next = tabs.filterNot { it.id == id }
-            tabs = next
+            val next = sessions.filterNot { it.id == id }
+            sessions = next
             activeId = when {
                 next.isEmpty() -> -1L
                 next.any { it.id == activeId } -> activeId
-                else -> next[(idx - 1).coerceAtLeast(0).coerceAtMost(next.size - 1)].id
+                else -> next.first().id
             }
-            // 引擎活跃会话同步（关掉的若是活跃会话，引擎侧也随之切走）
             ExecutionEngine.activeSessionId = activeId
         }
 
-        // 首次进入：等运行环境就绪后自动开一个 shell（login 就位 → 完整 Linux 环境；
-        // 未就绪期间终端区显示玻璃进度卡，Failed 态提供重试按钮）
+        fun switchSession(id: Long) {
+            activeId = id
+            ExecutionEngine.activeSessionId = id
+        }
+
+        fun renameSession(id: Long, name: String) {
+            sessions = sessions.map { if (it.id == id) it.copy(name = name) else it }
+        }
+
+        // 首启自动开一个 shell；本地包导入
         val bootState by BootstrapState.state.collectAsState()
         val retryScope = rememberCoroutineScope()
-        // 本地包导入：用户用文件选择器选一个 bootstrap zip（曾下载失败/白下的包可复用）
         val importLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.OpenDocument(),
         ) { uri ->
@@ -174,7 +181,8 @@ fun MoxshRoot() {
                 runCatching {
                     context.contentResolver.openInputStream(uri)?.use { ins ->
                         val tmp = File(context.cacheDir, "bootstrap.import.zip")
-                        FileOutputStream(tmp).use { ins.copyTo(it) }
+                        File(tmp.parentFile, tmp.name).parentFile?.mkdirs()
+                        java.io.FileOutputStream(tmp).use { ins.copyTo(it) }
                         BootstrapState.importFromLocal(context, tmp.absolutePath)
                     }
                 }
@@ -182,218 +190,270 @@ fun MoxshRoot() {
         }
         LaunchedEffect(Unit) {
             BootstrapState.state.collect { s ->
-                if (s is BootstrapState.State.Ready && tabs.isEmpty()) {
-                    // 会话创建可能触及原生层；包住 Kotlin 异常，避免协程顶层崩溃闪退
+                if (s is BootstrapState.State.Ready && sessions.isEmpty()) {
                     runCatching { newSession() }
                 }
             }
         }
 
-        if (showSettings) {
-            SettingsScreen(
-                perfMode = perfMode,
-                onPerfModeChange = { perfMode = it },
-                fontSizeSp = fontSizeSp,
-                onFontSizeChange = { fontSizeSp = it },
-                accent = accent,
-                onAccentChange = { accent = it },
-                mirror = mirror,
-                onMirrorChange = { mirror = it },
-                onBack = { showSettings = false },
-            )
-        } else if (showManager) {
-            // ---- 发行版管理器（D13 四件套入口；插件契约注册见 DistroPluginRegistrar）----
-            DistroManagerScreen(
-                onBack = { showManager = false },
-                onOpenTerminal = { cmd ->
-                    // "启动发行版"：拿 loginCommand 生成的 proot 命令行开新会话并切过去，
-                    // 用户视角即"切回终端 tab"（标签自动新增 distro N 并激活）。
-                    val id = ExecutionEngine.createSession(command = cmd, cols = 80, rows = 24)
-                    if (id > 0L) {
-                        tabs = tabs + TermTab(id, "distro $id")
-                        activeId = id
-                        MoxshSessionService.uiOwnedSessions.add(id)
-                        ExecutionEngine.startPump(id) { frameTick++ }
-                        showManager = false
+        val activeSession = sessions.firstOrNull { it.id == activeId }
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .systemBarsPadding()
+                .imePadding()
+                .onKeyEvent { ev ->
+                    if (ev.type == KeyEventType.KeyDown) {
+                        when (ev.key) {
+                            Key.V -> showControl = true
+                            Key.U -> { showAi = true; aiBadge = false }
+                            Key.One -> page = MoxshPage.TERMINAL
+                            Key.Two -> page = MoxshPage.CATALOG
+                            Key.Three -> page = MoxshPage.SETTINGS
+                            Key.Escape -> { showControl = false; showAi = false; showDrawer = false }
+                        }
                     }
+                    false
                 },
-                onOpenPackageManager = null, // 四件套互相跳转走插件面板；此处留空即不显示入口
-            )
-        } else if (showPlugins) {
-            // ---- 插件面板（D5 体系②）：内置玻璃插件卡片入口 ----
-            PluginPanelScreen(onBack = { showPlugins = false })
-        } else {
-            // imePadding：输入法弹起自动避让（架构 §6"玻璃层不阻挡触摸与 IME"）
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
-                    .imePadding()
-            ) {
-                GlassBackdrop(performantBlur = !perfMode, modifier = Modifier.fillMaxSize())
+        ) {
+            GlassBackdrop(performantBlur = !perfMode, modifier = Modifier.fillMaxSize())
 
-                Column(Modifier.fillMaxSize()) {
-                    GlassTopBar(
-                        title = "moxsh",
-                        perfMode = perfMode,
-                        onTogglePerf = { perfMode = !perfMode },
+            // ---- 三个主页面 ----
+            when (page) {
+                MoxshPage.TERMINAL -> TerminalPage(
+                    sessions = sessions,
+                    activeSession = activeSession,
+                    frameTick = frameTick,
+                    fontSizeSp = fontSizeSp,
+                    onFontSizeChange = { fontSizeSp = it },
+                    ctrlActive = ctrlActive,
+                    altActive = altActive,
+                    onModifiersConsumed = { uc, ua ->
+                        if (uc) ctrlActive = false
+                        if (ua) altActive = false
+                    },
+                    onOpenDrawer = { showDrawer = true },
+                    onOpenAi = { showAi = true; aiBadge = false },
+                    onOpenControl = { showControl = true },
+                    onOpenAccount = { context.startActivity(Intent(context, LoginActivity::class.java)) },
+                    onOpenPlugins = { showPluginsTemp = true },
+                    onNewSession = { newSession() },
+                    bootState = bootState,
+                    onRetry = {
+                        retryScope.launch { BootstrapState.begin(context) }
+                    },
+                    onImport = { importLauncher.launch(arrayOf("application/zip")) },
+                )
+                MoxshPage.CATALOG -> when (catalogTop) {
+                    "distro" -> DistroManagerScreen(
+                        onBack = { catalogTop = "hub" },
+                        onOpenTerminal = { cmd ->
+                            newSession("distro", SessionEnv.CONTAINER, "/root", cmd)
+                            catalogTop = "hub"
+                            page = MoxshPage.TERMINAL
+                        },
+                        onOpenPackageManager = { catalogTop = "pkgs" },
                     )
-
-                    // ---- 会话标签栏（GlassSurface 卡片）+ 设置入口 ----
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Row(
-                            Modifier
-                                .weight(1f)
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            tabs.forEach { tab ->
-                                val active = tab.id == activeId
-                                Row(
-                                    Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(
-                                            if (active) Color.White.copy(alpha = 0.20f)
-                                            else GlassTokens.surfaceTint
-                                        )
-                                        .border(1.dp, GlassTokens.stroke, RoundedCornerShape(14.dp))
-                                        .clickable {
-                                            activeId = tab.id
-                                            // 同步引擎活跃会话（插件 runLocalCommand 的写入目标）
-                                            ExecutionEngine.activeSessionId = tab.id
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        tab.title,
-                                        color = if (active) Color.White else GlassTokens.onGlassDim,
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        "×",
-                                        color = GlassTokens.onGlassDim,
-                                        modifier = Modifier.clickable { closeSession(tab.id) },
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        // 账号入口：GitHub 登录 / 会话管理（LoginActivity 内展示登录态）
-                        GlassIconButton("👤") {
-                            context.startActivity(Intent(context, LoginActivity::class.java))
-                        }
-                        Spacer(Modifier.width(6.dp))
-                        // 插件面板入口（D5 体系②）：玻璃小按钮 → 已注册插件卡片
-                        GlassIconButton("✦") { showPlugins = true }
-                        Spacer(Modifier.width(6.dp))
-                        // 管理器入口（D13）：玻璃小按钮 → 发行版管理器
-                        GlassIconButton("☰") { showManager = true }
-                        Spacer(Modifier.width(6.dp))
-                        // 设置入口（玻璃小按钮）
-                        GlassIconButton("⚙") { showSettings = true }
-                    }
-
-                    // ---- 终端区 ----
-                    if (activeId > 0L) {
-                        // key(activeId)：切换标签时按会话隔离滚动/输入框等 remember 状态
-                        key(activeId) {
-                            TerminalScreen(
-                                sessionId = activeId,
-                                tick = frameTick,
-                                fontSizeSp = fontSizeSp,
-                                onFontSizeChange = { fontSizeSp = it },
-                                ctrlActive = ctrlActive,
-                                altActive = altActive,
-                                onModifiersConsumed = { usedCtrl, usedAlt ->
-                                    if (usedCtrl) ctrlActive = false
-                                    if (usedAlt) altActive = false
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(10.dp),
-                            )
-                        }
-                    } else {
-                        // 无活动会话：环境就绪前显示 bootstrap 安装进度卡（小白不需要知道 $PREFIX）；
-                        // 就绪后（会话已开）正常不会走到这里，仅提示新建
-                        GlassSurface(
-                            Modifier
-                                .weight(1f)
-                                .padding(10.dp)
-                                .fillMaxWidth(),
-                            tint = GlassTokens.termTint,
-                        ) {
-                            when (val s = bootState) {
-                                is BootstrapState.State.Running -> Column(
-                                    Modifier.fillMaxWidth().wrapContentSize(Alignment.Center).padding(20.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) {
-                                    Text("正在准备运行环境", color = GlassTokens.onGlass)
-                                    Spacer(Modifier.height(10.dp))
-                                    LinearProgressIndicator(
-                                        progress = { s.progress / 100f },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                    Spacer(Modifier.height(10.dp))
-                                    Text(s.message, color = GlassTokens.onGlassDim)
-                                }
-                                is BootstrapState.State.Failed -> Column(
-                                    Modifier.fillMaxWidth().wrapContentSize(Alignment.Center).padding(20.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) {
-                                    Text("运行环境安装失败", color = GlassTokens.onGlass)
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(s.message, color = GlassTokens.onGlassDim)
-                                    Spacer(Modifier.height(14.dp))
-                                    Button(
-                                        enabled = !retrying,
-                                        onClick = {
-                                            retrying = true
-                                            retryScope.launch {
-                                                try { BootstrapState.begin(context) }
-                                                finally { retrying = false }
-                                            }
-                                        },
-                                    ) { Text(if (retrying) "重试中…" else "重试") }
-                                    Spacer(Modifier.height(8.dp))
-                                    Button(onClick = { importLauncher.launch(arrayOf("application/zip")) }) {
-                                        Text("从本地包导入")
-                                    }
-                                }
-                                else -> Text(
-                                    "没有活动会话，点击右下角 + 新建",
-                                    color = GlassTokens.onGlassDim,
-                                    modifier = Modifier.padding(16.dp),
-                                )
-                            }
-                        }
-                    }
-
-                    // ---- ExtraKeys：真发 VT 序列到当前会话 ----
-                    GlassBottomBar(
-                        ctrlActive = ctrlActive,
-                        altActive = altActive,
-                        onToggleCtrl = { ctrlActive = !ctrlActive },
-                        onToggleAlt = { altActive = !altActive },
-                        onKey = { seq -> sendToSession(activeId, seq) },
+                    "pkgs" -> PackageManagerScreen(onBack = { catalogTop = "hub" })
+                    "monitor" -> ResourceMonitorScreen(onBack = { catalogTop = "hub" })
+                    else -> CategoryHub(
+                        onOpenDistro = { catalogTop = "distro" },
+                        onOpenPkgs = { catalogTop = "pkgs" },
+                        onOpenMonitor = { catalogTop = "monitor" },
+                        onOpenWizard = { showWizard = true },
                     )
                 }
-
-                // 新建会话
-                GlassFAB(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                ) { newSession() }
+                MoxshPage.SETTINGS -> SettingsScreen(
+                    perfMode = perfMode,
+                    onPerfModeChange = { perfMode = it },
+                    fontSizeSp = fontSizeSp,
+                    onFontSizeChange = { fontSizeSp = it },
+                    accent = accent,
+                    onAccentChange = { accent = it },
+                    mirror = mirror,
+                    onMirrorChange = { mirror = it },
+                    onBack = { page = MoxshPage.TERMINAL },
+                )
             }
+
+            // ---- 插件面板（独立覆盖层，未归入三页） ----
+            if (showPluginsTemp) {
+                // 直接复用既有插件面板入口（与旧实现一致）
+                PluginPanelHolder(onClose = { showPluginsTemp = false })
+            }
+
+            // ---- 覆盖层：会话抽屉 / 控制中心 / AI 面板 / 新手引导 ----
+            if (showDrawer) {
+                SessionDrawer(
+                    sessions = sessions,
+                    activeId = activeId,
+                    onSwitch = { switchSession(it) },
+                    onKill = { closeSession(it) },
+                    onRename = { id, name -> renameSession(id, name) },
+                    onNew = { newSession() },
+                    onDismiss = { showDrawer = false },
+                )
+            }
+            if (showControl) {
+                ControlCenter(onToggleTheme = { darkTheme = !darkTheme }, onDismiss = { showControl = false })
+            }
+            if (showAi) {
+                AiPanel(onDismiss = { showAi = false })
+            }
+            if (showWizard) {
+                OnboardingWizard(onFinish = { showWizard = false })
+            }
+
+            // ---- 底部三页导航 ----
+            MoxshBottomNav(
+                current = page,
+                onSelect = { page = it },
+                showAiBadge = aiBadge,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
+}
+
+/**
+ * 终端页（三页之一）：顶栏（☰ 抽屉 / 标题 / 账号 / 插件 / AI / 控制中心）+ 真实终端 + ExtraKeys + ＋。
+ * 无活动会话时显示 bootstrap 安装进度卡（失败可重试 / 本地包导入）。
+ */
+@Composable
+private fun TerminalPage(
+    sessions: List<MoxSession>,
+    activeSession: MoxSession?,
+    frameTick: Long,
+    fontSizeSp: Float,
+    onFontSizeChange: (Float) -> Unit,
+    ctrlActive: Boolean,
+    altActive: Boolean,
+    onModifiersConsumed: (Boolean, Boolean) -> Unit,
+    onOpenDrawer: () -> Unit,
+    onOpenAi: () -> Unit,
+    onOpenControl: () -> Unit,
+    onOpenAccount: () -> Unit,
+    onOpenPlugins: () -> Unit,
+    onNewSession: () -> Unit,
+    bootState: BootstrapState.State,
+    onRetry: () -> Unit,
+    onImport: () -> Unit,
+) {
+    var retrying by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(bottom = 84.dp),
+    ) {
+        // ---- 顶栏 ----
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GlassIconButton("☰") { onOpenDrawer() }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (activeSession != null) "mox · ${activeSession.name}" else "moxsh",
+                    color = GlassTokens.onGlass,
+                    fontSize = 16.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                )
+                if (sessions.isNotEmpty()) {
+                    Text("${sessions.size} 个会话", color = GlassTokens.onGlassDim, fontSize = 11.sp)
+                }
+            }
+            GlassIconButton("👤") { onOpenAccount() }
+            Spacer(Modifier.width(6.dp))
+            GlassIconButton("✦") { onOpenPlugins() }
+            Spacer(Modifier.width(6.dp))
+            GlassIconButton("💬") { onOpenAi() }
+            Spacer(Modifier.width(6.dp))
+            GlassIconButton("☀") { onOpenControl() }
+        }
+
+        // ---- 终端区 ----
+        if (activeSession != null) {
+            key(activeSession.id) {
+                TerminalScreen(
+                    sessionId = activeSession.id,
+                    tick = frameTick,
+                    fontSizeSp = fontSizeSp,
+                    onFontSizeChange = onFontSizeChange,
+                    ctrlActive = ctrlActive,
+                    altActive = altActive,
+                    onModifiersConsumed = onModifiersConsumed,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(10.dp),
+                )
+            }
+        } else {
+            GlassSurface(
+                Modifier
+                    .weight(1f)
+                    .padding(10.dp)
+                    .fillMaxWidth(),
+                tint = GlassTokens.termTint,
+            ) {
+                when (val s = bootState) {
+                    is BootstrapState.State.Running -> Column(
+                        Modifier.fillMaxWidth().wrapContentSize(Alignment.Center).padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("正在准备运行环境", color = GlassTokens.onGlass)
+                        Spacer(Modifier.height(10.dp))
+                        LinearProgressIndicator(progress = { s.progress / 100f }, modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(10.dp))
+                        Text(s.message, color = GlassTokens.onGlassDim)
+                    }
+                    is BootstrapState.State.Failed -> Column(
+                        Modifier.fillMaxWidth().wrapContentSize(Alignment.Center).padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("运行环境安装失败", color = GlassTokens.onGlass)
+                        Spacer(Modifier.height(8.dp))
+                        Text(s.message, color = GlassTokens.onGlassDim)
+                        Spacer(Modifier.height(14.dp))
+                        Button(enabled = !retrying, onClick = { retrying = true; onRetry(); retrying = false }) {
+                            Text(if (retrying) "重试中…" else "重试")
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Button(onClick = onImport) { Text("从本地包导入") }
+                    }
+                    else -> Text("没有活动会话，点击右下角 + 新建", color = GlassTokens.onGlassDim, modifier = Modifier.padding(16.dp))
+                }
+            }
+        }
+
+        // ---- ExtraKeys ----
+        GlassBottomBar(
+            ctrlActive = ctrlActive,
+            altActive = altActive,
+            onToggleCtrl = { ctrlActive = !ctrlActive },
+            onToggleAlt = { altActive = !altActive },
+            onKey = { seq -> activeSession?.let { sendToSession(it.id, seq) } },
+        )
+    }
+
+    // ---- 新建会话 ----
+    GlassFAB(
+        Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 16.dp, bottom = 96.dp),
+    ) { onNewSession() }
+}
+
+/**
+ * 插件面板占位：复用既有 PluginPanelScreen（与旧实现一致）。
+ * 独立抽取便于终端页以回调方式打开，不污染三页导航。
+ */
+@Composable
+private fun PluginPanelHolder(onClose: () -> Unit) {
+    PluginPanelScreen(onBack = onClose)
 }
 
 class MainActivity : ComponentActivity() {
