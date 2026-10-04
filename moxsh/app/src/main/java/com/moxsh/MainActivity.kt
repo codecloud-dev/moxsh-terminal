@@ -26,7 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.key
+import androidx.compose.runtime.key as composableKey
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +35,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -235,6 +237,8 @@ fun MoxshRoot() {
                         if (uc) ctrlActive = false
                         if (ua) altActive = false
                     },
+                    onToggleCtrl = { ctrlActive = !ctrlActive },
+                    onToggleAlt = { altActive = !altActive },
                     onOpenDrawer = { showDrawer = true },
                     onOpenAi = { showAi = true; aiBadge = false },
                     onOpenControl = { showControl = true },
@@ -332,6 +336,8 @@ private fun TerminalPage(
     ctrlActive: Boolean,
     altActive: Boolean,
     onModifiersConsumed: (Boolean, Boolean) -> Unit,
+    onToggleCtrl: () -> Unit = {},
+    onToggleAlt: () -> Unit = {},
     onOpenDrawer: () -> Unit,
     onOpenAi: () -> Unit,
     onOpenControl: () -> Unit,
@@ -380,7 +386,7 @@ private fun TerminalPage(
 
         // ---- 终端区 ----
         if (activeSession != null) {
-            key(activeSession.id) {
+            composableKey(activeSession.id) {
                 TerminalScreen(
                     sessionId = activeSession.id,
                     tick = frameTick,
@@ -436,8 +442,8 @@ private fun TerminalPage(
         GlassBottomBar(
             ctrlActive = ctrlActive,
             altActive = altActive,
-            onToggleCtrl = { ctrlActive = !ctrlActive },
-            onToggleAlt = { altActive = !altActive },
+            onToggleCtrl = onToggleCtrl,
+            onToggleAlt = onToggleAlt,
             onKey = { seq -> activeSession?.let { sendToSession(it.id, seq) } },
         )
         }
