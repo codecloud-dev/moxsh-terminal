@@ -44,4 +44,33 @@ object AuthConfig {
      */
     const val ENABLE_CLOUD_SYNC = false
     const val RESERVED_SYNC_BASE = ""
+
+    // ------------------------------------------------------------------
+    // 邮箱注册 / 绑定（邮箱验证码）
+    //
+    // 【安全红线】邮箱授权码（SMTP 授权码 / 客户端专用密码）**绝不进 APK、
+    // 绝不进公开仓库**——本仓库是公开仓，且 APK 公开分发可被反编译，
+    // 一旦内置，任何人即可冒用该邮箱收发邮件。授权码只允许存在于
+    // mox-id（Cloudflare Workers）的环境变量 / wrangler secret 中。
+    //
+    // 客户端只持有 [EMAIL_API_BASE]（服务地址，属公开信息，与 github_client_id
+    // 同级、可公开），由 local.properties 的 `email_api_base` 经 buildConfig 注入。
+    //
+    // 强约束：邮箱注册**必须**同时登录 GitHub —— 发码与校验两个请求都要带
+    // `Authorization: Bearer <GitHub access token>`，后端以 token 解析出的
+    // GitHub login 作为邮箱归属主体，客户端无法伪造他人身份批量注册。
+    // ------------------------------------------------------------------
+
+    /** 邮箱验证服务（mox-id）基址，留空则邮箱注册入口不可用（不会发起任何请求）。 */
+    val EMAIL_API_BASE: String get() = BuildConfig.EMAIL_API_BASE
+
+    /** 是否已配置邮箱验证服务地址。 */
+    val EMAIL_IS_CONFIGURED: Boolean
+        get() = EMAIL_API_BASE.isNotBlank() && !EMAIL_API_BASE.startsWith("REPLACE_WITH")
+
+    /** 发码端点（POST，Bearer 鉴权）：{email} → 发送验证码到该邮箱。 */
+    fun emailSendCodeUrl(): String = "${EMAIL_API_BASE.trimEnd('/')}/auth/email/send-code"
+
+    /** 校验端点（POST，Bearer 鉴权）：{email, code} → 校验并完成绑定。 */
+    fun emailVerifyUrl(): String = "${EMAIL_API_BASE.trimEnd('/')}/auth/email/verify"
 }

@@ -34,6 +34,13 @@ android {
         val clientId = localProps.getProperty("github_client_id")
             ?: "REPLACE_WITH_YOUR_GITHUB_OAUTH_CLIENT_ID"
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"$clientId\"")
+
+        // 邮箱验证服务（mox-id）基址：来自 local.properties。
+        // 仅服务【地址】，属公开信息；邮箱授权码绝不在此注入、绝不进 APK，
+        // 它只允许存在于后端 Worker 的环境变量 / wrangler secret。
+        val emailApiBase = localProps.getProperty("email_api_base")
+            ?: "REPLACE_WITH_YOUR_MOX_ID_EMAIL_API_BASE"
+        buildConfigField("String", "EMAIL_API_BASE", "\"$emailApiBase\"")
     }
 
     signingConfigs {

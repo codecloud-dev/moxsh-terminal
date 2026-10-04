@@ -6,7 +6,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -158,6 +160,8 @@ private fun LoginScreen() {
                             Button(onClick = {
                                 SessionStore.clear(ctx)
                                 UserProfileStore.clear(ctx)
+                                // 邮箱依附于 GitHub 会话：退出即解除绑定
+                                EmailBindingStore.clear(ctx)
                                 profile = null
                                 phase = Phase.Idle
                             }) { Text(stringResource(R.string.mox_login_logout)) }
@@ -213,6 +217,11 @@ private fun LoginScreen() {
                     }
                 }
             }
+
+            Spacer(Modifier.height(14.dp))
+
+            // 邮箱注册：必须已登录 GitHub（卡片内会强制该前提并禁用未登录态）
+            EmailSignUpCard(loggedIn = profile != null)
         }
     }
 }
