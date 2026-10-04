@@ -11,13 +11,28 @@
 #   注意：不要把任何 secret 放进仓库；client_id 本就可公开。
 github_client_id=REPLACE_WITH_YOUR_GITHUB_OAUTH_CLIENT_ID
 
-# 邮箱注册 / 绑定所用的验证服务地址（mox-id，Cloudflare Workers），例如
-#   https://mox-id.example.workers.dev
-# 仅【地址】，属公开信息，允许进 APK 与本仓库。
+# ---------------------------------------------------------------------------
+# 邮箱注册：mox-id 服务地址
+# ---------------------------------------------------------------------------
 #
-# ⚠️ 邮箱授权码（SMTP 授权码 / 客户端专用密码）绝对不要填在这里、也不要写进
-#    任何源码或提交进仓库：本仓库是公开仓、APK 也公开分发可被反编译，内置
-#    授权码等于把邮箱交出去。授权码只允许配置在后端 Worker 的环境变量里：
-#      cd mox-id && wrangler secret put SMTP_AUTH_CODE
+# 【重要】绝大多数用户**不需要**配置这一项。
+#
+# 邮箱绑定的默认路径是「用 GitHub 已验证邮箱一键绑定」：App 直接读取 GitHub
+# /user/emails 里 primary + verified 的邮箱完成绑定：
+#   · 不发送任何邮件 → 没有发信限流 / IP 信誉 / 端口限制问题
+#   · 不依赖任何后端 → 装上 APK 即用
+# 因此 github_client_id 填好、App 登录 GitHub 之后，邮箱功能就已经可用了。
+#
+# 只有当你想用「与 GitHub 账号不同的另一个邮箱」（验证码路径）时，
+# 才需要填下面的地址。当前已部署的实例：
+email_api_base=https://mox-id-email.3042980037.workers.dev
+#
+# 该地址是【服务地址】，属公开信息，允许进 APK 与本仓库。
+# 它只在你已为 Worker 配置好发信通道（Resend API Key）时才真正可用；
+# 未配置时 App 会显示「服务未配置」并且【不会发起任何请求】。
+#
+# ⚠️ 任何密钥（Resend API Key、SMTP 授权码、邮箱密码）都绝对不要填在这里，
+#    也不要写进任何源码或提交进仓库：本仓库是公开仓、APK 也公开分发可被
+#    反编译，内置密钥等于把它公开。密钥只允许配置在后端 Worker 上：
+#      cd edge/mox-id && wrangler secret put RESEND_API_KEY
 # 详见 docs/email-auth.md。
-email_api_base=REPLACE_WITH_YOUR_MOX_ID_EMAIL_API_BASE
