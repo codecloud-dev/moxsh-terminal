@@ -19,4 +19,24 @@
     <string name="mox_login_device_not_configured">未配置 GitHub client_id：请在 local.properties 填入后重新构建</string>
     <string name="mox_login_view_config">查看配置方法</string>
     <string name="mox_login_retry">重试</string>
+    <!-- 邮箱注册（必须已登录 GitHub） -->
+    <string name="mox_email_title">邮箱注册</string>
+    <string name="mox_email_desc">邮箱需与已登录的 GitHub 账号绑定，用于接收验证码与找回账号</string>
+    <string name="mox_email_requires_github">请先完成 GitHub 登录，再绑定邮箱</string>
+    <string name="mox_email_not_configured">邮箱验证服务未配置：请在 local.properties 填入 email_api_base 后重新构建</string>
+    <string name="mox_email_bound">已绑定邮箱</string>
+    <string name="mox_email_bound_desc">该邮箱已绑定到当前 GitHub 账号</string>
+    <string name="mox_email_unbind">解除绑定</string>
+    <string name="mox_email_hint">输入邮箱地址</string>
+    <string name="mox_email_code_hint">输入 6 位验证码</string>
+    <string name="mox_email_send_code">获取验证码</string>
+    <string name="mox_email_submit">完成绑定</string>
+    <string name="mox_email_sending">发送中…</string>
+    <string name="mox_email_resend">%1$d 秒后重发</string>
+    <string name="mox_email_code_sent">验证码已发送，请查收邮件（含垃圾箱）</string>
+    <string name="mox_email_success">邮箱绑定成功</string>
+    <string name="mox_email_verifying">校验中…</string>
+    <string name="mox_login_with_email_action">邮箱注册 / 绑定</string>
+    <string name="mox_email_action_title">邮箱注册</string>
+    <string name="mox_email_action_desc">需先登录 GitHub；邮箱仅用于接收验证码与找回账号</string>
 </resources>

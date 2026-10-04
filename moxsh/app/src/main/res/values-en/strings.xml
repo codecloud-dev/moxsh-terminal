@@ -19,4 +19,24 @@
     <string name="mox_login_device_not_configured">GitHub client_id not configured: fill it in local.properties and rebuild</string>
     <string name="mox_login_view_config">View setup guide</string>
     <string name="mox_login_retry">Retry</string>
+    <!-- Email sign-up (always requires a signed-in GitHub account) -->
+    <string name="mox_email_title">Email sign-up</string>
+    <string name="mox_email_desc">Your email is bound to the signed-in GitHub account, used for verification codes and account recovery</string>
+    <string name="mox_email_requires_github">Sign in with GitHub first, then bind an email</string>
+    <string name="mox_email_not_configured">Email service not configured: fill in email_api_base in local.properties and rebuild</string>
+    <string name="mox_email_bound">Email bound</string>
+    <string name="mox_email_bound_desc">This email is linked to the current GitHub account</string>
+    <string name="mox_email_unbind">Unbind</string>
+    <string name="mox_email_hint">Enter your email address</string>
+    <string name="mox_email_code_hint">Enter the 6-digit code</string>
+    <string name="mox_email_send_code">Send code</string>
+    <string name="mox_email_submit">Complete binding</string>
+    <string name="mox_email_sending">Sending…</string>
+    <string name="mox_email_resend">Resend in %1$d s</string>
+    <string name="mox_email_code_sent">Code sent — please check your inbox (and spam)</string>
+    <string name="mox_email_success">Email bound successfully</string>
+    <string name="mox_email_verifying">Verifying…</string>
+    <string name="mox_login_with_email_action">Email sign-up / binding</string>
+    <string name="mox_email_action_title">Email sign-up</string>
+    <string name="mox_email_action_desc">Requires GitHub sign-in; your email is only used for verification codes and account recovery</string>
 </resources>

@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.moxsh.auth.EmailBindingStore
 import com.moxsh.auth.GitHubLogin
 import com.moxsh.auth.SessionStore
 import com.moxsh.auth.UserProfileStore
@@ -290,6 +291,8 @@ fun SettingsScreen(
                         GlassIconButton("退出") {
                             SessionStore.clear(context)
                             UserProfileStore.clear(context)
+                            // 邮箱依附于 GitHub 会话：退出即解除绑定
+                            EmailBindingStore.clear(context)
                             MoxshPrefs.setCloudSync(context, false)
                             loggedIn = false
                             cloudOn = false
