@@ -71,9 +71,9 @@ fun ResourceMonitorScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         }
 
         Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Gauge("CPU", "$cpu%", cpuHist)
-            Gauge("内存", "$mem%", memHist)
-            Gauge("磁盘", "$disk%", diskHist)
+            Gauge("CPU", "$cpu%", cpuHist, Modifier.weight(1f))
+            Gauge("内存", "$mem%", memHist, Modifier.weight(1f))
+            Gauge("磁盘", "$disk%", diskHist, Modifier.weight(1f))
         }
 
         Text("进程（本应用可见）", color = GlassTokens.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -112,10 +112,9 @@ fun ResourceMonitorScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Gauge(label: String, value: String, hist: List<Int>) {
+private fun Gauge(label: String, value: String, hist: List<Int>, modifier: Modifier = Modifier) {
     Column(
-        Modifier
-            .weight(1f)
+        modifier
             .clip(RoundedCornerShape(16.dp))
             .background(GlassTokens.surfaceTint)
             .border(1.dp, GlassTokens.stroke, RoundedCornerShape(16.dp))

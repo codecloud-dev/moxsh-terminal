@@ -22,10 +22,10 @@ import com.moxsh.ui.component.GlassTokens
 @Composable
 fun GlassButton(
     text: String,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
     filled: Boolean = false,
     enabled: Boolean = true,
+    onClick: () -> Unit,
 ) {
     Box(
         modifier
@@ -48,7 +48,7 @@ fun GlassButton(
 
 /** 玻璃胶囊筛选标签（分类页 / 包管理器用）。 */
 @Composable
-fun GlassChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun GlassChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier
             .clip(RoundedCornerShape(999.dp))
