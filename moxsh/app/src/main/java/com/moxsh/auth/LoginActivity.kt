@@ -160,8 +160,7 @@ private fun LoginScreen() {
                             Button(onClick = {
                                 SessionStore.clear(ctx)
                                 UserProfileStore.clear(ctx)
-                                // 邮箱依附于 GitHub 会话：退出即解除绑定
-                                EmailBindingStore.clear(ctx)
+                                // 邮箱是独立账号，不随 GitHub 退出而清除
                                 profile = null
                                 phase = Phase.Idle
                             }) { Text(stringResource(R.string.mox_login_logout)) }
@@ -220,7 +219,7 @@ private fun LoginScreen() {
 
             Spacer(Modifier.height(14.dp))
 
-            // 邮箱注册：必须已登录 GitHub（卡片内会强制该前提并禁用未登录态）
+            // 邮箱注册：不再强制 GitHub 登录；已登录时卡片额外提供 GitHub 已验证邮箱快捷方式
             EmailSignUpCard(loggedIn = profile != null)
         }
     }
