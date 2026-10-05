@@ -86,15 +86,24 @@ jobs:
         working-directory: edge/mox-id
         run: npx wrangler d1 execute mox-id --remote --file=./migrations/0001_init.sql
 
-      - name: 注入 RESEND_API_KEY（仅当仓库已配置该 Secret）
-        if: ${{ secrets.RESEND_API_KEY != '' }}
+      - name: 注入 RESEND_API_KEY（仓库已配置该 Secret 时才注入）
+        # 注意：GitHub 的 if 条件不支持 secrets 上下文，故把"是否注入"判断放进 bash
         working-directory: edge/mox-id
-        run: echo "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY
+        run: |
+          if [ -n "$RESEND_API_KEY" ]; then
+            echo "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY
+          else
+            echo "（仓库未配置 RESEND_API_KEY Secret，路径 B 暂不启用，跳过注入）"
+          fi
 
-      - name: 设置 MAIL_FROM（仅当仓库已配置该 Variable）
-        if: ${{ vars.MAIL_FROM != '' }}
+      - name: 设置 MAIL_FROM（仓库已配置该 Variable 时才设置）
         working-directory: edge/mox-id
-        run: npx wrangler vars set MAIL_FROM "$MAIL_FROM"
+        run: |
+          if [ -n "$MAIL_FROM" ]; then
+            npx wrangler vars set MAIL_FROM "$MAIL_FROM"
+          else
+            echo "（仓库未配置 MAIL_FROM Variable，跳过）"
+          fi
 
       - name: 部署 mox-id Worker
         working-directory: edge/mox-id
