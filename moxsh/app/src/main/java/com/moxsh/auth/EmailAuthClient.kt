@@ -16,11 +16,12 @@ import java.net.URL
  * 本客户端只做一件事：把「邮箱 + 当前 GitHub 令牌」发给后端，取回校验结果。
  * 授权码绝不进 APK、绝不进公开仓库——本仓库公开且 APK 公开分发，内置即泄漏。
  *
- * ## 为什么必须绑定 GitHub
+ * ## 何时需要 GitHub 令牌
  *
- * 邮箱本身可被随意填写，不加约束等于开放批量注册小号。因此两个请求都强制携带
- * `Authorization: Bearer <GitHub access token>`：后端以 token 解析出的 GitHub
- * login 作为该邮箱的归属主体，客户端无法为他人邮箱"抢注"，也无法伪造身份刷号。
+ * 这是「验证码」高级路径专用：用于绑定一个与 GitHub 账号不同的邮箱。此时邮箱
+ * 可被随意填写，故强制携带 `Authorization: Bearer <GitHub access token>`，后端以
+ * token 解析出的 GitHub login 作为归属主体，防伪造批量注册。主路径「邮箱 + 密码」
+ * 注册不在此列，无需任何令牌（见 [EmailSignUpCard]）。
  *
  * 通道：HttpURLConnection（零新依赖），与 [GitHubLogin] 保持一致的极简风格。
  * 全部方法为挂起函数，内部已切到 [Dispatchers.IO]。
