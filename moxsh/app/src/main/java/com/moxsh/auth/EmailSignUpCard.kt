@@ -35,6 +35,8 @@ import com.moxsh.R
 import com.moxsh.ui.component.GlassSurface
 import com.moxsh.ui.component.GlassTokens
 import com.moxsh.ui.widgets.GlassButton
+import com.moxsh.ui.widgets.GlassField
+import com.moxsh.ui.widgets.GlassPasswordField
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -58,6 +60,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun EmailSignUpCard(
     loggedIn: Boolean,
+    onRegistered: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val ctx = LocalContext.current
@@ -163,14 +166,13 @@ fun EmailSignUpCard(
                 placeholder = stringResource(R.string.mox_email_email_hint),
                 keyboardType = KeyboardType.Email,
             )
-            GlassField(
+            GlassPasswordField(
                 value = password,
                 onValueChange = {
                     password = it
                     pwError = false
                 },
                 placeholder = stringResource(R.string.mox_email_password_hint),
-                keyboardType = KeyboardType.Password,
             )
             if (pwError) {
                 Text(
@@ -215,6 +217,7 @@ fun EmailSignUpCard(
                     password = ""
                     registering = false
                     Toast.makeText(ctx, R.string.mox_email_registered, Toast.LENGTH_SHORT).show()
+                    onRegistered(boundEmail)
                 }
             }
 
@@ -458,35 +461,5 @@ private fun TextButtonish(label: String, onClick: () -> Unit) {
     )
 }
 
-/** 玻璃风单行输入框（与终端/AI 面板同款的紧凑样式）。 */
-@Composable
-private fun GlassField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    keyboardType: KeyboardType,
-) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(GlassTokens.surfaceTint)
-            .border(1.dp, GlassTokens.stroke, RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            textStyle = TextStyle(color = GlassTokens.onGlass, fontSize = 14.sp),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            decorationBox = { inner ->
-                if (value.isEmpty()) {
-                    Text(placeholder, color = GlassTokens.onGlassDim, fontSize = 14.sp)
-                }
-                inner()
-            },
-        )
-    }
-}
+/** 玻璃风单行输入框与密码框见 [com.moxsh.ui.widgets.GlassField] / [com.moxsh.ui.widgets.GlassPasswordField]。 */
+
