@@ -257,6 +257,23 @@ private key」。
 | 已绑定 | 展示邮箱 + 来源徽章（GitHub 已验证 / 密码注册 / 验证码验证）+ 「解除绑定」 |
 | 退出 GitHub 登录 | **邮箱绑定保留**（邮箱是独立账号，不随 GitHub 退出清除） |
 
+### 7.1 邮箱账号登录（设备上真正登录）
+
+登录页（`LoginActivity`）顶部为 **GitHub / 邮箱** 双 Tab：
+
+- **邮箱 Tab**：输入「邮箱 + 密码」登录。登录态由 `EmailSessionStore` 持久化
+  （`EncryptedSharedPreferences`），应用重启后仍判定为已登录。
+- 密码框带**眼睛图标显隐**；邮箱格式 / 密码非空**实时校验**并标红错误态。
+- 登录失败统一提示「邮箱或密码错误」，不暴露具体是哪项错误。
+- 「还没有账号？注册」展开内置的 `EmailSignUpCard`；**注册成功即自动登录**
+  （本地凭据刚创建，可信）。
+- 「忘记密码」给出诚实说明：本地账号不联网，无法远程重置，需重新注册覆盖凭据。
+
+`MoxAccount` 门面统一 GitHub 与邮箱两种身份（`isLoggedIn` / `label` /
+`logout`），设置页据此展示「已登录 · <身份>」并提供单一退出。云同步等需后端
+鉴权的能力仍绑定 GitHub token（`SyncClient` / `MoxshApplication` 直接读
+`SessionStore`），邮箱账号为本地身份。
+
 绑定结果存于 `EmailBindingStore`（`EncryptedSharedPreferences`，AES-256 +
 Android Keystore），与 GitHub token 同源的安全存储。密码以 PBKDF2-HMAC-SHA256
-（随机盐 + 10k 迭代）派生后存储，明文不落盘。
+（随机盐 + 10k 迭代）派生后存储，明文不落盘；登录态单独存于 `EmailSessionStore`。

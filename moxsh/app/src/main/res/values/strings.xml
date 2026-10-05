@@ -60,4 +60,26 @@
     <string name="mox_email_code_sent">验证码已发送，请查收邮件（含垃圾箱）</string>
     <string name="mox_email_success">邮箱已绑定</string>
     <string name="mox_email_verifying">校验中…</string>
+
+    <!-- 登录页双 Tab -->
+    <string name="mox_login_tab_github">GitHub</string>
+    <string name="mox_login_tab_email">邮箱</string>
+
+    <!-- 邮箱密码登录 -->
+    <string name="mox_email_login_password_hint">密码</string>
+    <string name="mox_email_login_button">登录</string>
+    <string name="mox_email_login_loading">登录中…</string>
+    <string name="mox_email_login_wrong">邮箱或密码错误</string>
+    <string name="mox_email_login_no_password">该邮箱未设置密码：请在下方「注册」设置密码，或改用 GitHub 登录</string>
+    <string name="mox_email_login_success">已登录</string>
+    <string name="mox_email_login_registered">已注册并登录</string>
+    <string name="mox_email_login_no_account">还没有账号？注册</string>
+    <string name="mox_email_login_forgot">忘记密码？</string>
+    <string name="mox_email_forgot_hint">本地账号不联网，无法远程重置密码。可在下方「注册」重新注册以覆盖本地凭据（原密码随即失效）。</string>
+    <string name="mox_email_logged_in_as">已登录</string>
+    <string name="mox_email_logged_in_desc">这是你的本地 mox 账号，凭密码登录此设备</string>
+
+    <!-- 设置页账号统一身份 -->
+    <string name="mox_account_logged_in">已登录 · %1$s</string>
+    <string name="mox_account_logged_out">未登录——登录后可云同步命令历史</string>
 </resources>
