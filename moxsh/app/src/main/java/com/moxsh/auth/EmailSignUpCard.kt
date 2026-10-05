@@ -190,7 +190,7 @@ fun EmailSignUpCard(
                 enabled = !registering && email.isNotBlank() && password.length >= 8,
             ) {
                 if (!EmailAuthClient.isEmailLooksValid(email)) {
-                    status = stringResource(R.string.mox_email_invalid)
+                    status = ctx.getString(R.string.mox_email_invalid)
                     return@GlassButton
                 }
                 if (password.length < 8) {
