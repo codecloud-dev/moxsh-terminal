@@ -60,4 +60,26 @@
     <string name="mox_email_code_sent">Code sent — please check your inbox (and spam)</string>
     <string name="mox_email_success">Email bound</string>
     <string name="mox_email_verifying">Verifying…</string>
+
+    <!-- Login page tabs -->
+    <string name="mox_login_tab_github">GitHub</string>
+    <string name="mox_login_tab_email">Email</string>
+
+    <!-- Email + password sign-in -->
+    <string name="mox_email_login_password_hint">Password</string>
+    <string name="mox_email_login_button">Sign in</string>
+    <string name="mox_email_login_loading">Signing in…</string>
+    <string name="mox_email_login_wrong">Email or password is incorrect</string>
+    <string name="mox_email_login_no_password">This email has no password set: set one via "Register" below, or sign in with GitHub</string>
+    <string name="mox_email_login_success">Signed in</string>
+    <string name="mox_email_login_registered">Registered and signed in</string>
+    <string name="mox_email_login_no_account">No account? Register</string>
+    <string name="mox_email_login_forgot">Forgot password?</string>
+    <string name="mox_email_forgot_hint">Local accounts are offline — passwords cannot be reset remotely. Re-register via "Register" below to overwrite the local credential (the old password stops working).</string>
+    <string name="mox_email_logged_in_as">Signed in</string>
+    <string name="mox_email_logged_in_desc">This is your local mox account — sign in on this device with your password</string>
+
+    <!-- Settings: unified account identity -->
+    <string name="mox_account_logged_in">Signed in · %1$s</string>
+    <string name="mox_account_logged_out">Not signed in — sign in to cloud-sync command history</string>
 </resources>

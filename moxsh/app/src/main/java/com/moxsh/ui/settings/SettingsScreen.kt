@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.moxsh.auth.EmailBindingStore
 import com.moxsh.auth.GitHubLogin
+import com.moxsh.auth.MoxAccount
 import com.moxsh.auth.SessionStore
 import com.moxsh.auth.UserProfileStore
 import com.moxsh.cloud.SyncClient
@@ -266,45 +267,49 @@ fun SettingsScreen(
                 }
             }
 
-            // ---- 账号与云同步（GitHub 登录 + 命令历史云同步 MVP）----
+            // ---- 账号与云同步（GitHub / 邮箱账号登录 + 命令历史云同步 MVP）----
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
-            var loggedIn by remember { mutableStateOf(SessionStore.isLoggedIn(context)) }
+            var loggedIn by remember { mutableStateOf(MoxAccount.isLoggedIn(context)) }
             var cloudOn by remember { mutableStateOf(MoxshPrefs.cloudSync(context)) }
             var syncMsg by remember { mutableStateOf("未同步") }
             var syncing by remember { mutableStateOf(false) }
 
             // 登录态可能因 LoginActivity 刚完成而变化：回到本页时刷新
-            LaunchedEffect(Unit) { loggedIn = SessionStore.isLoggedIn(context) }
+            LaunchedEffect(Unit) { loggedIn = MoxAccount.isLoggedIn(context) }
 
             GlassSurface(Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("账号", color = GlassTokens.onGlass)
                         Text(
-                            if (loggedIn) "已通过 GitHub 登录" else "未登录——登录后可云同步命令历史",
+                            if (loggedIn) {
+                                stringResource(R.string.mox_account_logged_in, MoxAccount.label(context) ?: "")
+                            } else {
+                                stringResource(R.string.mox_account_logged_out)
+                            },
                             color = GlassTokens.onGlassDim,
                         )
                     }
                     Spacer(Modifier.width(10.dp))
                     if (loggedIn) {
                         GlassIconButton("退出") {
-                            SessionStore.clear(context)
-                            UserProfileStore.clear(context)
-                            // 邮箱依附于 GitHub 会话：退出即解除绑定
-                            EmailBindingStore.clear(context)
+                            // 同时清除 GitHub 与邮箱会话；邮箱注册凭据(EmailBindingStore)保留，可重新登录
+                            MoxAccount.logout(context)
                             MoxshPrefs.setCloudSync(context, false)
                             loggedIn = false
                             cloudOn = false
                         }
                         Spacer(Modifier.width(8.dp))
-                        Text(
-                            "在 GitHub 撤销授权",
-                            color = GlassTokens.onGlassDim,
-                            modifier = Modifier.clickable {
-                                GitHubLogin.openUrl(context, GitHubLogin.revokeManagementUrl())
-                            },
-                        )
+                        if (MoxAccount.type(context) == MoxAccount.Type.GITHUB) {
+                            Text(
+                                "在 GitHub 撤销授权",
+                                color = GlassTokens.onGlassDim,
+                                modifier = Modifier.clickable {
+                                    GitHubLogin.openUrl(context, GitHubLogin.revokeManagementUrl())
+                                },
+                            )
+                        }
                     } else {
                         GlassIconButton("登录") { GitHubLogin.startLogin(context) }
                     }

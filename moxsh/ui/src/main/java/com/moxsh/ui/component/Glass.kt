@@ -61,6 +61,7 @@ object GlassTokens {
     val surfaceTint = Color.White.copy(alpha = 0.10f)
     val termTint = Color.Black.copy(alpha = 0.28f)
     val stroke = Color.White.copy(alpha = 0.18f)
+    val strokeError = Color(0xFFFF8A80).copy(alpha = 0.85f)
     val onGlass = Color.White.copy(alpha = 0.92f)
     val onGlassDim = Color.White.copy(alpha = 0.6f)
 }
