@@ -19,14 +19,38 @@
     <string name="mox_login_device_not_configured">GitHub client_id not configured: fill it in local.properties and rebuild</string>
     <string name="mox_login_view_config">View setup guide</string>
     <string name="mox_login_retry">Retry</string>
-    <!-- Email sign-up (always requires a signed-in GitHub account) -->
+    <!-- Email sign-up: standalone account, GitHub sign-in not required -->
     <string name="mox_email_title">Email sign-up</string>
-    <string name="mox_email_desc">Your email is bound to the signed-in GitHub account, used for verification codes and account recovery</string>
-    <string name="mox_email_requires_github">Sign in with GitHub first, then bind an email</string>
-    <string name="mox_email_not_configured">Email service not configured: fill in email_api_base in local.properties and rebuild</string>
+    <string name="mox_email_desc">Create a mox account with email + password. Signed in with GitHub? One-tap your verified email (no password).</string>
+    <string name="mox_email_email_hint">Email address</string>
+    <string name="mox_email_password_hint">Set a password (at least 8 characters)</string>
+    <string name="mox_email_password_short">Password must be at least 8 characters</string>
+    <string name="mox_email_register">Sign up</string>
+    <string name="mox_email_register_loading">Signing up…</string>
+    <string name="mox_email_registered">Email account created</string>
+    <string name="mox_email_invalid">Invalid email format</string>
+
     <string name="mox_email_bound">Email bound</string>
-    <string name="mox_email_bound_desc">This email is linked to the current GitHub account</string>
+    <string name="mox_email_bound_desc">This is your mox account email, independent of GitHub</string>
     <string name="mox_email_unbind">Unbind</string>
+
+    <string name="mox_email_gh_badge">GitHub verified</string>
+    <string name="mox_email_password_badge">Password sign-up</string>
+    <string name="mox_email_code_badge">Code verified</string>
+
+    <!-- GitHub verified email: optional shortcut (shown only when signed in) -->
+    <string name="mox_email_fast_title">One-tap your GitHub verified email</string>
+    <string name="mox_email_fast_desc">Recommended: use the email already verified on your GitHub account — no password needed</string>
+    <string name="mox_email_fast_loading">Loading…</string>
+    <string name="mox_email_fast_none">Your GitHub account has no verified email yet. Add and verify one in GitHub settings first.</string>
+    <string name="mox_email_fast_add">Open GitHub email settings</string>
+    <string name="mox_email_gh_settings">GitHub email settings</string>
+    <string name="mox_email_pick">Use this email</string>
+
+    <!-- Other email with code: advanced option (needs sign-in + deployed backend) -->
+    <string name="mox_email_alt_title">Use another email (verification code)</string>
+    <string name="mox_email_alt_desc">Only if you want an email different from all above: backend sends a code, requires the mox-id service deployed and configured</string>
+    <string name="mox_email_not_configured">Email service not configured: fill in email_api_base in local.properties and rebuild</string>
     <string name="mox_email_hint">Enter your email address</string>
     <string name="mox_email_code_hint">Enter the 6-digit code</string>
     <string name="mox_email_send_code">Send code</string>
@@ -34,23 +58,6 @@
     <string name="mox_email_sending">Sending…</string>
     <string name="mox_email_resend">Resend in %1$d s</string>
     <string name="mox_email_code_sent">Code sent — please check your inbox (and spam)</string>
-    <string name="mox_email_success">Email bound successfully</string>
+    <string name="mox_email_success">Email bound</string>
     <string name="mox_email_verifying">Verifying…</string>
-    <string name="mox_login_with_email_action">Email sign-up / binding</string>
-    <string name="mox_email_action_title">Email sign-up</string>
-    <string name="mox_email_action_desc">Requires GitHub sign-in; your email is only used for verification codes and account recovery</string>
-
-    <!-- 路径 A：用 GitHub 已验证邮箱一键绑定（默认，推荐） -->
-    <string name="mox_email_fast_title">Use your GitHub verified email</string>
-    <string name="mox_email_fast_desc">Recommended: use the email already verified on your GitHub account — no code needed, instant</string>
-    <string name="mox_email_fast_bind">Bind GitHub email</string>
-    <string name="mox_email_fast_loading">Loading…</string>
-    <string name="mox_email_fast_none">Your GitHub account has no verified email yet. Add and verify one in GitHub settings first.</string>
-    <string name="mox_email_fast_add">Open GitHub email settings</string>
-    <string name="mox_email_gh_badge">GitHub 已验证</string>
-    <string name="mox_email_code_badge">验证码验证</string>
-    <string name="mox_email_alt_title">用其他邮箱（需收验证码）</string>
-    <string name="mox_email_alt_desc">若你想绑定一个与 GitHub 账号不同的邮箱，才需要走此路径：后端发验证码，需先部署 mox-id 服务</string>
-    <string name="mox_email_gh_settings">GitHub 邮箱设置</string>
-    <string name="mox_email_pick">使用此邮箱</string>
 </resources>

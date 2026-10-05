@@ -41,22 +41,19 @@ import kotlinx.coroutines.launch
 /**
  * 邮箱注册 / 绑定卡片（液态玻璃风）。
  *
- * ## 两条路径
+ * ## 不再强制 GitHub 登录
  *
- * **路径 A（默认、推荐）—— 用 GitHub 已验证邮箱一键绑定**
- *   App 直接读 GitHub `/user/emails` 里primary + verified 的邮箱并绑定。
- *   不发邮件 → **没有发信限流 / IP 信誉 / 端口限制问题**；
- *   不依赖后端 → **装上即用**，无需部署任何服务。
+ * 主路径是**邮箱 + 密码**独立注册，任何人都能用，无需登录 GitHub：
  *
- * **路径 B（补充）—— 用其他邮箱收验证码**
- *   仅当用户想绑定一个「与 GitHub 账号不同」的邮箱时才需要。
- *   需后端 mox-id 发信，且必须先部署（[AuthConfig.EMAIL_IS_CONFIGURED]）。
+ * ```
+ * 填邮箱 + 设密码（≥8 位） → 本地派生存储（PBKDF2） → 账号创建完成
+ * ```
  *
- * ## 共同前提（产品硬要求）
+ * GitHub 已验证邮箱降级为**可选的免密快捷方式**（仅当已登录时显示）：
+ * 一键把 GitHub verified 邮箱填入并标记来源，省去记忆密码，但非必须。
+ * 验证码路径（需登录 + 后端已部署）保留为折叠的高级选项。
  *
- * **邮箱注册必须绑定 GitHub**：未登录时整张卡片禁用；已登录时所有请求都带
- * GitHub token，由后端以 token 主体作为邮箱归属。因此本组件自身不持有任何
- * 邮箱授权码（授权码只可能存在于后端 Worker 的环境变量中）。
+ * 因此本组件自身不持有任何邮件授权码（授权码只可能存在于后端 Worker 的环境变量）。
  */
 @Composable
 fun EmailSignUpCard(
@@ -67,6 +64,10 @@ fun EmailSignUpCard(
     val scope = rememberCoroutineScope()
 
     var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var pwError by remember { mutableStateOf(false) }
+    var registering by remember { mutableStateOf(false) }
+
     var code by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var verifying by remember { mutableStateOf(false) }
@@ -74,18 +75,21 @@ fun EmailSignUpCard(
     var status by remember { mutableStateOf("") }
 
     var boundEmail by remember { mutableStateOf(EmailBindingStore.get(ctx)) }
-    var ghVerified by remember { mutableStateOf(EmailBindingStore.isGithubVerified(ctx)) }
+    var src by remember { mutableStateOf(EmailBindingStore.source(ctx)) }
 
-    // ---- 路径 A 的状态 ----
+    // ---- 路径 A 的状态（GitHub 已验证邮箱，折叠） ----
+    var showGh by remember { mutableStateOf(false) }
     var ghLoading by remember { mutableStateOf(false) }
     var ghEmails by remember { mutableStateOf<List<GitHubVerifiedEmail.VerifiedEmail>>(emptyList()) }
     var ghNone by remember { mutableStateOf(false) }
+
+    // ---- 路径 B 的状态（验证码，折叠） ----
     var showAlt by remember { mutableStateOf(false) }
 
-    // 登录态变化时刷新已绑定邮箱
+    // 登录态变化时刷新已绑定邮箱与来源
     LaunchedEffect(loggedIn) {
         boundEmail = EmailBindingStore.get(ctx)
-        ghVerified = EmailBindingStore.isGithubVerified(ctx)
+        src = EmailBindingStore.source(ctx)
     }
 
     // 倒计时
@@ -113,16 +117,6 @@ fun EmailSignUpCard(
                 fontSize = 12.5.sp,
             )
 
-            // ============== 未登录 GitHub：全部禁用 ==============
-            if (!loggedIn) {
-                Text(
-                    stringResource(R.string.mox_email_requires_github),
-                    color = GlassTokens.onGlassDim,
-                    fontSize = 13.sp,
-                )
-                return@Column
-            }
-
             // ============== 已绑定：展示 + 可解除 ==============
             if (boundEmail != null) {
                 Text(
@@ -133,8 +127,11 @@ fun EmailSignUpCard(
                 )
                 Text(
                     stringResource(
-                        if (ghVerified) R.string.mox_email_gh_badge
-                        else R.string.mox_email_code_badge,
+                        when (src) {
+                            EmailBindingStore.Source.GITHUB -> R.string.mox_email_gh_badge
+                            EmailBindingStore.Source.PASSWORD -> R.string.mox_email_password_badge
+                            else -> R.string.mox_email_code_badge
+                        },
                     ),
                     color = GlassTokens.onGlassDim,
                     fontSize = 12.sp,
@@ -150,105 +147,175 @@ fun EmailSignUpCard(
                 ) {
                     EmailBindingStore.clear(ctx)
                     boundEmail = null
-                    ghVerified = false
+                    src = EmailBindingStore.Source.PASSWORD
                     email = ""
+                    password = ""
                     code = ""
                     status = ""
                 }
                 return@Column
             }
 
-            // ============== 路径 A：用 GitHub 已验证邮箱 ==============
-            Text(
-                stringResource(R.string.mox_email_fast_title),
-                color = GlassTokens.onGlass,
-                fontSize = 14.5.sp,
-                fontWeight = FontWeight.SemiBold,
+            // ============== 主路径：邮箱 + 密码（始终可用，无需 GitHub） ==============
+            GlassField(
+                value = email,
+                onValueChange = { email = it },
+                placeholder = stringResource(R.string.mox_email_email_hint),
+                keyboardType = KeyboardType.Email,
             )
-            Text(
-                stringResource(R.string.mox_email_fast_desc),
-                color = GlassTokens.onGlassDim,
-                fontSize = 12.5.sp,
+            GlassField(
+                value = password,
+                onValueChange = {
+                    password = it
+                    pwError = false
+                },
+                placeholder = stringResource(R.string.mox_email_password_hint),
+                keyboardType = KeyboardType.Password,
             )
-
-            when {
-                ghLoading -> Text(
-                    stringResource(R.string.mox_email_fast_loading),
-                    color = GlassTokens.onGlassDim,
-                    fontSize = 13.sp,
-                )
-
-                ghNone -> {
-                    Text(
-                        stringResource(R.string.mox_email_fast_none),
-                        color = GlassTokens.onGlassDim,
-                        fontSize = 13.sp,
-                    )
-                    GlassButton(
-                        text = stringResource(R.string.mox_email_fast_add),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        GitHubLogin.openUrl(ctx, GITHUB_EMAIL_SETTINGS)
-                    }
-                }
-
-                else -> {
-                    // 列出可绑定的 GitHub 已验证邮箱
-                    ghEmails.forEach { candidate ->
-                        GhEmailRow(
-                            label = candidate.label,
-                            onPick = {
-                                val token = SessionStore.get(ctx).orEmpty()
-                                ghLoading = true
-                                scope.launch {
-                                    when (val r = GitHubVerifiedEmail.fetch(token)) {
-                                        is GitHubVerifiedEmail.Result.Ok -> {
-                                            // 以用户实际点选的那个为准
-                                            EmailBindingStore.save(ctx, candidate.email, verified = true)
-                                            boundEmail = candidate.email
-                                            ghVerified = true
-                                            status = ""
-                                            Toast.makeText(
-                                                ctx,
-                                                R.string.mox_email_success,
-                                                Toast.LENGTH_SHORT,
-                                            ).show()
-                                        }
-                                        is GitHubVerifiedEmail.Result.None -> ghNone = true
-                                        is GitHubVerifiedEmail.Result.Failed -> status = r.reason
-                                    }
-                                    ghLoading = false
-                                }
-                            },
-                        )
-                    }
-                    // 主邮箱之外的补充入口：去 GitHub 管理全部邮箱
-                    TextButtonish(
-                        label = stringResource(R.string.mox_email_gh_settings),
-                        onClick = { GitHubLogin.openUrl(ctx, GITHUB_EMAIL_SETTINGS) },
-                    )
-                }
-            }
-
-            // ============== 路径 B：其他邮箱（折叠，默认收起） ==============
-            TextButtonish(
-                label = stringResource(R.string.mox_email_alt_title),
-                onClick = { showAlt = !showAlt },
-            )
-            if (showAlt) {
+            if (pwError) {
                 Text(
-                    stringResource(R.string.mox_email_alt_desc),
+                    stringResource(R.string.mox_email_password_short),
                     color = GlassTokens.onGlassDim,
                     fontSize = 12.sp,
                 )
-
-                if (!AuthConfig.EMAIL_IS_CONFIGURED) {
-                    Text(
-                        stringResource(R.string.mox_email_not_configured),
-                        color = GlassTokens.onGlassDim,
-                        fontSize = 13.sp,
-                    )
+            }
+            GlassButton(
+                text = if (registering) {
+                    stringResource(R.string.mox_email_register_loading)
                 } else {
+                    stringResource(R.string.mox_email_register)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                filled = true,
+                enabled = !registering && email.isNotBlank() && password.length >= 8,
+            ) {
+                if (!EmailAuthClient.isEmailLooksValid(email)) {
+                    status = stringResource(R.string.mox_email_invalid)
+                    return@GlassButton
+                }
+                if (password.length < 8) {
+                    pwError = true
+                    return@GlassButton
+                }
+                registering = true
+                status = ""
+                scope.launch {
+                    val salt = EmailBindingStore.newSaltB64()
+                    val hash = EmailBindingStore.hashPassword(password, salt)
+                    EmailBindingStore.save(
+                        ctx,
+                        email.trim(),
+                        EmailBindingStore.Source.PASSWORD,
+                        passwordHashB64 = hash,
+                        saltB64 = salt,
+                    )
+                    boundEmail = email.trim()
+                    src = EmailBindingStore.Source.PASSWORD
+                    email = ""
+                    password = ""
+                    registering = false
+                    Toast.makeText(ctx, R.string.mox_email_registered, Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            // ============== 路径 A：GitHub 已验证邮箱（仅登录后，折叠） ==============
+            if (loggedIn) {
+                TextButtonish(
+                    label = stringResource(R.string.mox_email_fast_title),
+                    onClick = { showGh = !showGh },
+                )
+                if (showGh) {
+                    Text(
+                        stringResource(R.string.mox_email_fast_desc),
+                        color = GlassTokens.onGlassDim,
+                        fontSize = 12.5.sp,
+                    )
+                    when {
+                        ghLoading -> Text(
+                            stringResource(R.string.mox_email_fast_loading),
+                            color = GlassTokens.onGlassDim,
+                            fontSize = 13.sp,
+                        )
+                        ghNone -> {
+                            Text(
+                                stringResource(R.string.mox_email_fast_none),
+                                color = GlassTokens.onGlassDim,
+                                fontSize = 13.sp,
+                            )
+                            GlassButton(
+                                text = stringResource(R.string.mox_email_fast_add),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                GitHubLogin.openUrl(ctx, GITHUB_EMAIL_SETTINGS)
+                            }
+                        }
+                        else -> {
+                            ghEmails.forEach { candidate ->
+                                GhEmailRow(
+                                    label = candidate.label,
+                                    onPick = {
+                                        val token = SessionStore.get(ctx).orEmpty()
+                                        ghLoading = true
+                                        scope.launch {
+                                            when (val r = GitHubVerifiedEmail.fetch(token)) {
+                                                is GitHubVerifiedEmail.Result.Ok -> {
+                                                    EmailBindingStore.save(
+                                                        ctx,
+                                                        candidate.email,
+                                                        EmailBindingStore.Source.GITHUB,
+                                                    )
+                                                    boundEmail = candidate.email
+                                                    src = EmailBindingStore.Source.GITHUB
+                                                    status = ""
+                                                    showGh = false
+                                                    Toast.makeText(
+                                                        ctx,
+                                                        R.string.mox_email_success,
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                }
+                                                is GitHubVerifiedEmail.Result.None -> ghNone = true
+                                                is GitHubVerifiedEmail.Result.Failed -> status = r.reason
+                                            }
+                                            ghLoading = false
+                                        }
+                                    },
+                                )
+                            }
+                            TextButtonish(
+                                label = stringResource(R.string.mox_email_gh_settings),
+                                onClick = { GitHubLogin.openUrl(ctx, GITHUB_EMAIL_SETTINGS) },
+                            )
+                        }
+                    }
+                    // 首次展开时拉一次 GitHub 邮箱
+                    LaunchedEffect(showGh) {
+                        if (showGh && ghEmails.isEmpty() && !ghNone && !ghLoading) {
+                            ghLoading = true
+                            val token = SessionStore.get(ctx).orEmpty()
+                            when (val r = GitHubVerifiedEmail.fetch(token)) {
+                                is GitHubVerifiedEmail.Result.Ok -> ghEmails = r.emails
+                                is GitHubVerifiedEmail.Result.None -> ghNone = true
+                                is GitHubVerifiedEmail.Result.Failed -> status = r.reason
+                            }
+                            ghLoading = false
+                        }
+                    }
+                }
+            }
+
+            // ============== 路径 B：其他邮箱（仅登录 + 后端已配置，折叠） ==============
+            if (loggedIn && AuthConfig.EMAIL_IS_CONFIGURED) {
+                TextButtonish(
+                    label = stringResource(R.string.mox_email_alt_title),
+                    onClick = { showAlt = !showAlt },
+                )
+                if (showAlt) {
+                    Text(
+                        stringResource(R.string.mox_email_alt_desc),
+                        color = GlassTokens.onGlassDim,
+                        fontSize = 12.sp,
+                    )
                     GlassField(
                         value = email,
                         onValueChange = { email = it },
@@ -309,9 +376,9 @@ fun EmailSignUpCard(
                         scope.launch {
                             when (val r = EmailAuthClient.verify(email, code, token)) {
                                 is EmailAuthClient.VerifyResult.Ok -> {
-                                    EmailBindingStore.save(ctx, r.email, verified = false)
+                                    EmailBindingStore.save(ctx, r.email, EmailBindingStore.Source.CODE)
                                     boundEmail = r.email
-                                    ghVerified = false
+                                    src = EmailBindingStore.Source.CODE
                                     email = ""
                                     code = ""
                                     status = ctx.getString(R.string.mox_email_success)
@@ -327,24 +394,16 @@ fun EmailSignUpCard(
                         }
                     }
                 }
+            } else if (loggedIn && !AuthConfig.EMAIL_IS_CONFIGURED) {
+                Text(
+                    stringResource(R.string.mox_email_not_configured),
+                    color = GlassTokens.onGlassDim,
+                    fontSize = 12.sp,
+                )
             }
 
             if (status.isNotBlank()) {
                 Text(status, color = GlassTokens.onGlassDim, fontSize = 12.5.sp)
-            }
-
-            // 首次进入时自动拉一次 GitHub 邮箱，用户无需多点一次
-            LaunchedEffect(loggedIn) {
-                if (loggedIn && ghEmails.isEmpty() && !ghNone && !ghLoading) {
-                    ghLoading = true
-                    val token = SessionStore.get(ctx).orEmpty()
-                    when (val r = GitHubVerifiedEmail.fetch(token)) {
-                        is GitHubVerifiedEmail.Result.Ok -> ghEmails = r.emails
-                        is GitHubVerifiedEmail.Result.None -> ghNone = true
-                        is GitHubVerifiedEmail.Result.Failed -> status = r.reason
-                    }
-                    ghLoading = false
-                }
             }
         }
     }

@@ -33,11 +33,12 @@ import java.net.URL
  * 邮箱与 GitHub login 一起落库，主体由 `/user` 与 `/user/emails` 两个
  * 接口用**同一个 access token** 取得，客户端无法为他人账号「抢注」邮箱。
  *
- * ## 与路径 B（邮箱验证码）的关系
+ * ## 与其他路径的关系
  *
- * 路径 A 是**默认且推荐**；[EmailAuthClient] 的验证码流程是**补充**，
- * 用于用户想绑定一个「与 GitHub 账号不同」的邮箱时。两者都强绑定 GitHub，
- * 最终都写进同一个 [EmailBindingStore]。
+ * 本对象是**可选**的免密快捷方式；主路径「邮箱 + 密码」[EmailSignUpCard] 不依赖
+ * GitHub。当用户已登录 GitHub、且想直接复用其已验证邮箱时，才走这里（免密）。
+ * [EmailAuthClient] 的验证码流程是**高级补充**，用于绑定一个与 GitHub 不同的
+ * 邮箱，此时才需要 GitHub 令牌作为归属主体。三者最终都写进 [EmailBindingStore]。
  */
 object GitHubVerifiedEmail {
 
@@ -105,7 +106,7 @@ object GitHubVerifiedEmail {
     suspend fun bindBest(ctx: Context, token: String): Result = withContext(Dispatchers.IO) {
         when (val r = fetch(token)) {
             is Result.Ok -> {
-                EmailBindingStore.save(ctx, r.preferred.email, verified = true)
+                EmailBindingStore.save(ctx, r.preferred.email, EmailBindingStore.Source.GITHUB)
                 r
             }
             else -> r

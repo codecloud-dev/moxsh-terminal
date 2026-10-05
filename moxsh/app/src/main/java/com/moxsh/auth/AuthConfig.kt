@@ -56,9 +56,10 @@ object AuthConfig {
     // 客户端只持有 [EMAIL_API_BASE]（服务地址，属公开信息，与 github_client_id
     // 同级、可公开），由 local.properties 的 `email_api_base` 经 buildConfig 注入。
     //
-    // 强约束：邮箱注册**必须**同时登录 GitHub —— 发码与校验两个请求都要带
-    // `Authorization: Bearer <GitHub access token>`，后端以 token 解析出的
-    // GitHub login 作为邮箱归属主体，客户端无法伪造他人身份批量注册。
+    // 邮箱注册**不强制** GitHub 登录：主路径「邮箱 + 密码」独立注册，无需 token。
+    // 仅当使用「验证码」高级路径（绑定与 GitHub 不同的邮箱）时才需要 GitHub
+    // 令牌与后端，此时发码/校验请求带 `Authorization: Bearer <GitHub token>`，
+    // 后端以 token 解析出的 GitHub login 作为归属主体，防伪造批量注册。
     // ------------------------------------------------------------------
 
     /** 邮箱验证服务（mox-id）基址，留空则邮箱注册入口不可用（不会发起任何请求）。 */

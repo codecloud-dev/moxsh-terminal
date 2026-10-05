@@ -8,21 +8,23 @@
 
 ---
 
-## 1. 两条路径，先看这个
+## 1. 三种方式，先看这个
 
-邮箱绑定有**两条路径**，优先级明确：
+邮箱绑定有**三种方式**，主路径**不依赖 GitHub 登录**：
 
-| | **路径 A（默认、推荐）** | **路径 B（补充）** |
-|---|---|---|
-| 做什么 | 直接采用 GitHub 账号里**已验证**的邮箱 | 用另一个邮箱收验证码 |
-| 发邮件吗 | **不发** | 发 |
-| 需要后端吗 | **不需要** | 需要 mox-id |
-| 装上能用吗 | **能** | 需先部署 |
-| 发信限流 / IP 风险 | **不存在**（不发信） | 有，已做多重限流 |
-| 可信度 | GitHub 出具 verified 证明 | 验证码由后端通道签发 |
+| | **主路径：邮箱 + 密码** | **GitHub 已验证邮箱（可选）** | **验证码通道（高级）** |
+|---|---|---|---|
+| 做什么 | 填邮箱 + 设密码即注册 | 一键采用 GitHub 已验证邮箱 | 用另一个邮箱收验证码 |
+| 需要 GitHub 登录吗 | **不需要** | 需要（仅作快捷来源） | 需要（作为归属主体） |
+| 发邮件吗 | **不发** | **不发** | 发 |
+| 需要后端吗 | **不需要** | **不需要** | 需要 mox-id |
+| 装上能用吗 | **能** | **能** | 需先部署 |
+| 密码 | 用户自设（PBKDF2 本地派生） | 免密（GitHub 即身份证明） | 免密（验证码即证明） |
+| 可信度 | 用户自证（本地凭据） | GitHub 出具 verified 证明 | 验证码由后端通道签发 |
 
-**结论：路径 A 已经覆盖绝大多数用户，装上 APK 即可用，不需要部署任何服务。**
-路径 B 只在「想绑定一个与 GitHub 账号不同的邮箱」时才需要。
+**结论：邮箱注册不再强制 GitHub 登录。** 绝大多数用户用「邮箱 + 密码」即可，
+装上 APK 即可用；已登录 GitHub 的用户可一键用已验证邮箱免密绑定。验证码通道
+只在「想绑定一个与 GitHub 账号不同的邮箱」且已部署后端时才需要。
 
 ---
 
@@ -52,21 +54,23 @@
 
 ---
 
-## 3. 路径 A：GitHub 已验证邮箱一键绑定
+## 3. GitHub 已验证邮箱（可选快捷方式）
+
+> 这是**可选**的便捷入口，不是前提。未登录 GitHub 时完全不显示，主路径「邮箱 + 密码」照常可用。
 
 ### 3.1 流程
 
 ```
-GitHub 设备流登录
-      ↓  拿到 access token（scope: read:user user:email read:org）
+已通过 GitHub 设备流登录（拿到 access token，scope: read:user user:email read:org）
+      ↓
 GET https://api.github.com/user/emails
       ↓  筛出 verified == true，主邮箱优先
-写入 EmailBindingStore（EncryptedSharedPreferences）
+写入 EmailBindingStore（来源 = GITHUB，免密）
       ↓
 绑定完成
 ```
 
-实现见 `GitHubVerifiedEmail.kt`；UI 见 `EmailSignUpCard.kt` 的路径 A 区域。
+实现见 `GitHubVerifiedEmail.kt`；UI 见 `EmailSignUpCard.kt` 的 GitHub 快捷方式区域。
 
 ### 3.2 归属主体不可伪造
 
@@ -81,16 +85,16 @@ GET https://api.github.com/user/emails
 
 ---
 
-## 4. 强约束：邮箱永远不能独立登录
+## 4. 邮箱是独立账号，GitHub 是可选来源
 
-无论走哪条路径，邮箱都是**已登录 GitHub 账号的附属信息**，不是独立凭据：
+主路径「邮箱 + 密码」注册出的就是**独立账号**，与 GitHub 登录解耦：
 
 | 约束 | 实现 |
 |---|---|
-| 未登录 GitHub 时无法进入邮箱绑定 | 客户端卡片禁用并提示先登录；请求层再挡一次（缺 token 直接 401） |
-| 邮箱归属主体由 GitHub 决定 | 发码/校验都强制 `Authorization: Bearer <GitHub access token>`，后端以 token 解析出的 `login` 为主体 |
-| 客户端无法伪造身份 | 无 GitHub token 拿不到验证码；换邮箱也只绑到自己账号名下 |
-| 退出会话即解除绑定 | `SessionStore.clear` 时同步 `EmailBindingStore.clear`；`EmailBindingStore.get` 在未登录态直接返回 `null` |
+| 邮箱可独立于 GitHub 存在 | 主路径不要求登录；`EmailBindingStore.get` 不再以 `SessionStore.isLoggedIn` 为前置；退出 GitHub 也不清除邮箱 |
+| 密码本地派生 | 密码经 PBKDF2（随机盐 + 10k 迭代）派生后存入 `EncryptedSharedPreferences`，明文不落盘，作为该账号的独立凭据 |
+| 验证码通道仍须 GitHub 作为归属主体 | 仅当用「验证码」高级路径绑定与 GitHub 不同的邮箱时，发码/校验强制 `Authorization: Bearer <GitHub token>`，后端以 token 的 `login` 为主体，防伪造批量注册 |
+| 客户端无法伪造他人身份 | 验证码通道无 GitHub token 拿不到验证码；换邮箱只绑到自己账号名下 |
 
 ---
 
@@ -245,13 +249,14 @@ private key」。
 
 | 状态 | 表现 |
 |---|---|
-| 未登录 GitHub | 整张卡片禁用，提示「请先完成 GitHub 登录，再绑定邮箱」，不发任何请求 |
-| 已登录 · 路径 A 可用 | 列出 GitHub 已验证邮箱，点一下即绑定，标注「GitHub 已验证」 |
+| 未登录 GitHub | 主路径「邮箱 + 密码」**照常可用**；GitHub 快捷方式与验证码通道不显示 |
+| 已登录 · GitHub 快捷方式 | 折叠区展开列出 GitHub 已验证邮箱，点一下即绑定（免密），标注「GitHub 已验证」 |
 | 已登录 · GitHub 无已验证邮箱 | 引导去 GitHub 邮箱设置页添加并验证 |
-| 已登录 · 路径 B 未配置后端 | 折叠区展开后显示「服务未配置」，**不发任何请求** |
-| 已登录 · 路径 B 可用 | 邮箱输入 → 获取验证码（60s 倒计时防刷）→ 输 6 位 → 完成绑定 |
-| 已绑定 | 展示邮箱 + 来源徽章（GitHub 已验证 / 验证码验证）+ 「解除绑定」 |
-| 退出 GitHub 登录 | 邮箱绑定同步解除 |
+| 已登录 · 验证码通道未配置后端 | 折叠区展开后显示「服务未配置」，**不发任何请求** |
+| 已登录 · 验证码通道可用 | 邮箱输入 → 获取验证码（60s 倒计时防刷）→ 输 6 位 → 完成绑定 |
+| 已绑定 | 展示邮箱 + 来源徽章（GitHub 已验证 / 密码注册 / 验证码验证）+ 「解除绑定」 |
+| 退出 GitHub 登录 | **邮箱绑定保留**（邮箱是独立账号，不随 GitHub 退出清除） |
 
 绑定结果存于 `EmailBindingStore`（`EncryptedSharedPreferences`，AES-256 +
-Android Keystore），与 GitHub token 同源的安全存储。
+Android Keystore），与 GitHub token 同源的安全存储。密码以 PBKDF2-HMAC-SHA256
+（随机盐 + 10k 迭代）派生后存储，明文不落盘。
