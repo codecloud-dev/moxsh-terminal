@@ -89,6 +89,16 @@ jobs:
         if: ${{ env.KEYSTORE_BASE64 != '' }}
         run: echo "$KEYSTORE_BASE64" | base64 -d > moxsh/release.jks
 
+      # 注入公开的 mox-id 服务地址（workers.dev 子域，非机密），让发布的 APK 路径 B 能连上。
+      # 缺省用已知部署地址；仓库 Settings → Variables 设 EMAIL_API_BASE 可覆盖。
+      - name: 写入 local.properties（注入服务地址）
+        working-directory: moxsh
+        run: |
+          {
+            echo "email_api_base=${{ vars.EMAIL_API_BASE || 'https://mox-id-email.3042980037.workers.dev' }}"
+          } > local.properties
+          echo "email_api_base 已注入"
+
       # Rust/NDK/cargo 交叉编译链偶发网络超时（crates.io / maven 抖动）会直接打挂整个构建。
       # 这里加重试：最多 3 次，每次把完整日志 tee 到 /tmp/build.log，最后失败时诊断步骤直接读该文件，
       # 不必再 clean 全量重编译（既慢又可能再次撞网络）。

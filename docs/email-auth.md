@@ -111,26 +111,38 @@ GET https://api.github.com/user/emails
 共享 IP 池已预热、送达率高、自带退信与配额管理，专为程序化发信设计。
 密钥以 `wrangler secret` 存放，代码与公开仓库中零字面量。
 
-### 5.2 部署
+### 5.2 部署（走 CI，凭证在仓库 Secrets 里）
+
+部署由 `.github/workflows/deploy-edge.yml` 自动完成，**无需本地手敲凭证**：
+
+- 触发：`push` 到 `main` 且改动 `edge/**`，或 `workflow_dispatch` 手动触发。
+- 凭证全部来自仓库 Secrets（CI 内可读，本地读不到值）：
+  - `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` —— Cloudflare 部署凭证（**已配置**）。
+  - `RESEND_API_KEY` —— Resend API Key（**可选**；仓库里配了才会注入 Worker，路径 B 才发得出信）。
+  - `MAIL_FROM` —— 作为 **Variable**（非机密）配置的已验证发件地址，如 `mox@yourdomain.com`。
+- 流程：`npm ci` → `tsc` 类型检查 → 进程内集成测试（11 项）→ `d1 execute` 同步表结构（幂等）→
+  按需注入 `RESEND_API_KEY`/`MAIL_FROM` → `wrangler deploy`。
+- `pull_request` 只跑「类型检查 + 集成测试」做门禁，不部署。
+
+> ⚠️ **启用路径 B 前必须做两件事**（否则 Worker 会返回 `mail_configured:false`，发码失败）：
+> 1. 在仓库 **Settings → Secrets** 加 `RESEND_API_KEY`（resend.com 控制台生成）。
+> 2. 在仓库 **Settings → Variables** 加 `MAIL_FROM`（Resend 里已验证域名的发件地址）。
+> 两者加好后，下一次 `main` 推送会自动注入并生效，无需改代码。
+
+> 本地手动部署（仅调试用，等价于 CI 步骤）：
 
 ```bash
 cd edge/mox-id
+export CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=...   # 来自仓库 Secrets / 本地 .env
 npm install
-
-# 1) 建 D1 库并记下 database_id，写入 wrangler.jsonc
-npx wrangler d1 create mox-id
 npx wrangler d1 execute mox-id --remote --file=./migrations/0001_init.sql
-
-# 2) 配密钥（交互式输入，不进版本库）
-npx wrangler secret put RESEND_API_KEY# resend.com 控制台的 API Key
-npx wrangler secret put MAIL_FROM       # 已验证的发件地址，如 mox@yourdomain.com
-
-# 3) 部署
+npx wrangler secret put RESEND_API_KEY        # 交互式，不进版本库
+npx wrangler vars set MAIL_FROM mox@yourdomain.com
 npx wrangler deploy
 ```
 
 探活：`curl https://<worker>.workers.dev/health` →
-`{"ok":true,"mail_configured":true}`
+`{"ok":true,"mail_configured":true}`（未配 Resend 时为 `false`）
 
 ### 5.3 限流策略（针对发信被限的问题）
 
