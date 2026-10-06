@@ -28,7 +28,7 @@
 ### 修复
 
 - **版本号回归**:`versionName` 由遗留的 `0.5.0` 修正为 `0.6.2`(此前 v0.6.0 发布包内 APK 仍显示 0.5.0)。
-- **4 处编译错误**:`KeyboardOptions` 导入从错误的 `androidx.compose.foundation.text` 改回 `androidx.compose.ui.text.input`(`GlassWidgets` / `EmailSignUpCard` / `TerminalView`);`SettingsScreen` 补 `stringResource` 与 `com.moxsh.R` 导入;`EmailSignUpCard` 注册成功回调改用局部非空 `val`,规避委托属性(自定义 getter)的智能转型失败。
+- **4 处编译错误**:`KeyboardOptions` 导入修正为 `androidx.compose.foundation.text`(`GlassWidgets` / `EmailSignUpCard` / `TerminalView` —— 本项目所用 Compose 版本中 `KeyboardOptions` 位于 `foundation.text`,而非 `ui.text.input`);`SettingsScreen` 补 `stringResource` 与 `com.moxsh.R` 导入;`EmailSignUpCard` 注册成功回调改用局部非空 `val`,规避委托属性(自定义 getter)的智能转型失败。
 
 [0.6.2]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.2
 
