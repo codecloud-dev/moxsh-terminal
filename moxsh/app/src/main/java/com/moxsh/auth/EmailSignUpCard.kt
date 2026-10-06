@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -204,20 +204,21 @@ fun EmailSignUpCard(
                 scope.launch {
                     val salt = EmailBindingStore.newSaltB64()
                     val hash = EmailBindingStore.hashPassword(password, salt)
+                    val finalEmail = email.trim()
                     EmailBindingStore.save(
                         ctx,
-                        email.trim(),
+                        finalEmail,
                         EmailBindingStore.Source.PASSWORD,
                         passwordHashB64 = hash,
                         saltB64 = salt,
                     )
-                    boundEmail = email.trim()
+                    boundEmail = finalEmail
                     src = EmailBindingStore.Source.PASSWORD
                     email = ""
                     password = ""
                     registering = false
                     Toast.makeText(ctx, R.string.mox_email_registered, Toast.LENGTH_SHORT).show()
-                    onRegistered(boundEmail)
+                    onRegistered(finalEmail)
                 }
             }
 
