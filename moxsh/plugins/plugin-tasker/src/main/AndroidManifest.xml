@@ -6,18 +6,25 @@
           接收 com.moxsh.plugin.tasker.RUN 意图，解析命令经 CompatShim 路由执行，
           结果以 PendingIntent 或广播回传 Tasker。
         -->
+        <!--
+          命令执行接收器（重写 Termux:Tasker）：执行任意命令，属高危组件。
+          android:permission=signature 级权限在系统侧强制——仅同签名 App（含本应用自身）
+          可投递此广播，第三方 App（含外部 Tasker）无法直接触发命令执行。
+          若需外部 Tasker 联动，应改为同签名桥接组件，而非放开此接收器。
+        -->
         <receiver
             android:name=".TaskerReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:permission="com.termux.permission.RUN_COMMAND">
             <intent-filter>
                 <action android:name="com.moxsh.plugin.tasker.RUN" />
             </intent-filter>
         </receiver>
 
-        <!-- Tasker 命令模板的玻璃配置面板 -->
+        <!-- Tasker 命令模板的玻璃配置面板（内部 UI，不对外暴露） -->
         <activity
             android:name=".TaskerGlassActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.Moxsh.Glass" />
     </application>
 </manifest>

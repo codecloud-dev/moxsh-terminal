@@ -4,7 +4,7 @@
     <application>
         <activity
             android:name=".FloatGlassActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleInstance"
             android:theme="@style/Theme.Moxsh.Glass" />
     </application>
