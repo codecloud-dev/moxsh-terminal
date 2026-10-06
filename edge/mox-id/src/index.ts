@@ -67,14 +67,29 @@ interface Session {
   id: number;
 }
 
+// 跨域来源白名单：仅官网同域、GitHub Pages 镜像与本地开发回显 CORS。
+// 此前为 '*'，虽本 Worker 走 Bearer Token（非 Cookie，无经典 CSRF 风险），
+// 但收紧为显式白名单可消除审计指出的宽松头隐患，且与前端 api-proxy 策略一致。
+const ALLOWED_ORIGINS = new Set<string>([
+  'https://moxsh.app',
+  'https://www.moxsh.app',
+  'https://mox-site.pages.dev',
+  'https://codecloud-dev.github.io',
+]);
+
+function resolveCorsOrigin(origin?: string | null): string | null {
+  if (!origin) return null;
+  if (ALLOWED_ORIGINS.has(origin)) return origin;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return origin;
+  return null;
+}
+
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
-      // 客户端为 Android 原生，不涉及浏览器 CORS；保留宽松头便于自测工具调用
-      'access-control-allow-origin': '*',
     },
   });
 
@@ -421,22 +436,33 @@ export default {
       return json({ ok: true, service: 'mox-id-email', mail_configured: configured });
     }
 
-    if (request.method === 'OPTIONS') return json({ ok: true });
+    if (request.method === 'OPTIONS') return withCors(json({ ok: true }), request);
     if (request.method !== 'POST') return fail('仅支持 POST', 405);
 
     try {
       switch (url.pathname) {
         case '/auth/email/send-code':
-          return await handleSendCode(request, env);
+          return withCors(await handleSendCode(request, env), request);
         case '/auth/email/verify':
-          return await handleVerify(request, env);
+          return withCors(await handleVerify(request, env), request);
         default:
-          return fail('Not Found', 404);
+          return withCors(fail('Not Found', 404), request);
       }
     } catch (e) {
       // 日志中不输出任何密钥或验证码
       console.error('email-auth error:', (e as Error)?.message);
-      return fail('服务异常，请稍后再试', 500);
+      return withCors(fail('服务异常，请稍后再试', 500), request);
     }
   },
 };
+
+/** 按请求来源白名单回显 CORS 头（未命中则不发，避免宽松 '+' 暴露）。 */
+function withCors(res: Response, request: Request): Response {
+  const origin = resolveCorsOrigin(request.headers.get('origin'));
+  if (origin) {
+    res.headers.set('access-control-allow-origin', origin);
+    res.headers.set('access-control-allow-methods', 'POST, OPTIONS');
+    res.headers.set('access-control-allow-headers', 'authorization, content-type');
+  }
+  return res;
+}

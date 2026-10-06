@@ -600,18 +600,7 @@ pub fn extract_tar(archive: &Path, dest: &Path) -> ProotResult<()> {
         }
         Ok(())
     } else if lower.ends_with(".tar.xz") || lower.ends_with(".tar.zst") || lower.ends_with(".txz") {
-        let st = Command::new("tar")
-            .arg("-xf")
-            .arg(archive)
-            .arg("-C")
-            .arg(dest)
-            .status()
-            .map_err(ProotError::Io)?;
-        if st.success() {
-            Ok(())
-        } else {
-            Err(ProotError::ExtractFailed(format!("tar 解压失败: {}", name)))
-        }
+        extract_tar_subprocess(archive, dest)
     } else {
         // 未知后缀：先试 gz（大部分 rootfs 是 tar.gz），失败再交系统 tar。
         match fs::File::open(archive) {
@@ -622,24 +611,44 @@ pub fn extract_tar(archive: &Path, dest: &Path) -> ProotResult<()> {
                 let f2 = fs::File::open(archive)?;
                 match extract_tar_gz_checked(f2, dest) {
                     Ok(()) => Ok(()),
-                    Err(_) => {
-                        let st = Command::new("tar")
-                            .arg("-xf")
-                            .arg(archive)
-                            .arg("-C")
-                            .arg(dest)
-                            .status()
-                            .map_err(ProotError::Io)?;
-                        if st.success() {
-                            Ok(())
-                        } else {
-                            Err(ProotError::ExtractFailed(name))
-                        }
-                    }
+                    Err(_) => extract_tar_subprocess(archive, dest),
                 }
             }
             Err(e) => Err(ProotError::Io(e)),
         }
+    }
+}
+
+/// 系统 `tar` 子进程回退解包（仅用于 .xz/.zst/未知后缀，Rust `tar` crate 不支持的压缩）。
+///
+/// 安全加固（P1 修复：解包写穿）：
+/// - `dest` 先 `canonicalize`，确保 `-C` 落点是真实绝对路径，避免路径歧义；
+/// - `--no-same-owner`：不还原归档内的 uid/gid，避免以任意 uid（含 0/root）落盘；
+/// - `--no-same-permissions`：不还原 setuid/setgid 位与归档 mode，避免恶意提权位；
+/// - 若 toybox tar 不支持 `--no-same-permissions` 而失败，回退一次不带该 flag 的调用，
+///   仍保留 `--no-same-owner` 与规范化 dest 两道基本防线。
+///
+/// 注意：系统 tar 不具备 Rust crate 的逐条目符号链接/越界防御，故仅作最后的压缩
+/// 格式兜底；主流 rootfs（tar.gz）始终走 `extract_tar_gz_checked` 的安全路径。
+fn extract_tar_subprocess(archive: &Path, dest: &Path) -> ProotResult<()> {
+    let dest_abs = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+    let try_extract = |extra: &[&str]| -> ProotResult<bool> {
+        let mut cmd = Command::new("tar");
+        cmd.arg("-xf").arg(archive).arg("-C").arg(&dest_abs);
+        cmd.args(extra);
+        let st = cmd.status().map_err(ProotError::Io)?;
+        Ok(st.success())
+    };
+    if try_extract(&["--no-same-owner", "--no-same-permissions"])? {
+        Ok(())
+    } else if try_extract(&["--no-same-owner"])? {
+        // toybox tar 回退：保留 --no-same-owner，放弃 --no-same-permissions
+        Ok(())
+    } else {
+        Err(ProotError::ExtractFailed(format!(
+            "tar 解压失败: {}",
+            archive.file_name().map(|s| s.to_string_lossy()).unwrap_or_default()
+        )))
     }
 }
 

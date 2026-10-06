@@ -52,6 +52,16 @@ jobs:
         working-directory: edge/mox-id
         run: npx tsc --noEmit
 
+      - name: 注入 D1_DATABASE_ID 占位（wrangler 不解析 {{ }}）
+        working-directory: edge/mox-id
+        run: |
+          # verify 阶段无真实库 ID（PR/日志轮次），注入占位 UUID 让 getPlatformProxy 通过校验；
+          # 真实 ID 仅在 deploy 阶段注入（见下）。
+          sed -i.bak -e 's/{{D1_DATABASE_ID}}/00000000-0000-0000-0000-000000000000/g' wrangler.jsonc
+          sed -i.bak -e 's#mox@REPLACE_WITH_YOUR_DOMAIN#noreply@moxsh.local#g' wrangler.jsonc
+          rm -f wrangler.jsonc.bak
+          echo "verify 阶段已注入占位 D1_ID / MAIL_FROM"
+
       - name: 进程内集成测试（wrangler getPlatformProxy，真实代码路径）
         working-directory: edge/mox-id
         run: |
@@ -83,6 +93,20 @@ jobs:
       - name: Install edge deps
         working-directory: edge/mox-id
         run: npm ci
+
+      - name: 注入 D1_DATABASE_ID（wrangler 不解析 {{ }}，部署前必须替换）
+        working-directory: edge/mox-id
+        run: |
+          if [ -z "$D1_DATABASE_ID" ]; then
+            echo "::error::仓库未配置 Variable D1_DATABASE_ID，无法部署 mox-id Worker"
+            exit 1
+          fi
+          sed -i.bak -e "s/{{D1_DATABASE_ID}}/${D1_DATABASE_ID}/g" wrangler.jsonc
+          if [ -n "$MAIL_FROM" ]; then
+            sed -i.bak -e "s#mox@REPLACE_WITH_YOUR_DOMAIN#${MAIL_FROM}#g" wrangler.jsonc
+          fi
+          rm -f wrangler.jsonc.bak
+          echo "已注入真实 D1_DATABASE_ID（前8位：${D1_DATABASE_ID:0:8}…）"
 
       - name: 初始化/同步 D1 表结构（remote，幂等：全部 IF NOT EXISTS）
         working-directory: edge/mox-id

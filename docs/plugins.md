@@ -179,7 +179,7 @@ openssl dgst -sha256 -hmac "你的签名密钥" manifest.json \
   | awk '{print $2}' > signature
 ```
 
-> 开发期使用与宿主一致的官方测试密钥即可通过验签（见 `plugin-store` 的 `StoreSecrets`）；正式分发请使用你自己的密钥并在发布渠道说明，避免被他人冒签。
+> 开发期使用与宿主一致的官方测试密钥即可通过验签；验签密钥**不再硬编码在库源码**里，而是由构建注入：CI 设置环境变量 `MOX_STORE_SECRET`（或本地 `local.properties` 的 `MOX_STORE_SECRET`），经 `BuildConfig.MOX_STORE_SECRET` 暴露给 `StoreRepository.install`（详见 `plugin-store/build.gradle.kts`）。未注入时回退为开发期占位常量。**正式发布必须在 CI 注入真实签名密钥**，切勿把生产密钥提交进仓库；第三方正式分发请使用你自己的密钥并在发布渠道说明，避免被他人冒签。
 
 ### ③ 打 tar 包
 
