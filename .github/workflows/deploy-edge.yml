@@ -35,7 +35,7 @@ jobs:
       WRANGLER_SEND_METRICS: 'false'
       D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           clean: true
 
@@ -71,7 +71,7 @@ jobs:
       MAIL_FROM: ${{ vars.MAIL_FROM }}
       D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           clean: true
 

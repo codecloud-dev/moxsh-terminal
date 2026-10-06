@@ -23,7 +23,7 @@ jobs:
     name: 测试（host target）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: 安装工具链（跟随 rust-toolchain.toml 钉死 1.86.0）
         uses: dtolnay/rust-toolchain@master
         with:
@@ -39,7 +39,7 @@ jobs:
     name: Clippy 静态检查
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.86.0"
@@ -55,7 +55,7 @@ jobs:
     name: 依赖漏洞扫描
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # audit 是独立工具（不参与构建），用预编译二进制安装，
       # 避免受项目钉死的 1.86.0 工具链限制（cargo-audit 0.22.x 需 1.88+）
       - uses: taiki-e/install-action@v2
@@ -69,7 +69,7 @@ jobs:
     name: Android aarch64 交叉编译检查
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.86.0"
