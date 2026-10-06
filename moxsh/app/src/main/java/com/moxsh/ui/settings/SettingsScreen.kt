@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import com.moxsh.auth.EmailBindingStore
 import com.moxsh.auth.GitHubLogin
 import com.moxsh.auth.MoxAccount
+import com.moxsh.R
+import androidx.compose.ui.res.stringResource
 import com.moxsh.auth.SessionStore
 import com.moxsh.auth.UserProfileStore
 import com.moxsh.cloud.SyncClient

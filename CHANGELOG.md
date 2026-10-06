@@ -19,6 +19,19 @@
 - 本地小模型接入（llama.cpp 端侧）
 - 插件售卖支付流程（manifest 中 author/price/purchased 字段已预留）
 
+## [0.6.2] - 2026-10-06
+
+### 新增
+
+- **邮箱 + 密码独立账号(不再强制 GitHub 登录)**:`LoginActivity` 改为 GitHub / 邮箱双 Tab 登录页;邮箱 + 密码自注册(`EmailSignUpCard`,PBKDF2-HMAC-SHA256 + 随机盐);新增统一账号门面 `MoxAccount` 与登录态持久化 `EmailSessionStore`;GitHub 已验证邮箱可一键绑定,密码为可选项。
+
+### 修复
+
+- **版本号回归**:`versionName` 由遗留的 `0.5.0` 修正为 `0.6.2`(此前 v0.6.0 发布包内 APK 仍显示 0.5.0)。
+- **4 处编译错误**:`KeyboardOptions` 导入从错误的 `androidx.compose.foundation.text` 改回 `androidx.compose.ui.text.input`(`GlassWidgets` / `EmailSignUpCard` / `TerminalView`);`SettingsScreen` 补 `stringResource` 与 `com.moxsh.R` 导入;`EmailSignUpCard` 注册成功回调改用局部非空 `val`,规避委托属性(自定义 getter)的智能转型失败。
+
+[0.6.2]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.2
+
 ## [0.6.1] - 2026-09-30
 
 ### 修复

@@ -26,8 +26,8 @@ android {
         applicationId = "com.moxsh"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.5.0"
+        versionCode = 62
+        versionName = "0.6.2"
 
         // GitHub 登录 client_id（设备流）：来自 local.properties，公开安全，
         // 不写死、不提交 git。仅此一个值进 APK，且本就可公开。
