@@ -11,7 +11,9 @@
     {
       "binding": "DB",
       "database_name": "mox-id",
-      "database_id": "ecbd980b-f017-464f-80ec-465b124653eb",
+      // database_id 改为环境变量引用，避免明文写死在公开仓库；
+      // 本地放 edge/mox-id/.dev.vars，CI 通过仓库 Variable D1_DATABASE_ID 注入（见 deploy-edge.yml）。
+      "database_id": "{{D1_DATABASE_ID}}",
       "migrations_dir": "migrations"
     }
   ],
