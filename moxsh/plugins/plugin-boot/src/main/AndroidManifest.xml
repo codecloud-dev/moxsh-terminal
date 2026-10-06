@@ -17,10 +17,10 @@
             </intent-filter>
         </receiver>
 
-        <!-- 自启命令的玻璃配置面板 -->
+        <!-- 自启命令的玻璃配置面板（内部 UI，仅本应用显式启动，不对外暴露） -->
         <activity
             android:name=".BootGlassActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.Moxsh.Glass" />
     </application>
 </manifest>

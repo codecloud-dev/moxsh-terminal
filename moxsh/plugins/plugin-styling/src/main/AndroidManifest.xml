@@ -3,7 +3,7 @@
     <application>
         <activity
             android:name=".StyleGlassActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.Moxsh.Glass" />
     </application>
 </manifest>

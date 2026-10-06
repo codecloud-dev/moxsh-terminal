@@ -15,14 +15,32 @@ android {
             val f = project.rootProject.file("local.properties")
             if (f.exists()) f.inputStream().use { load(it) }
         }
-    val storeSecret: String =
+    // 原始密钥值（CI 环境变量 > 本地 local.properties）；为空表示未配置。
+    val rawSecret: String? =
         System.getenv("MOX_STORE_SECRET")
             ?: localProps.getProperty("MOX_STORE_SECRET")
-            ?: "moxsh-official-store-v1"
+    // 开发期占位常量：仅 debug 构建允许回退，release 严禁（见下方 buildTypes）。
+    val DEV_FALLBACK = "moxsh-official-store-v1"
 
     defaultConfig {
         minSdk = 28
+        // debug / 未配置时回退开发占位；release 会在 buildTypes 里直接构建失败。
+        val storeSecret = rawSecret ?: DEV_FALLBACK
         buildConfigField("String", "MOX_STORE_SECRET", "\"$storeSecret\"")
+    }
+
+    buildTypes {
+        // P0 修复：release 构建若未注入真实密钥，严禁回退到公开 DEV_FALLBACK
+        // （那等于把密钥就写在 APK 里）。CI 必须配置 MOX_STORE_SECRET，否则构建即失败。
+        release {
+            if (rawSecret.isNullOrBlank()) {
+                throw GradleException(
+                    "MOX_STORE_SECRET 未配置：release 构建禁止回退到公开 DEV_FALLBACK 密钥 " +
+                        "（moxsh-official-store-v1）。请在 CI 环境变量或 local.properties 设置 " +
+                        "MOX_STORE_SECRET 后再打 release 包。",
+                )
+            }
+        }
     }
 
     compileOptions {

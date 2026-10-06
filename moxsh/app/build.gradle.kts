@@ -25,7 +25,10 @@ android {
     defaultConfig {
         applicationId = "com.moxsh"
         minSdk = 28
-        targetSdk = 34
+        // 对齐 Termux：降到 28 以避免 Android 10+ 对 app 私有目录可执行文件的 W^X
+        // 限制（SELinux 拒绝 exec），否则 bin 写盘后 setExecutable 在真机 Permission denied
+        // （CI 模拟器不触发 SELinux 故一直绿）。
+        targetSdk = 28
         versionCode = 62
         versionName = "0.6.2"
 
