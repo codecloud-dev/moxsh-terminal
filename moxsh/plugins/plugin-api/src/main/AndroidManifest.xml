@@ -6,14 +6,16 @@
 
     <!--
       兼容 Termux 的 RUN_COMMAND 自定义权限（D7 体系①）：
-      moxsh 是该权限的 owner，第三方 app 声明 uses-permission 后即可调用；
-      签名体系仍是 moxsh 自有签名，与原 Termux 不互通（契约兼容而非签名兼容）。
+      moxsh 是该权限的 owner。原本 protectionLevel=dangerous 意味着任意 app 只要
+      声明 <uses-permission> 即可调用导出的 TermuxCompatHost 服务、执行真实 shell
+      命令——这是高危暴露。改为 signature 后，只有与 moxsh 同签名（同证书）的 app
+      才能持有该权限，对齐 Termux 官方实现，契约（action 名）仍然兼容。
     -->
     <permission
         android:name="com.termux.permission.RUN_COMMAND"
         android:label="moxsh 兼容 Termux 的 RUN_COMMAND 权限"
         android:description="@string/compat_run_command_permission_desc"
-        android:protectionLevel="dangerous" />
+        android:protectionLevel="signature" />
 
     <application>
         <!--

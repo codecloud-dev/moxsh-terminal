@@ -68,17 +68,17 @@ object BootstrapInstaller {
 
     /**
      * 各 bootstrap 架构包的官方 sha256（GitHub Release 资产 digest 核实，
-     * `gh api repos/termux/termux-packages/releases/tags/<tag>` 可复核）。
+     * `gh api repos/termux/termux-packages/releases/tags/<tag>` 可复核；
+     * 升级 [TERMUX_BOOTSTRAP_TAG] 时必须同步更新下方哈希，否则校验会失败）。
      *
-     * 注意：留空 = 跳过校验（优先保证"能装上"）。此前因占位哈希与真实包不符，
-     * 导致每次下载都"校验失败"、所有源失败、永久"环境加载错误"。若填入真实哈希，
-     * 校验不一致会仅告警并继续安装，不再阻断。
+     * 完整性校验 **fail-closed**：哈希非空时，不一致即视为该源损坏/被篡改，
+     * 中止该源并回退下一源（不再"仅告警并继续"）。
      */
     private val TERMUX_SHA256 = mapOf(
-        "aarch64" to "",
-        "arm" to "",
-        "i686" to "",
-        "x86_64" to "",
+        "aarch64" to "65ba578133ea2f4e5cc07234568815397cf9e1236b5da8c06ce6753cf036cc69",
+        "arm" to "1c953b1d808c45fd578b7a3b4ba4d6b6f54329a7f6db57dceeab55fe997102e8",
+        "i686" to "db0c868c88b8d814e71b7e2d60438c836b903585140f40046d885ce103e789fe",
+        "x86_64" to "2d23d45c1a9e72dda2172895c218334473a2d1560e724f4b88323e56e80736ff",
     )
 
     /** 设备 ABI -> Termux bootstrap 架构名映射（Termux 只按这 4 个架构分发）。 */
@@ -95,13 +95,6 @@ object BootstrapInstaller {
         BootstrapSource(
             label = "Termux 官方源（GitHub 直连）",
             url = "https://github.com/termux/termux-packages/releases/download/$TERMUX_BOOTSTRAP_TAG/bootstrap-%ABI%.zip",
-            sha256 = "%SHA256%",
-            format = Format.ZIP,
-            abis = emptySet(),
-        ),
-        BootstrapSource(
-            label = "Termux 官方源（国内加速）",
-            url = "https://ghproxy.net/https://github.com/termux/termux-packages/releases/download/$TERMUX_BOOTSTRAP_TAG/bootstrap-%ABI%.zip",
             sha256 = "%SHA256%",
             format = Format.ZIP,
             abis = emptySet(),
@@ -185,9 +178,17 @@ object BootstrapInstaller {
                     if (source.sha256.isNotEmpty()) {
                         val actual = sha256Hex(pkgFile)
                         if (!actual.equals(source.sha256, ignoreCase = true)) {
-                            // 校验不一致：仅告警并继续（避免错误哈希导致永久"环境加载错误"）
-                            listener.onProgress(2, 0, "校验不一致（${source.label}），仍继续安装…")
+                            // 校验不一致 = 源损坏或被篡改：fail-closed，中止该源并回退下一源
+                            pkgFile.delete()
+                            throw BootstrapException(
+                                "完整性校验失败（${source.label}）：实际 ${
+                                    actual.take(16)
+                                }… 与预期不符，已丢弃该源",
+                            )
                         }
+                    } else {
+                        // 哈希未配置：无法做加密完整性校验，显式告警（不静默信任）
+                        listener.onProgress(2, 0, "⚠️ 未配置哈希，跳过完整性校验（${source.label}）")
                     }
                     chosen = source
                     break // 下载+校验通过
@@ -519,12 +520,13 @@ object BootstrapInstaller {
                 "nameserver 119.29.29.29\n",
         )
 
-        // 4. 包源模板：moxsh 自研包管理 CLI 读取（mox 格式仓库，国内 CDN 置顶）
+        // 4. 包源模板：moxsh 自研包管理 CLI 读取（mox 格式仓库，官方仓库置顶）
         File(etc, "moxsh-sources.list").writeText(
             "# moxsh 包源（自研 mox 格式仓库，按优先级排序）\n" +
-                "# 1) moxsh 国内 CDN（默认）\n" +
-                "# 2) moxsh 官方源（回退）\n" +
-                "# TODO(CI): 填入真实仓库地址（M6）\n",
+                "# 1) moxsh 官方 GitHub 发布源（默认，已校验可达）\n" +
+                "https://github.com/codecloud-dev/moxsh-terminal/releases\n" +
+                "# 2) moxsh 国内镜像（M6 启用，待 CDN 域名就绪后取消注释）\n" +
+                "# https://mirror.moxsh.app/packages\n",
         )
 
         // 5. 兼容层提示：apt 风格 sources（发行版在 proot 容器内用容器自身的源，与这里无关）

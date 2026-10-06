@@ -26,10 +26,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- 兼容 Termux 的 RUN_COMMAND 意图，让旧脚本可调用 moxsh -->
-            <intent-filter>
-                <action android:name="com.termux.RUN_COMMAND" />
-            </intent-filter>
         </activity>
 
         <!-- 会话保活 foreground service；specialUse 类型按 Android 14 要求声明子类型说明 -->

@@ -7,7 +7,23 @@ android {
     namespace = "com.moxsh.plugin.store"
     compileSdk = 34
 
-    defaultConfig { minSdk = 28 }
+    // 商店验签密钥：生产值经 CI 注入（环境变量 MOX_STORE_SECRET 或本地
+    // local.properties 的 MOX_STORE_SECRET），源码不保留明文密钥；
+    // 未注入时回退为开发期本地包验签占位常量。
+    val localProps =
+        java.util.Properties().apply {
+            val f = project.rootProject.file("local.properties")
+            if (f.exists()) f.inputStream().use { load(it) }
+        }
+    val storeSecret: String =
+        System.getenv("MOX_STORE_SECRET")
+            ?: localProps.getProperty("MOX_STORE_SECRET")
+            ?: "moxsh-official-store-v1"
+
+    defaultConfig {
+        minSdk = 28
+        buildConfigField("String", "MOX_STORE_SECRET", "\"$storeSecret\"")
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

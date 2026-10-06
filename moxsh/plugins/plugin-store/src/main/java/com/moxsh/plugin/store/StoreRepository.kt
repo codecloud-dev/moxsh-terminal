@@ -11,13 +11,19 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * .mox 商店签名密钥（D15/D17）。
+ * .mox 商店验签密钥（D15/D17）的注入入口。
  *
- * 占位常量：与 Rust 侧测试及内置包构建脚本的 secret 一致。发布版改为从
- * Android Keystore 派生（M6 落地），硬编码仅用于开发期本地包验签。
+ * 源码**不再硬编码明文密钥**：真实值由构建期注入——读取 `local.properties`
+ * 的 `MOX_STORE_SECRET` 或 CI 环境变量（见 `plugin-store/build.gradle.kts`），
+ * 经 `BuildConfig.MOX_STORE_SECRET` 暴露给运行时代码。Release 构建必须在 CI
+ * 注入正式密钥（来自密钥库/CI Secret），开发期回退为本地测试常量。
  */
 object StoreSecrets {
-    const val OFFICIAL: String = "moxsh-official-store-v1"
+    /**
+     * 开发期本地包验签用的占位密钥（仅 `BuildConfig` 未注入时生效）。
+     * 正式签名密钥由构建注入，永远不会出现在库源码里。
+     */
+    const val DEV_FALLBACK_SECRET: String = "moxsh-official-store-v1"
 
     /**
      * P1 修复：插件 id 白名单。id 来自包内 manifest（作者可控）/云端清单，
@@ -302,7 +308,7 @@ object StoreInstaller {
         context: Context,
         entry: StoreEntry,
         api: StoreApi,
-        secret: String = StoreSecrets.OFFICIAL,
+        secret: String = com.moxsh.plugin.store.BuildConfig.MOX_STORE_SECRET,
         onProgress: suspend (Int, String) -> Unit,
     ): Boolean {
         // ① 下载/定位（0-35%）：云源走 download；本地/内置包直接定位文件。
