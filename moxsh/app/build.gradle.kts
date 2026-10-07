@@ -29,8 +29,8 @@ android {
         // 限制（SELinux 拒绝 exec），否则 bin 写盘后 setExecutable 在真机 Permission denied
         // （CI 模拟器不触发 SELinux 故一直绿）。
         targetSdk = 28
-        versionCode = 62
-        versionName = "0.6.2"
+        versionCode = 63
+        versionName = "1.0.0"
 
         // GitHub 登录 client_id（设备流）：来自 local.properties，公开安全，
         // 不写死、不提交 git。仅此一个值进 APK，且本就可公开。

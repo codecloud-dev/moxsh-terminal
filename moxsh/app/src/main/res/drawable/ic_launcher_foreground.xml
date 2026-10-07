@@ -3,19 +3,22 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 终端 ">" 字形 -->
-    <path
+    <!-- moxsh 品牌 M 终端字形，取自仓库 assets/logo.svg（青→靛→粉渐变背景之上） -->
+    <group
         android:fillColor="#00000000"
-        android:strokeColor="#0b0d12"
-        android:strokeWidth="9"
+        android:strokeColor="#0b0e1a"
+        android:strokeWidth="8"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M40 30 L56 54 L40 78" />
-    <!-- 终端 "_" 字形 -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#0b0d12"
-        android:strokeWidth="9"
-        android:strokeLineCap="round"
-        android:pathData="M60 80 L80 80" />
+        android:strokeLineJoin="round">
+        <!-- 左竖 -->
+        <path android:pathData="M34 36 L34 73" />
+        <!-- 中 V（向下的一笔，构成 M）左半 -->
+        <path android:pathData="M34 36 L54 63" />
+        <!-- 中 V 右半 -->
+        <path android:pathData="M54 63 L74 36" />
+        <!-- 右竖 -->
+        <path android:pathData="M74 36 L74 73" />
+        <!-- 底部下划线 -->
+        <path android:pathData="M34 81 L74 81" />
+    </group>
 </vector>
