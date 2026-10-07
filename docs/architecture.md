@@ -1,4 +1,4 @@
-# moxsh 架构设计白皮书（v0.6.2）
+# moxsh 架构设计白皮书（v1.0.0）
 
 > **核心定位**：moxsh 的**运行架构 100% 自研、不沿用 Termux 任何代码**（clean-room），但**产物兼容 Termux 生态**——能直接吃 termux-packages 官方仓库、跑现有 `.deb`，同时自带全新格式仓库。全应用液态玻璃、国内优化、云端 CI 出 APK。
 > **Clean-room 纪律**：可广泛阅读任何项目的**思路**（libvterm/st/apt/dpkg/termux），但实现代码全部自己写，不复制片段。

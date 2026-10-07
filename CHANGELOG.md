@@ -19,6 +19,22 @@
 - 本地小模型接入（llama.cpp 端侧）
 - 插件售卖支付流程（manifest 中 author/price/purchased 字段已预留）
 
+## [1.0.0] - 2026-10-07
+
+首个大版本里程碑（MoX 全家桶 1.0.0 同步发布）。本版本以**门面统一与里程碑**为主，不含功能性的「做绝」，为后续迭代留出空间。
+
+### 门面 / 里程碑
+
+- **应用图标统一品牌**：自适应图标前景由旧 `> _` 字形替换为仓库 `assets/logo.svg` 的 moxsh「M」终端字形（前景描边沿用近黑 `#0b0e1a`），青→靛→粉渐变背景层保留，App 与官方门户门面一致
+- **版本号升 1.0.0**：`versionName` `0.6.2` → `1.0.0`，`versionCode` `62` → `63`
+- **路线图板块文档化**：性能打磨（120Hz 渲染 / glyph atlas 离屏缓存 / NEON 向量化）、AI 端侧（llama.cpp）、`.mox` 生态等方向在 [docs/roadmap.md](docs/roadmap.md) 中显式记为「规划中 / 待定」，不在本次一次性实现
+
+### 文档
+
+- README 新增「大版本进度（MoX 全家桶 1.0.0）」对照表，标注 6 个公开仓库的 1.0.0 状态
+
+[1.0.0]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v1.0.0
+
 ## [0.6.2] - 2026-10-06
 
 ### 新增
@@ -49,7 +65,7 @@
 
 - `.gitignore` 补充 `node_modules/` 与本地仓库副本目录，避免 `git add -A` 将其以 gitlink(160000) 形式误纳入索引
 
-[0.6.1]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.0
+[0.6.1]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.1
 
 ## [0.6.0] - 2026-09-28
 
@@ -109,5 +125,5 @@
 - 项目为 100% clean-room 实现：包层面兼容 Termux 生态，代码层面零复用
 - 与 Termux 的关系详见 [README](README.md#和-termux-是什么关系)
 
-[Unreleased]: https://github.com/codecloud-dev/moxsh-terminal/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/codecloud-dev/moxsh-terminal/compare/v1.0.0...HEAD
 [0.5.0]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.5.0
