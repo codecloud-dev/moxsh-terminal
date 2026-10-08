@@ -5,22 +5,18 @@
 <h1 align="center">moxsh</h1>
 
 <p align="center">
-  <b>跑在 Android 上的液态玻璃终端</b> —— 装上就有完整 Linux 命令行，无需 root、无需配置，全面兼容 Termux 生态。
-</p>
-
-<p align="center">
-  <a href="../../actions"><img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&label=CI%20Build&color=8a7bff" alt="CI Build"></a>
-  <a href="../../releases"><img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=Latest&color=37d5d3" alt="最新版本"></a>
-  <a href="../../stargazers"><img src="https://img.shields.io/github/stars/codecloud-dev/moxsh-terminal?style=social" alt="GitHub Stars"></a>
-  <a href="../../discussions"><img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal?label=Discussions&color=ff7ac3" alt="社区讨论"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/codecloud-dev/moxsh-terminal?color=3DDC84" alt="许可证"></a>
-
+  <img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&label=CI%20Build&color=8a7bff" alt="CI Build">
+  <img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=Latest&color=37d5d3" alt="Latest">
+  <img src="https://img.shields.io/github/stars/codecloud-dev/moxsh-terminal?style=social" alt="GitHub Stars">
+  <img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal?label=Discussions&color=ff7ac3" alt="社区讨论">
+  <img src="https://img.shields.io/badge/version-1.0.0-8a7bff" alt="version">
+  <img src="https://img.shields.io/badge/license-GPL--3.0-37d5d3" alt="license">
   <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9+">
   <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust&logoColor=white" alt="Rust 内核">
-  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="液态玻璃 UI">
+  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="液态玻璃">
   <img src="https://img.shields.io/badge/Kotlin-UI-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
-  <img src="https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions">
 </p>
+
 
 > 装上就有完整的 Linux 命令行；整个应用从内核到界面都为「快」与「美」重新造过一遍——Rust 内核 + 一整套美得像水的液态玻璃界面。
 
@@ -44,7 +40,7 @@
 
 ---
 
-## MoX 系列
+## 🌟 MoX 系列
 
 moxsh 只是 **MoX 工具系列**的第一块拼图。一套审美，把桌面级工具搬进掌心。
 
@@ -57,7 +53,7 @@ moxsh 只是 **MoX 工具系列**的第一块拼图。一套审美，把桌面�
 
 ---
 
-## 大版本进度（MoX 全家桶 1.0.0）
+## 🌟 大版本进度（MoX 全家桶 1.0.0）
 
 moxsh 是 MoX 工具系列的第一块拼图。本仓库随全家桶一起升到 **1.0.0** 大版本里程碑：
 
@@ -76,7 +72,7 @@ moxsh 是 MoX 工具系列的第一块拼图。本仓库随全家桶一起升到
 
 ---
 
-## 核心特性
+## ⚙️ 核心特性
 
 | 维度               | 说明                                             |
 | :--------------- | ---------------------------------------------- |
@@ -91,7 +87,7 @@ moxsh 是 MoX 工具系列的第一块拼图。本仓库随全家桶一起升到
 
 ---
 
-## 它是怎么工作的
+## 🔧 它是怎么工作的
 
 moxsh 不是虚拟机，也不是模拟器。
 
@@ -103,7 +99,7 @@ moxsh 不是虚拟机，也不是模拟器。
 
 ---
 
-## 快速上手
+## 🚀 快速上手
 
 第一次启动会自动下载并安装基础系统（引导包），完成后直接进入终端。
 
@@ -129,25 +125,25 @@ echo $PREFIX                  # 查看当前 prefix 路径
 
 > 首次装包前先 `pkg update` 一次，可避免找不到包的问题。
 
-### 系统要求
+### 🔹 系统要求
 
 - Android 9.0 或更高
 - arm64-v8a 设备
 - 约 300 MB 可用空间（含首装引导包）
 
-### 获取 APK
+### 🔹 获取 APK
 
 正式签名包在 [Releases](../../releases) 页面；CI 每次成功构建也会产出最新 APK。安装时如系统提示「未知来源」，允许即可。
 
 ---
 
-## GitHub 登录
+## 🔹 GitHub 登录
 
 moxsh 支持用 **GitHub 账号一键登录**（同步 shell 配置/历史、解锁插件商店）。登录走 **设备流（Device Flow）**：app 只需一个公开安全的 `client_id`，**不含任何 client_secret / private key**，无后端依赖。
 
 > 为什么不是网页回调流：OAuth App 的网页流即使带 PKCE 也强制要求 `client_secret`，而密钥绝不能进 APK。设备流是 GitHub 给原生/CLI 应用的无密钥标准方案（gh CLI 同款）。
 
-### 配置步骤（约 30 秒，只需做一次）
+### 🔹 配置步骤（约 30 秒，只需做一次）
 
 1. 打开 GitHub → **Settings → Developer settings**
    - 选 **OAuth Apps → New OAuth App**，**或**
@@ -166,7 +162,7 @@ moxsh 支持用 **GitHub 账号一键登录**（同步 shell 配置/历史、解
 
 ---
 
-## 插件体系
+## 🧩 插件体系
 
 moxsh 的插件、AI 技能、主题、发行版镜像统一使用 **`.mox`** 包格式，通过内置商店安装，也支持把 `.mox` 文件放到下载目录离线安装。
 
@@ -174,7 +170,7 @@ moxsh 的插件、AI 技能、主题、发行版镜像统一使用 **`.mox`** �
 
 ---
 
-## 和 Termux 的关系
+## 🔗 和 Termux 的关系
 
 - **软件包层面**：直接兼容。Termux 官方源 `.deb` 能装能跑，命令用法一致。
 - **代码层面**：AI 辅助生成、clean-room 重写。终端内核、包管理器、运行环境、PRoot 引擎全部重新编写（Rust/Kotlin）；开发过程研读 Termux 公开文档/源码以对齐行为与生态契约，但**未复制其代码**，也不依赖修改 Termux 源码。
@@ -182,7 +178,7 @@ moxsh 的插件、AI 技能、主题、发行版镜像统一使用 **`.mox`** �
 
 ---
 
-## 文档
+## 📖 文档
 
 - [架构白皮书](docs/architecture.md) —— 设计与实现原理
 - [插件开发指南](docs/plugins.md) —— 编写、打包、签名、上架
@@ -191,13 +187,13 @@ moxsh 的插件、AI 技能、主题、发行版镜像统一使用 **`.mox`** �
 
 ---
 
-## 参与进来
+## 🤝 参与进来
 
 发现 bug 或想要新功能，欢迎提 [Issue](../../issues)；想贡献代码直接提 Pull Request。
 
 ---
 
-## 支持我们
+## 💖 支持我们
 
 如果这个项目对你有用，**求一个 Star、点个关注、顺手转发**——这对一个独立小项目来说，是天大的鼓励，也能让更多人用上更好的终端。
 
@@ -209,10 +205,10 @@ moxsh 的插件、AI 技能、主题、发行版镜像统一使用 **`.mox`** �
 
 ---
 
-## 许可证
+## 📜 许可证
 
 [GPL-3.0](LICENSE)
 
-## AI 辅助声明
+## 🤖 AI 辅助声明
 
 本项目（含全部代码、文档与官网页面）由开发者 **Codecloud** 主导设计，**AI 辅助生成代码**：架构决策、需求定义与验收由人完成，代码实现与文档撰写由 AI 协作完成并经人工审核修订。
