@@ -5,23 +5,40 @@
 <h1 align="center">moxsh</h1>
 
 <p align="center">
-  <b>A liquid-glass terminal that runs on Android</b> —— a full Linux command line the moment you install it. No root, no setup, fully Termux-compatible.
-</p>
-
-<p align="center">
-  <a href="../../actions"><img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&label=CI%20Build&color=8a7bff" alt="CI Build"></a>
-  <a href="../../releases"><img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=Latest&color=37d5d3" alt="Latest"></a>
-  <a href="../../stargazers"><img src="https://img.shields.io/github/stars/codecloud-dev/moxsh-terminal?style=social" alt="GitHub Stars"></a>
-  <a href="../../discussions"><img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal?label=Discussions&color=ff7ac3" alt="Discussions"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/codecloud-dev/moxsh-terminal?color=3DDC84" alt="License"></a>
+  <img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&label=CI%20Build&color=8a7bff" alt="CI Build">
+  <img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=Latest&color=37d5d3" alt="Latest">
+  <img src="https://img.shields.io/github/stars/codecloud-dev/moxsh-terminal?style=social" alt="GitHub Stars">
+  <img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal?label=Discussions&color=ff7ac3" alt="Discussions">
+  <img src="https://img.shields.io/badge/version-1.0.0-8a7bff" alt="version">
+  <img src="https://img.shields.io/badge/license-GPL--3.0-37d5d3" alt="license">
   <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9+">
   <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust&logoColor=white" alt="Rust core">
-  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="Liquid-glass UI">
+  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="Liquid Glass">
+  <img src="https://img.shields.io/badge/Kotlin-UI-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
 </p>
+
 
 > A complete Linux command line out of the box; the whole app — from the core to the UI — was rebuilt for speed and beauty: a Rust core plus a set of water-like liquid-glass interfaces.
 
-## Contents
+<details>
+<summary>📑 目录 · Contents</summary>
+
+- [📑 Contents](#contents)
+- [🌟 MoX family](#mox-family)
+- [✨ Features](#features)
+- [🔧 How it works](#how-it-works)
+- [🚀 Getting started](#getting-started)
+- [🧩 Plugin system](#plugin-system)
+- [🔗 Relationship with Termux](#relationship-with-termux)
+- [📖 Docs](#docs)
+- [🤝 Get involved](#get-involved)
+- [💖 Support us](#support-us)
+- [📜 License](#license)
+- [🤖 AI assistance statement](#ai-assistance-statement)
+
+</details>
+
+## 📑 Contents
 
 - [MoX family](#mox-family)
 - [Features](#features)
@@ -36,7 +53,7 @@
 
 ---
 
-## MoX family
+## 🌟 MoX family
 
 moxsh is just the first piece of the **MoX tool series** — one visual language, bringing desktop-grade tools into your pocket.
 
@@ -49,7 +66,7 @@ moxsh is just the first piece of the **MoX tool series** — one visual language
 
 ---
 
-## Features
+## ✨ Features
 
 | Dimension | Notes |
 | :--- | --- |
@@ -64,7 +81,7 @@ moxsh is just the first piece of the **MoX tool series** — one visual language
 
 ---
 
-## How it works
+## 🔧 How it works
 
 moxsh is neither a VM nor an emulator.
 
@@ -76,7 +93,7 @@ The UI uses **liquid glass**: real-time blur, translucent layers, draggable floa
 
 ---
 
-## Getting started
+## 🚀 Getting started
 
 On first launch it auto-downloads and installs the base system (bootstrap). Then you're straight into the terminal.
 
@@ -102,19 +119,19 @@ echo $PREFIX                  # print the current prefix path
 
 > Run `pkg update` once before your first package install to avoid "package not found".
 
-### Requirements
+### 🔹 Requirements
 
 - Android 9.0 or newer
 - arm64-v8a device
 - ~300 MB free (incl. first-run bootstrap)
 
-### Get the APK
+### 🔹 Get the APK
 
 Signed release builds are on the [Releases](../../releases) page; CI also produces the latest APK on every successful build. If the system warns "unknown source" on install, just allow it.
 
 ---
 
-## Plugin system
+## 🧩 Plugin system
 
 moxsh's plugins, AI skills, themes and distro images all use the **`.mox`** package format, installed via the built-in store; you can also drop a `.mox` file into Downloads for offline install.
 
@@ -122,7 +139,7 @@ See [docs/plugins.md](docs/plugins.md) to write and publish plugins. moxsh also 
 
 ---
 
-## Relationship with Termux
+## 🔗 Relationship with Termux
 
 - **Packages**: directly compatible. Official Termux `.deb` installs and runs, commands behave the same.
 - **Code**: AI-assisted, clean-room rewrite. The terminal core, package manager, runtime and PRoot engine are all rewritten (Rust/Kotlin). We studied Termux's public docs/source to align behavior and ecosystem contracts, but **did not copy its code** and do not depend on modifying Termux source.
@@ -130,7 +147,7 @@ See [docs/plugins.md](docs/plugins.md) to write and publish plugins. moxsh also 
 
 ---
 
-## Docs
+## 📖 Docs
 
 - [Architecture whitepaper](docs/architecture.md) (Chinese)
 - [Plugin guide](docs/plugins.md) (Chinese)
@@ -139,13 +156,13 @@ See [docs/plugins.md](docs/plugins.md) to write and publish plugins. moxsh also 
 
 ---
 
-## Get involved
+## 🤝 Get involved
 
 Found a bug or want a feature? Open an [Issue](../../issues); to contribute code, just open a Pull Request.
 
 ---
 
-## Support us
+## 💖 Support us
 
 If this project is useful to you, **a Star, a follow, or a share** is the biggest encouragement for a tiny indie project — and helps more people find a better terminal.
 
@@ -157,10 +174,10 @@ All forms of contribution are welcome: bugs, ideas, code, docs, translations. In
 
 ---
 
-## License
+## 📜 License
 
 [GPL-3.0](LICENSE)
 
-## AI assistance statement
+## 🤖 AI assistance statement
 
 This project (all code, docs and site pages) is led by the developer **Codecloud**, with **AI-assisted code generation**: architecture decisions, requirements and acceptance are done by humans; implementation and docs are AI-collaborative and reviewed/edited by humans.
