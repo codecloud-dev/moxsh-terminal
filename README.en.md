@@ -26,6 +26,8 @@
 
 <p align="center"><b>⭐ If moxsh is useful to you, please give it a <a href="https://github.com/codecloud-dev/moxsh-terminal">star</a> — it helps more people get a smooth Linux terminal on their phone!</b></p>
 
+<p align="center">💛 Found it useful? <a href="https://afdian.com/a/cloudharbor">Buy the author a coffee on AfDian</a> — CN payments (WeChat / Alipay) supported, the biggest encouragement for an indie dev.</p>
+
 <details>
 <summary>📑 目录 · Contents</summary>
 

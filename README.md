@@ -26,6 +26,8 @@
 
 <p align="center"><b>⭐ 如果 moxsh 对你有用,欢迎点个 <a href="https://github.com/codecloud-dev/moxsh-terminal">Star</a> —— 它能让更多人在手机上用上顺滑的 Linux 终端!</b></p>
 
+<p align="center">💛 觉得好用？欢迎到 <a href="https://afdian.com/a/cloudharbor">爱发电</a> 请作者喝杯咖啡 —— 国内可直接微信 / 支付宝收款，是独立开发最大的鼓励。</p>
+
 <details>
 
 <summary>目录</summary>
