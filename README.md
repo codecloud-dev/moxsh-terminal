@@ -22,6 +22,8 @@
 
 <p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a></p>
 
+<p align="center"><img src="assets/demo.svg" width="760" alt="moxsh-terminal 手机终端动图：命令行安装 moxsh，进度条循环增长、光标闪烁"></p>
+
 <p align="center"><b>⭐ 如果 moxsh 对你有用,欢迎点个 <a href="https://github.com/codecloud-dev/moxsh-terminal">Star</a> —— 它能让更多人在手机上用上顺滑的 Linux 终端!</b></p>
 
 <details>
