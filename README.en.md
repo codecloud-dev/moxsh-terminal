@@ -22,6 +22,8 @@
 
 <p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a></p>
 
+<p align="center"><img src="assets/demo.svg" width="760" alt="moxsh-terminal animation: installing moxsh from the command line, with a looping progress bar and blinking cursor"></p>
+
 <p align="center"><b>⭐ If moxsh is useful to you, please give it a <a href="https://github.com/codecloud-dev/moxsh-terminal">star</a> — it helps more people get a smooth Linux terminal on their phone!</b></p>
 
 <details>
