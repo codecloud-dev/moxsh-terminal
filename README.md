@@ -20,6 +20,10 @@
 
 > 装上就有完整的 Linux 命令行；整个应用从内核到界面都为「快」与「美」重新造过一遍——Rust 内核 + 一整套美得像水的液态玻璃界面。
 
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a></p>
+
+<p align="center"><b>⭐ 如果 moxsh 对你有用,欢迎点个 <a href="https://github.com/codecloud-dev/moxsh-terminal">Star</a> —— 它能让更多人在手机上用上顺滑的 Linux 终端!</b></p>
+
 <details>
 
 <summary>目录</summary>

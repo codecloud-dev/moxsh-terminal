@@ -20,6 +20,10 @@
 
 > A complete Linux command line out of the box; the whole app — from the core to the UI — was rebuilt for speed and beauty: a Rust core plus a set of water-like liquid-glass interfaces.
 
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a></p>
+
+<p align="center"><b>⭐ If moxsh is useful to you, please give it a <a href="https://github.com/codecloud-dev/moxsh-terminal">star</a> — it helps more people get a smooth Linux terminal on their phone!</b></p>
+
 <details>
 <summary>📑 目录 · Contents</summary>
 
