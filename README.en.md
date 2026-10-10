@@ -41,6 +41,8 @@ I read every issue and fix what I can, fast. Let's grow this from "runs" to "del
 
 <p align="center">💛 Found it useful? <a href="https://afdian.com/a/cloudharbor">Buy the author a coffee on AfDian</a> — CN payments (WeChat / Alipay) supported, the biggest encouragement for an indie dev.</p>
 
+<p align="center"><img src="assets/afdian-qr.jpg" width="200" alt="Afdian sponsorship QR code"></p>
+
 <details>
 <summary>📑 目录 · Contents</summary>
 
@@ -201,4 +203,4 @@ All forms of contribution are welcome: bugs, ideas, code, docs, translations. In
 
 ## 🤖 AI assistance statement
 
-This project (all code, docs and site pages) is led by the developer **Codecloud**, with **AI-assisted code generation**: architecture decisions, requirements and acceptance are done by humans; implementation and docs are AI-collaborative and reviewed/edited by humans.
+This project (all code, docs and site pages) is led by the developer **codecloud-dev**, with **AI-assisted code generation**: architecture decisions, requirements and acceptance are done by humans; implementation and docs are AI-collaborative and reviewed/edited by humans.
