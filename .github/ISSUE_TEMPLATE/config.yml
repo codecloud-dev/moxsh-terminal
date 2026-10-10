@@ -1,5 +1,8 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: 安全漏洞报告
-    url: https://github.com/codecloud-dev/moxsh-terminal/blob/main/SECURITY.md
-    about: 安全问题请勿公开发布，请按安全政策私密报告
+  - name: "💬 想聊 / 想赞助 / Just want to chat"
+    url: "https://afdian.com/a/cloudharbor"
+    about: "吐槽、赞助、或者只是打个招呼都行。"
+  - name: "🔍 先搜搜有没有重复 / Search first"
+    url: "https://github.com/codecloud-dev/moxsh-terminal/issues"
+    about: "提交前可以先看看有没有重复的 issue。"
