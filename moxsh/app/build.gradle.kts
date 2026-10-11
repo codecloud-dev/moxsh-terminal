@@ -153,5 +153,5 @@ dependencies {
     // GitHub 登录会话的安全本地存储（基于 Android Keystore 的 AES-256）
     implementation("androidx.security:security-crypto:1.1.0")
     // Custom Tabs：用系统浏览器内核打开设备流的验证页（最安全、可见网址）
-    implementation("androidx.browser:browser:1.8.0")
+    implementation("androidx.browser:browser:1.10.0")
 }
