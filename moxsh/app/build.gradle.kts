@@ -149,7 +149,7 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.2.1")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
-    implementation("androidx.compose.material:material-icons-extended:1.6.8")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
     // GitHub 登录会话的安全本地存储（基于 Android Keystore 的 AES-256）
     implementation("androidx.security:security-crypto:1.1.0")
     // Custom Tabs：用系统浏览器内核打开设备流的验证页（最安全、可见网址）
