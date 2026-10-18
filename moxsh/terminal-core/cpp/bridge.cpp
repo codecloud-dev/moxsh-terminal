@@ -17,7 +17,8 @@ extern "C" {
     int   moxsh_copy_cells(void* sess, int start_row, int count, uint8_t* buf, size_t buflen);
 
     // M4 PRoot 容器引擎（D12）：C-ABI 转发声明。
-    int moxsh_proot_install(const char* id, const char* moxsh_root, const char* cache_tar);
+    int moxsh_proot_install(const char* id, const char* moxsh_root, const char* cache_tar,
+                            const char* dns_csv);
     int moxsh_proot_remove(const char* id, const char* moxsh_root);
     int moxsh_proot_login(const char* id, const char* moxsh_root, char* out, size_t cap);
     int moxsh_proot_list_installed(const char* moxsh_root, char* out, size_t cap);
@@ -122,12 +123,15 @@ jint stringReturn(JNIEnv*, jbyteArray, int n) {
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_moxsh_core_ProotNative_nativeInstall(JNIEnv* env, jobject,
-                                               jstring id, jstring moxshRoot, jstring cacheTar) {
+                                               jstring id, jstring moxshRoot,
+                                               jstring cacheTar, jstring dnsCsv) {
     const char* i = jstr(env, id);
     const char* r = jstr(env, moxshRoot);
     const char* t = jstr(env, cacheTar);
-    int n = moxsh_proot_install(i, r, t);
-    jstrFree(env, id, i); jstrFree(env, moxshRoot, r); jstrFree(env, cacheTar, t);
+    const char* d = jstr(env, dnsCsv);
+    int n = moxsh_proot_install(i, r, t, d);
+    jstrFree(env, id, i); jstrFree(env, moxshRoot, r);
+    jstrFree(env, cacheTar, t); jstrFree(env, dnsCsv, d);
     return n;
 }
 

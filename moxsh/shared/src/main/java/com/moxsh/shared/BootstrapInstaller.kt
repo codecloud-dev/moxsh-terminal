@@ -1,6 +1,7 @@
 package com.moxsh.shared
 
 import android.content.Context
+import android.net.ConnectivityManager
 import android.os.Build
 import java.io.File
 import java.io.FileInputStream
@@ -468,6 +469,24 @@ object BootstrapInstaller {
     }
 
     /** 首次初始化：自研 login/profile、DNS、包源模板（D8 国内优化）、shebang 前缀修正。 */
+    /**
+     * 读取宿主系统 DNS（Android 8+ 走 ConnectivityManager LinkProperties；
+     * 读取失败/无权限返回 null，由调用方回退国内公共 DNS）。
+     */
+    private fun systemDnsServers(ctx: Context): List<String>? {
+        return try {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return null
+            val lp = cm.getLinkProperties(cm.activeNetwork) ?: return null
+            lp.dnsServers
+                ?.mapNotNull { it.hostAddress?.takeIf { h -> h.isNotBlank() } }
+                ?.take(3)
+                ?.takeIf { it.isNotEmpty() }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     private fun initialize(ctx: Context, prefix: File) {
         val prefixPath = prefix.absolutePath
         val homePath = File(ctx.filesDir, "files/home").absolutePath
@@ -513,11 +532,15 @@ object BootstrapInstaller {
                 "fi\n",
         )
 
-        // 3. DNS（安卓上 /etc 不可写，用 resolv.conf 常规兜底；proot 发行版内另有处理）
+        // 3. DNS：宿主系统 DNS 优先（读不到回退国内公共 DNS，与 Rust 侧
+        // proot::distro::DEFAULT_DNS_SERVERS 一致）；安卓上 /etc 不可写，
+        // 用 resolv.conf 常规兜底；proot 发行版内另有处理。
+        val dnsServers = systemDnsServers(ctx) ?: listOf("223.5.5.5", "119.29.29.29")
         File(etc, "resolv.conf").writeText(
-            "# moxsh 自动生成（国内 DNS，D8）\n" +
-                "nameserver 223.5.5.5\n" +
-                "nameserver 119.29.29.29\n",
+            buildString {
+                append("# moxsh 自动生成（宿主 DNS 优先，回退国内公共 DNS）\n")
+                dnsServers.forEach { append("nameserver ").append(it).append('\n') }
+            },
         )
 
         // 4. 包源模板：moxsh 自研包管理 CLI 读取（mox 格式仓库，官方仓库置顶）

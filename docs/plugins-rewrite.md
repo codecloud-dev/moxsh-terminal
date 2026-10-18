@@ -25,7 +25,7 @@ moxsh 不沿用 Termux「主应用 + 多个独立签名 APK 插件」的模型�
 
 - 实现 `RUN_COMMAND_SERVICE.ACTION_RUN_COMMAND` 的 `Intent` 处理器，等价 `termux-app` 的 `RunCommandService`（见 `commands.md` §4.1）。
 - 实现 `LocalServerSocket` / `AmSocketServer` 兼容总线（见 `commands.md` §4.2–4.3），保持 `exit_code\0stdout\0stderr\0` 约定，便于原 `termux-api` 二进制零改动接入。
-- 声明 `com.termux.permission.RUN_COMMAND` 兼容权限，并对原插件做 **Intent 重定向/包别名（package alias）**：原插件向 `com.termux` 发的调用经系统/宿主 shim 映射到 moxsh。
+- 声明**自有** `com.moxsh.permission.RUN_COMMAND`（signature 级）作为兼容宿主的入口权限，并对原插件做 **Intent 重定向/包别名（package alias）**：原插件向 `com.termux` 发的调用经系统/宿主 shim 映射到 moxsh。⚠️ **不可声明 `com.termux.permission.RUN_COMMAND`**——Android 权限定义全局唯一，与已安装 Termux 的同名权限（dangerous）冲突会导致整包安装失败（`INSTALL_FAILED_DUPLICATE_PERMISSION`）。
 - **签名 caveat（显式声明）**：原 Termux 插件以 `com.termux` 签名校验 `RUN_COMMAND` 权限，moxsh 用自有签名，故**与原 Termux 插件不能无缝共享签名校验**；体系①通过「契约兼容 + 包别名 + 放开同 UID 校验」达到「装得上、能调用」，但仅限 moxsh 签名侧生态，不反向互通。
 
 ### 0.3 体系② 自研框架统一基座（6 插件共用）

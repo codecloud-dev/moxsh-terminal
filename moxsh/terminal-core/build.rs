@@ -16,6 +16,9 @@ fn main() {
             .file("cpp/bridge.cpp")
             .flag("-std=c++17")
             .flag("-fvisibility=hidden")
+            // 汇编/链接阶段 cc-rs 仍会附带 -D/-f* 等编译期 flag，clang 对
+            // "argument unused" 告警——显式关掉，保持 CI 日志干净。
+            .flag("-Wno-unused-command-line-argument")
             .compile("moxsh_bridge");
 
         // NEON 汇编热路径：仅在 arm64-android 编译；其余架构由 Rust 回退实现。
@@ -24,6 +27,7 @@ fn main() {
                 .file("arch/neon.s")
                 .flag("-target")
                 .flag("aarch64-linux-android")
+                .flag("-Wno-unused-command-line-argument")
                 .compile("moxsh_neon");
             println!("cargo:rustc-cfg=has_neon_asm");
         }

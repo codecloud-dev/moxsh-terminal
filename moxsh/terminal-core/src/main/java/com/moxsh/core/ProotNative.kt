@@ -57,7 +57,7 @@ class ProotNative {
 
     // ============ external fun（由 bridge.cpp 1:1 转发到 Rust C-ABI） ============
 
-    external fun nativeInstall(id: String, moxshRoot: String, cacheTar: String?): Int
+    external fun nativeInstall(id: String, moxshRoot: String, cacheTar: String?, dnsCsv: String?): Int
     external fun nativeRemove(id: String, moxshRoot: String): Int
     external fun nativeLogin(id: String, moxshRoot: String, buf: ByteArray): Int
     external fun nativeListInstalled(moxshRoot: String, buf: ByteArray): Int
@@ -68,13 +68,42 @@ class ProotNative {
     // ============ Kotlin 侧封装（Result 包装 + 缓冲重试） ============
 
     /**
+     * 读取宿主系统 DNS（CSV 形式，如 `"192.168.1.1,223.5.5.5"`）。
+     *
+     * PRoot 共享宿主网络栈，但 guest 内 glibc 读的是 rootfs 里的
+     * resolv.conf——安装时必须把真实 DNS 落进去，否则容器内域名解析
+     * 走默认公共 DNS（国内可能绕美变慢，企业内网域名直接不可解析）。
+     * 读取失败返回 null（Rust 侧回退默认国内公共 DNS）。
+     */
+    fun systemDnsCsv(context: android.content.Context): String? {
+        return try {
+            val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+                as? android.net.ConnectivityManager ?: return null
+            val lp = cm.getLinkProperties(cm.activeNetwork) ?: return null
+            val servers = lp.dnsServers
+                ?.mapNotNull { it.hostAddress?.takeIf { h -> h.isNotBlank() } }
+                ?.take(3)
+                ?: return null
+            servers.joinToString(",").takeIf { it.isNotBlank() }
+        } catch (_: Throwable) {
+            null // 权限/兼容性问题一律回退默认 DNS
+        }
+    }
+
+    /**
      * 安装发行版。推荐流程：先由本层（OkHttp/DownloadManager）下载 rootfs
      * 归档到缓存，把本地路径作为 [cacheTar] 传入（Rust 侧依赖极简、不做 HTTPS）。
      * [cacheTar] 传 null 时 Rust 侧用 curl 兜底（开发者模式/命令行场景）。
+     * [dnsCsv] 传 null 时 Rust 侧用默认国内公共 DNS（223.5.5.5/119.29.29.29）。
      * 同步阻塞调用，请在 IO 线程执行；进度条按阶段估算。
      */
-    fun install(id: String, moxshRoot: String, cacheTar: String? = null): ProotResult =
-        wrap(nativeInstall(id, moxshRoot, cacheTar), "安装 $id")
+    fun install(
+        id: String,
+        moxshRoot: String,
+        cacheTar: String? = null,
+        dnsCsv: String? = null,
+    ): ProotResult =
+        wrap(nativeInstall(id, moxshRoot, cacheTar, dnsCsv), "安装 $id")
 
     /** 删除发行版。 */
     fun remove(id: String, moxshRoot: String): ProotResult =

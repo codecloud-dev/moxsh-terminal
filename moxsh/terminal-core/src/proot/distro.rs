@@ -9,8 +9,9 @@
 //! - **解压**：`.tar.gz` 走 `tar`+`flate2`（纯 Rust，NDK 可编）；`.tar.xz`/
 //!   `.tar.zst` 由系统 `tar` 子进程处理（Android 10+ toybox tar 支持 -J）。
 //!
-//! 安装后初始化对齐 proot-distro 的行为：写 `/etc/resolv.conf`（保证 DNS 可用）、
-//! 打印换国内源提示（不擅自改 sources.list，尊重发行版默认）。
+//! 安装后初始化对齐 proot-distro 的行为：写 `/etc/resolv.conf`（保证 DNS 可用，
+//! 默认国内公共 DNS 双备、宿主系统 DNS 优先）、打印换国内源提示
+//! （不擅自改 sources.list，尊重发行版默认）。
 
 use std::fs;
 use std::io::Read;
@@ -20,7 +21,31 @@ use std::process::Command;
 use flate2::read::GzDecoder;
 
 use crate::crypto::sha256;
+use crate::proot::symlink_fix::normalize_rootfs_symlinks;
+use crate::proot::translate::TranslateRules;
 use crate::proot::{ProotConfig, ProotError, ProotResult};
+
+/// 安装后符号链接规范化：把 rootfs 内的绝对 target 链接改写为相对形式。
+///
+/// 规则集对齐 App 运行时绑定（`-r root -b /dev -b /proc -b /sys`，见
+/// `ProotManager`）：指向这三个绑定目标的链接保持绝对（运行时经绑定表
+/// 解析才正确），其余映射进 rootfs 的绝对链接一律相对化。
+/// 失败不致命（只读 rootfs 等场景）：运行时走查兜底会接管。
+fn normalize_installed_rootfs(rootfs: &Path) {
+    let mut rules = TranslateRules::new(rootfs);
+    rules.add_binding("/dev", "/dev");
+    rules.add_binding("/proc", "/proc");
+    rules.add_binding("/sys", "/sys");
+    match normalize_rootfs_symlinks(rootfs, &rules) {
+        Ok(stats) if stats.rewritten > 0 => {
+            eprintln!(
+                "rootfs 符号链接规范化：检视 {} 条，改写 {} 条",
+                stats.links_seen, stats.rewritten
+            );
+        }
+        _ => {}
+    }
+}
 
 /// 单个发行版的规格（预置清单条目）。
 #[derive(Debug, Clone)]
@@ -32,24 +57,60 @@ pub struct DistroSpec {
     /// 版本描述。
     pub version: &'static str,
     /// (宿主 uname.machine, rootfs 架构名) 映射；查不到即不支持该设备。
+    ///
+    /// **必须与 URL 覆盖一致**：arch_map 声明支持 x86_64 就必须给
+    /// [`Self::url_official_x86_64`]，否则 x86_64 设备会装到 aarch64 rootfs
+    /// （能解压、不能执行）。由 `arch_urls_consistent` 单测钉死。
     pub arch_map: Vec<(&'static str, &'static str)>,
-    /// 官方下载 URL。
+    /// 官方下载 URL（aarch64）。
     pub url_official: &'static str,
-    /// 国内镜像 URL（国内优化：优先走镜像）。
+    /// 国内镜像 URL（国内优化：优先走镜像；aarch64）。
     pub url_cn_mirror: &'static str,
+    /// 官方下载 URL（x86_64）。None = 不支持该架构（如 Kali NetHunter
+    /// minimal 仅出 arm64 构建）。
+    pub url_official_x86_64: Option<&'static str>,
+    /// 国内镜像 URL（x86_64）。
+    pub url_cn_mirror_x86_64: Option<&'static str>,
     /// 内置 SHA-256（可选）。
     /// **设计决策：rolling / 滚动更新的 rootfs 不硬编码校验值**（Kali 每日构建、
     /// Ubuntu base 点版本更新都会使内置值过期）。默认 None，期望值在安装时经
     /// [`Self::checksum_url`]/[`fetch_expected_sha256`] 动态获取；仅锁版发布时
     /// 由发布流程写入具体值。
     pub sha256: Option<&'static str>,
-    /// 该发行版 SHA256SUMS 清单 URL（校验和获取机制的数据源）。
+    /// 该发行版 SHA256SUMS 清单 URL（校验和获取机制的数据源；aarch64）。
     /// 约定与 `url_official` 同源目录（或其父级汇总清单），行格式
     /// `<64 位 hex>  <文件名>`。均为 https——纯 Rust 手写 GET 无 TLS 能力，
     /// 真机清单下载与校验走 Kotlin 层（见 [`fetch_expected_sha256`] 注释）。
     pub checksum_url: &'static str,
+    /// SHA256SUMS 清单 URL（x86_64；None = 复用 aarch64 的 `checksum_url`，
+    /// 或该架构的校验清单在别处——仅 Debian 的清单路径含架构段）。
+    pub checksum_url_x86_64: Option<&'static str>,
     /// 下载体积提示（MB，用于 UI 进度条总长预估）。
     pub size_mb: u32,
+}
+
+impl DistroSpec {
+    /// 按宿主架构解析下载 URL：`(官方, 国内镜像, SHA256SUMS 清单)`。
+    ///
+    /// `host_arch` 取 [`std::env::consts::ARCH`]（编译期架构，与运行设备一致：
+    /// Android 侧按 ABI 分构构建，x86_64 变体自然不会装到 arm64 rootfs）。
+    /// 返回 None = 该发行版不支持此架构（arch_map 未收录或无对应 URL）——
+    /// 调用方必须明确报错，**绝不静默回退到另一架构的 rootfs**。
+    pub fn urls_for(&self, host_arch: &str) -> Option<(&'static str, &'static str, &'static str)> {
+        if !self.arch_map.iter().any(|(h, _)| *h == host_arch) {
+            return None;
+        }
+        match host_arch {
+            "x86_64" => {
+                let official = self.url_official_x86_64?;
+                let mirror = self.url_cn_mirror_x86_64.unwrap_or(official);
+                let checksum = self.checksum_url_x86_64.unwrap_or(self.checksum_url);
+                Some((official, mirror, checksum))
+            }
+            // 其余架构（当前仅 aarch64 有预置 rootfs）走默认字段。
+            _ => Some((self.url_official, self.url_cn_mirror, self.checksum_url)),
+        }
+    }
 }
 
 /// 预置四大发行版（D14）。
@@ -73,8 +134,15 @@ pub fn builtin_specs() -> Vec<DistroSpec> {
                 "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.2-base-arm64.tar.gz",
             url_cn_mirror:
                 "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.2-base-arm64.tar.gz",
+            url_official_x86_64: Some(
+                "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-amd64.tar.gz",
+            ),
+            url_cn_mirror_x86_64: Some(
+                "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-amd64.tar.gz",
+            ),
             sha256: None, // 期望值经 checksum_url（cdimage SHA256SUMS）动态获取，不硬编码点版本值
             checksum_url: "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/SHA256SUMS",
+            checksum_url_x86_64: None, // 汇总清单在 release 根目录，与架构无关
             size_mb: 31,
         },
         DistroSpec {
@@ -86,22 +154,38 @@ pub fn builtin_specs() -> Vec<DistroSpec> {
                 "https://us.lxd.images.canonical.com/images/debian/bookworm/arm64/default/rootfs.tar.xz",
             url_cn_mirror:
                 "https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/debian/bookworm/arm64/default/rootfs.tar.xz",
+            url_official_x86_64: Some(
+                "https://us.lxd.images.canonical.com/images/debian/bookworm/amd64/default/rootfs.tar.xz",
+            ),
+            url_cn_mirror_x86_64: Some(
+                "https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/debian/bookworm/amd64/default/rootfs.tar.xz",
+            ),
             sha256: None, // 期望值经镜像目录 SHA256SUMS 动态获取（fetch_expected_sha256）
             checksum_url:
                 "https://us.lxd.images.canonical.com/images/debian/bookworm/arm64/default/SHA256SUMS",
+            checksum_url_x86_64: Some(
+                "https://us.lxd.images.canonical.com/images/debian/bookworm/amd64/default/SHA256SUMS",
+            ),
             size_mb: 130,
         },
         DistroSpec {
             id: "kali",
             name: "Kali",
             version: "rolling (nethunter minimal)",
-            arch_map: vec![("aarch64", "arm64"), ("x86_64", "amd64")],
+            // NetHunter minimal rootfs 官方仅出 arm64 构建（kalifs-amd64
+            // 404 实证）；x86_64 设备装 Kali 请用 debian/ubuntu + kali 源，
+            // 或自定义 rootfs（install_custom）。arch_map 不声明就不会有
+            // urls_for 返回错架构 URL 的机会。
+            arch_map: vec![("aarch64", "arm64")],
             url_official:
                 "https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-minimal.tar.xz",
             url_cn_mirror:
                 "https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-minimal.tar.xz",
+            url_official_x86_64: None,
+            url_cn_mirror_x86_64: None,
             sha256: None, // rolling 每日构建值易变：必须经官网 SHA256SUMS 动态获取，禁止硬编码
             checksum_url: "https://kali.download/nethunter-images/current/rootfs/SHA256SUMS",
+            checksum_url_x86_64: None,
             size_mb: 800,
         },
         DistroSpec {
@@ -113,9 +197,16 @@ pub fn builtin_specs() -> Vec<DistroSpec> {
                 "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/alpine-minirootfs-3.20.3-aarch64.tar.gz",
             url_cn_mirror:
                 "https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.20/releases/aarch64/alpine-minirootfs-3.20.3-aarch64.tar.gz",
+            url_official_x86_64: Some(
+                "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/x86_64/alpine-minirootfs-3.20.3-x86_64.tar.gz",
+            ),
+            url_cn_mirror_x86_64: Some(
+                "https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.20/releases/x86_64/alpine-minirootfs-3.20.3-x86_64.tar.gz",
+            ),
             sha256: None, // 期望值经官方 releases 汇总 SHA256SUMS 动态获取；官方另提供
             // SHA256SUMS.asc，可用 alpine-keys 的 .pub 公钥验签（Kotlin 层负责）。
             checksum_url: "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/SHA256SUMS",
+            checksum_url_x86_64: None, // 汇总清单在 releases 根目录，与架构无关
             size_mb: 4,
         },
     ]
@@ -133,15 +224,67 @@ pub struct InstalledDistro {
 /// 下载/解压进度回调：`(阶段说明, 已完成字节或条目, 总量预估)`。
 pub type ProgressCb<'a> = &'a mut dyn FnMut(&str, u64, u64);
 
+/// 默认 DNS（国内公共 DNS 双备）：宿主系统 DNS 不可用时的回退值。
+///
+/// 与 Kotlin 侧 `BootstrapInstaller.DEFAULT_DNS_CSV` 保持一致；
+/// 上游 proot-distro 写的是 1.1.1.1/8.8.8.8（境外），国内网络下首跳
+/// 绕美、解析慢，故默认改用阿里/腾讯公共 DNS。
+pub const DEFAULT_DNS_SERVERS: &[&str] = &["223.5.5.5", "119.29.29.29"];
+
+/// 解析并清洗 DNS CSV（`"223.5.5.5,119.29.29.29"` 形式）为服务器列表。
+///
+/// **安全**：resolv.conf 是行式配置，未校验字符串里的 `\n`/空格/分号
+/// 可注入任意指令（如 `options trust-ad` 之外的恶意行）。本函数只放行
+/// IPv4/IPv6 合法字符（`0-9a-fA-F.:`），非空、去重、最多 3 个。
+/// 纯函数，可完整单测；FFI 边界（C-ABI 传入的系统 DNS）必经此函数。
+pub fn sanitize_dns_csv(csv: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in csv.split(',') {
+        let s = part.trim();
+        if s.is_empty() || s.len() > 45 {
+            continue; // 空项或超长（IPv6 文本上限 45）
+        }
+        if !s
+            .bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f' | b'A'..=b'F' | b'.' | b':'))
+        {
+            continue; // 非法字符（含换行/空格/分号）→ 整项丢弃
+        }
+        if !out.iter().any(|x| x == s) {
+            out.push(s.to_string());
+        }
+        if out.len() >= 3 {
+            break;
+        }
+    }
+    out
+}
+
 /// 发行版管理器：以 moxsh 数据根目录为基准管理 containers/。
 pub struct DistroManager {
     /// moxsh 数据根（Android: /data/data/com.moxsh/files）。
     root: PathBuf,
+    /// 安装时写入 rootfs 的 DNS 列表；空则用 [`DEFAULT_DNS_SERVERS`]。
+    dns_servers: Vec<String>,
 }
 
 impl DistroManager {
     pub fn new(root: &Path) -> DistroManager {
-        DistroManager { root: root.to_path_buf() }
+        DistroManager {
+            root: root.to_path_buf(),
+            dns_servers: DEFAULT_DNS_SERVERS.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    /// 覆盖 DNS 列表（C-ABI 传入宿主系统 DNS；空/全非法时重置为默认）。
+    /// 输入经 [`sanitize_dns_csv`] 清洗，防 resolv.conf 注入。
+    pub fn set_dns_servers_csv(&mut self, csv: &str) {
+        let cleaned = sanitize_dns_csv(csv);
+        self.dns_servers = if cleaned.is_empty() {
+            DEFAULT_DNS_SERVERS.iter().map(|s| s.to_string()).collect()
+        } else {
+            cleaned
+        };
     }
 
     /// 容器根目录：`$root/containers`（对齐 proot-distro 的 installed-rootfs 布局）。
@@ -221,13 +364,22 @@ impl DistroManager {
     /// 国内优化：默认先试国内镜像，失败回退官方。
     pub fn download(&self, spec: &DistroSpec, cb: ProgressCb) -> ProotResult<PathBuf> {
         fs::create_dir_all(self.cache_dir())?;
-        let fname = spec.url_official.rsplit('/').next().unwrap_or("rootfs.tar");
+        // 编译期架构 = 运行设备架构：Android 侧 Gradle 按 ABI 分构产出
+        // （aarch64/x86_64 各自的 .so/二进制），CLI 二进制同理。
+        // urls_for 返回 None 时明确报错——绝不静默装到另一架构的 rootfs。
+        let (official, mirror, _checksum) = spec
+            .urls_for(std::env::consts::ARCH)
+            .ok_or(ProotError::DistroUnsupportedArch {
+                id: spec.id.to_string(),
+                host_arch: std::env::consts::ARCH.to_string(),
+            })?;
+        let fname = official.rsplit('/').next().unwrap_or("rootfs.tar");
         let out_path = self.cache_dir().join(fname);
         if out_path.exists() {
             cb("使用已缓存归档", 1, 1);
             return Ok(out_path);
         }
-        for (label, url) in [("国内镜像", spec.url_cn_mirror), ("官方源", spec.url_official)] {
+        for (label, url) in [("国内镜像", mirror), ("官方源", official)] {
             cb(&format!("从{}下载：{}", label, url), 0, spec.size_mb as u64);
             // curl 子进程：Android NDK 不带 curl，命令行/开发者模式场景才可用；
             // 应用内安装由 Kotlin 层先下载好再调 install()。
@@ -296,6 +448,9 @@ impl DistroManager {
             let _ = fs::remove_dir_all(&rootfs);
             return Err(e);
         }
+        // 3.5) 符号链接规范化：绝对 target（alpine/debian 惯例）改写为相对，
+        // 让 guest 内解析天然不出 rootfs——之后运行时零开销。
+        normalize_installed_rootfs(&rootfs);
 
         // 4) 初始化：DNS + 换源提示（对齐 proot-distro 安装后行为）
         cb("初始化 DNS 与源", 0, 1);
@@ -333,19 +488,35 @@ impl DistroManager {
             let _ = fs::remove_dir_all(&rootfs);
             return Err(e);
         }
+        // 符号链接规范化（与预置发行版安装路径一致）
+        normalize_installed_rootfs(&rootfs);
+        // 初始化 DNS（与预置发行版安装路径一致：guest glibc 依赖 rootfs 内 resolv.conf）
+        self.init_dns_and_repos(&rootfs);
         fs::write(self.ok_marker(id), "custom")?;
         cb("自定义 rootfs 安装完成", 1, 1);
         Ok(())
     }
 
     /// 写 DNS 并输出换源提示（不擅自改 sources.list，对齐 proot-distro 的克制）。
+    ///
+    /// DNS 来源：宿主系统 DNS（C-ABI 传入，经 [`sanitize_dns_csv`] 清洗）优先，
+    /// 否则回退 [`DEFAULT_DNS_SERVERS`]（国内公共 DNS）。PRoot 共享宿主网络栈，
+    /// 但 guest 内 glibc 读的是 rootfs 里的 resolv.conf，必须落成真实可解析地址。
     fn init_dns_and_repos(&self, rootfs: &Path) {
         let resolv = rootfs.join("etc/resolv.conf");
         if let Some(parent) = resolv.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        // 1.1.1.1 与 8.8.8.8 双备；国内网络下运营商 DNS 由宿主接管（共享网络栈）。
-        let _ = fs::write(&resolv, "nameserver 1.1.1.1\nnameserver 8.8.8.8\n");
+        let servers: Vec<String> = if self.dns_servers.is_empty() {
+            DEFAULT_DNS_SERVERS.iter().map(|s| s.to_string()).collect()
+        } else {
+            self.dns_servers.clone()
+        };
+        let content: String = servers
+            .iter()
+            .map(|s| format!("nameserver {}\n", s))
+            .collect();
+        let _ = fs::write(&resolv, content);
     }
 
     /// 删除发行版（先删标记再删目录，防呆：不存在报 DistroNotInstalled）。
@@ -442,8 +613,11 @@ impl DistroManager {
 /// 期望 SHA-256（小写 hex）。返回 None 的情形：https 清单（见上 TLS 边界）、
 /// 网络失败、清单中无该文件名。
 pub fn fetch_expected_sha256(spec: &DistroSpec) -> Option<String> {
-    let body = http_get(spec.checksum_url)?;
-    let fname = spec.url_official.rsplit('/').next()?;
+    // 与 download() 同源取架构：清单 URL 与 rootfs 文件名必须同架构，
+    // 否则拿 arm64 的 SHA256 校验 amd64 归档必然失败。
+    let (official, _mirror, checksum) = spec.urls_for(std::env::consts::ARCH)?;
+    let body = http_get(checksum)?;
+    let fname = official.rsplit('/').next()?;
     parse_sha256sums(&body, fname)
 }
 
@@ -554,66 +728,41 @@ impl Sha256Stream {
 
 /// 解压 rootfs 归档：.tar.gz 走纯 Rust（tar+flate2），.tar.xz/.tar.zst
 /// 落系统 tar 子进程（Android 10+ toybox 支持 -J）。
+///
+/// # 符号链接安全模型（P1 修复 + M4 放宽）
+///
+/// rootfs 需要合法链接（alpine 的 `bin/sh -> /bin/busybox`、debian 的
+/// usrmerge 链接全是**绝对 target**），不能像 .mox 一样全跳过。分层防御：
+///
+/// 1. **tar crate 自身**（0.4.46 `unpack_in`）：条目路径含 `..` 即跳过；
+///    每个条目的**父目录**解包前 canonicalize 校验必须落在 dest 内——
+///    「先放 `bin/evil -> /etc` 再写 `bin/evil/x`」的写穿攻击由此封死
+///    （父目录 canonicalize 到 `/etc` 越界即报错）；文件以 `create_new`
+///    打开不原地覆写。
+/// 2. **本函数**：链接自身路径非法（绝对/含 `..`）→ 跳过；**相对** target
+///    按组件级推演（`resolve_under`），解析结果越出 dest → 跳过。
+/// 3. **绝对 symlink target 放行**：target 只是链接内容字符串，创建时不
+///    写任何东西，写穿由第 1 层封死；且按定义它指向 rootfs 命名空间内的
+///    路径（`/bin/busybox` 即 rootfs 里的 /bin/busybox）。解包后由
+///    [`normalize_rootfs_symlinks`] 统一改写为相对形式（见安装流程）。
+/// 4. **绝对 hardlink target 跳过**：tar crate 对硬链接走
+///    `base.join(src)`，绝对 src 会替换掉 base 导致越界报错；且绝对
+///    hardlink target 非 rootfs 惯例，跳过无损。
 pub fn extract_tar(archive: &Path, dest: &Path) -> ProotResult<()> {
     let name = archive.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let lower = name.to_lowercase();
     if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
         let f = fs::File::open(archive)?;
-        let mut ar = tar::Archive::new(GzDecoder::new(f));
-        ar.set_preserve_permissions(false);
-        // P1 修复（符号链接写穿）：rootfs 需要合法相对链接（bin/sh -> dash 等），
-        // 不能像 .mox 一样全跳过；改为逐条目解包并校验链接 target：
-        //   - 绝对 target 一律拒绝（合法 rootfs 链接均为相对）；
-        //   - 相对 target 按组件级推演（处理 ..），解析结果必须仍落在 dest 内。
-        // 这样"链接 + 后续经链接写文件"也无法越过 dest 边界。
-        let dest_abs = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
-        for entry in ar
-            .entries()
-            .map_err(|e| ProotError::ExtractFailed(format!("{}: {}", name, e)))?
-        {
-            let mut e = entry.map_err(ProotError::Io)?;
-            let et = e.header().entry_type();
-            if et.is_symlink() || et.is_hard_link() {
-                let link_path = e.path().map_err(ProotError::Io)?.to_path_buf();
-                if !link_path.is_absolute()
-                    && link_path
-                        .components()
-                        .all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir))
-                {
-                    let target = e.link_name().map_err(ProotError::Io)?.unwrap_or_default();
-                    let escape = if target.is_absolute() {
-                        true
-                    } else {
-                        let parent = link_path.parent().unwrap_or(std::path::Path::new(""));
-                        let resolved = resolve_under(dest, parent, &target);
-                        !resolved.starts_with(&dest_abs)
-                    };
-                    if escape {
-                        continue; // 逃逸链接：防御性跳过
-                    }
-                } else {
-                    continue; // 链接自身路径非法（绝对/含 ..）：跳过
-                }
-            }
-            e.unpack_in(dest)
-                .map_err(|err| ProotError::ExtractFailed(format!("{}: {}", name, err)))?;
-        }
-        Ok(())
+        extract_tar_gz_checked(f, dest)
     } else if lower.ends_with(".tar.xz") || lower.ends_with(".tar.zst") || lower.ends_with(".txz") {
         extract_tar_subprocess(archive, dest)
     } else {
         // 未知后缀：先试 gz（大部分 rootfs 是 tar.gz），失败再交系统 tar。
         match fs::File::open(archive) {
-            Ok(f) => {
-                let mut ar = tar::Archive::new(GzDecoder::new(f));
-                ar.set_preserve_permissions(false);
-                let _ = ar.entries(); // 探测：仅消费错误（下方统一走 extract_tar_gz_checked）
-                let f2 = fs::File::open(archive)?;
-                match extract_tar_gz_checked(f2, dest) {
-                    Ok(()) => Ok(()),
-                    Err(_) => extract_tar_subprocess(archive, dest),
-                }
-            }
+            Ok(f) => match extract_tar_gz_checked(f, dest) {
+                Ok(()) => Ok(()),
+                Err(_) => extract_tar_subprocess(archive, dest),
+            },
             Err(e) => Err(ProotError::Io(e)),
         }
     }
@@ -690,12 +839,15 @@ fn extract_tar_gz_checked(f: fs::File, dest: &Path) -> ProotResult<()> {
                     .components()
                     .all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir));
             if !ok_path {
-                continue;
+                continue; // 链接自身路径非法（绝对/含 ..）：跳过
             }
             let target = e.link_name().map_err(ProotError::Io)?.unwrap_or_default();
-            let escape = if target.is_absolute() {
-                true
-            } else {
+            if et.is_hard_link() && target.is_absolute() {
+                continue; // 绝对 hardlink target：tar 会越界报错，跳过（见函数文档）
+            }
+            // symlink 绝对 target 放行（rootfs 惯例，写穿由 tar crate 封死）；
+            // 相对 target 才做 .. 逃逸推演。
+            let escape = !target.is_absolute() && {
                 let parent = link_path.parent().unwrap_or(std::path::Path::new(""));
                 !resolve_under(dest, parent, &target).starts_with(&dest_abs)
             };
@@ -711,6 +863,46 @@ fn extract_tar_gz_checked(f: fs::File, dest: &Path) -> ProotResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// DNS 清洗：常规 CSV 正常解析、去重、截断到 3 个。
+    #[test]
+    fn sanitize_dns_csv_basic() {
+        assert_eq!(
+            sanitize_dns_csv("223.5.5.5,119.29.29.29"),
+            vec!["223.5.5.5".to_string(), "119.29.29.29".to_string()]
+        );
+        assert_eq!(
+            sanitize_dns_csv(" 1.1.1.1 , 1.1.1.1 ,8.8.8.8, 9.9.9.9 , 8.8.4.4"),
+            vec![
+                "1.1.1.1".to_string(),
+                "8.8.8.8".to_string(),
+                "9.9.9.9".to_string()
+            ]
+        );
+    }
+
+    /// DNS 清洗：注入字符（换行/空格中缀/分号）整项丢弃；IPv6 放行。
+    #[test]
+    fn sanitize_dns_csv_rejects_injection() {
+        assert!(sanitize_dns_csv("1.1.1.1\noptions trust-ad").is_empty());
+        assert!(sanitize_dns_csv("nameserver 1.2.3.4").is_empty());
+        assert!(sanitize_dns_csv("1.1.1.1;rm -rf /").is_empty());
+        assert_eq!(sanitize_dns_csv("::1,fe80::1"), vec!["::1".to_string(), "fe80::1".to_string()]);
+        assert!(sanitize_dns_csv("").is_empty());
+    }
+
+    /// set_dns_servers_csv：合法值覆盖、全非法时保留默认（国内公共 DNS）。
+    #[test]
+    fn dns_setter_fallback() {
+        let mut mgr = DistroManager::new(std::path::Path::new("/tmp/moxsh-test"));
+        mgr.set_dns_servers_csv("8.8.8.8");
+        assert_eq!(mgr.dns_servers, vec!["8.8.8.8".to_string()]);
+        mgr.set_dns_servers_csv("bad\nvalue");
+        assert_eq!(
+            mgr.dns_servers,
+            DEFAULT_DNS_SERVERS.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+        );
+    }
 
     /// 预置清单完整性：四大发行版、id 唯一、含 aarch64 映射、URL 双源。
     #[test]
@@ -734,6 +926,42 @@ mod tests {
             DistroManager::find_spec("windows"),
             Err(ProotError::DistroUnknown(_))
         ));
+    }
+
+    /// 架构 URL 一致性：arch_map 声明支持的架构必须有可解析 URL；
+    /// 未声明的架构必须返回 None（绝不静默给错架构 rootfs）。
+    /// kali 特例：NetHunter minimal 仅 arm64，urls_for("x86_64") 必须 None。
+    #[test]
+    fn arch_urls_consistent() {
+        for s in builtin_specs() {
+            for (host_arch, _) in &s.arch_map {
+                let got = s.urls_for(host_arch);
+                assert!(
+                    got.is_some(),
+                    "{} 声明支持 {} 但无 URL",
+                    s.id,
+                    host_arch
+                );
+                let (official, mirror, checksum) = got.unwrap();
+                assert!(official.starts_with("https://"), "{} {}", s.id, official);
+                assert!(mirror.starts_with("https://"));
+                assert!(checksum.starts_with("https://"));
+            }
+            // 未收录架构一律 None（含 riscv/arm 等）。
+            assert!(s.urls_for("riscv64").is_none(), "{} 不该支持 riscv64", s.id);
+        }
+        // kali：仅 aarch64。
+        let kali = DistroManager::find_spec("kali").unwrap();
+        assert_eq!(kali.arch_map.len(), 1);
+        assert!(kali.urls_for("x86_64").is_none(), "kali amd64 rootfs 不存在，不许声明");
+        assert!(kali.urls_for("aarch64").is_some());
+        // ubuntu：amd64 点版本与 arm64 不同（24.04.5 vs 24.04.2），各取各的。
+        let ubuntu = DistroManager::find_spec("ubuntu").unwrap();
+        let (arm, _, _) = ubuntu.urls_for("aarch64").unwrap();
+        let (amd, _, _) = ubuntu.urls_for("x86_64").unwrap();
+        assert!(arm.contains("arm64"));
+        assert!(amd.contains("amd64"));
+        assert_ne!(arm, amd);
     }
 
     /// login_cmd：fake root + 默认绑定 + env -i + 登录 shell，对齐 proot-distro。

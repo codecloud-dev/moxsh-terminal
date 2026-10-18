@@ -30,6 +30,12 @@ jobs:
       - name: Kotlin 源码静态自检
         run: python3 .github/scripts/check_kotlin_lexer.py moxsh
 
+      # 防回归（真实事故）：曾声明 com.termux.permission.RUN_COMMAND 兼容 Termux，
+      # 与已装 Termux 的同名权限定义冲突 → INSTALL_FAILED_DUPLICATE_PERMISSION，
+      # 用户实测"与 termux 权限冲突无法安装"。禁止再抢注任何外部权限名。
+      - name: AndroidManifest 权限声明自检
+        run: python3 .github/scripts/check_manifest_permissions.py moxsh
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
