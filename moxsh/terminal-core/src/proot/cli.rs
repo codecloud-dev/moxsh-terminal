@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 
 use crate::proot::distro::DistroManager;
 use crate::proot::elf::{resolve_exec_chain, ExecPlan};
+use crate::proot::net;
 use crate::proot::ptrace::Tracer;
 use crate::proot::translate::TranslateRules;
 
@@ -398,8 +399,27 @@ pub fn proot_distro(args: &[&str], moxsh_root: &Path) -> String {
         "remove" => cmd_remove(&mgr, rest),
         "backup" => cmd_backup(&mgr, rest),
         "restore" => cmd_restore(&mgr, rest, moxsh_root),
+        "net" => cmd_net(&mgr, rest),
         "help" | "--help" | "-h" | "" => HELP.to_string(),
         other => format!("proot-distro: 未知子命令 {}\n{}", other, HELP),
+    }
+}
+
+/// `net [id]`：容器网络边界报告（M7 网络栈重写）。
+///
+/// 无参数时报告宿主侧网络环境（DNS/IPv6/出网探测）；带发行版 id 时
+/// 叠加该 rootfs 的 resolv.conf/hosts 现状。纯报告，不改配置。
+fn cmd_net(mgr: &DistroManager, args: &[&str]) -> String {
+    match args.first().copied() {
+        None | Some("") => {
+            // 宿主环境画像（未指定发行版）
+            let profile = net::build_profile("");
+            net::network_report(&profile, 0, net::probe_egress())
+        }
+        Some(id) => match mgr.net_report(id) {
+            Ok(r) => r,
+            Err(e) => format!("proot-distro net: {}\n", e),
+        },
     }
 }
 

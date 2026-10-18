@@ -21,6 +21,7 @@ use std::process::Command;
 use flate2::read::GzDecoder;
 
 use crate::crypto::sha256;
+use crate::proot::net;
 use crate::proot::symlink_fix::normalize_rootfs_symlinks;
 use crate::proot::translate::TranslateRules;
 use crate::proot::{ProotConfig, ProotError, ProotResult};
@@ -502,21 +503,71 @@ impl DistroManager {
     /// DNS 来源：宿主系统 DNS（C-ABI 传入，经 [`sanitize_dns_csv`] 清洗）优先，
     /// 否则回退 [`DEFAULT_DNS_SERVERS`]（国内公共 DNS）。PRoot 共享宿主网络栈，
     /// 但 guest 内 glibc 读的是 rootfs 里的 resolv.conf，必须落成真实可解析地址。
+    ///
+    /// M7 网络栈重写后同时完成：IPv6 双栈探测（[`net::probe_ipv6`]）、
+    /// 宿主 hosts 条目同步（[`net::merge_hosts_into_rootfs`]）、search 域提取。
     fn init_dns_and_repos(&self, rootfs: &Path) {
         let resolv = rootfs.join("etc/resolv.conf");
         if let Some(parent) = resolv.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let servers: Vec<String> = if self.dns_servers.is_empty() {
-            DEFAULT_DNS_SERVERS.iter().map(|s| s.to_string()).collect()
-        } else {
-            self.dns_servers.clone()
-        };
-        let content: String = servers
-            .iter()
-            .map(|s| format!("nameserver {}\n", s))
+        // 1) 网络画像：系统 DNS → 公共 DNS 回退；v6 探测驱动
+        let system_csv = self.dns_servers.join(",");
+        let mut profile = net::build_profile(&system_csv);
+        // 2) search 域：宿主 resolv.conf 提取（正常 Linux 路径优先，Android 回退）
+        for host_resolv in ["/etc/resolv.conf", "/system/etc/resolv.conf"] {
+            if let Ok(txt) = fs::read_to_string(host_resolv) {
+                profile.search = net::extract_search_domains(&txt);
+                if !profile.search.is_empty() {
+                    break;
+                }
+            }
+        }
+        // 3) 写 resolv.conf（v4 先于 v6 + options）
+        let _ = fs::write(&resolv, net::render_resolv_conf(&profile));
+        // 4) hosts 同步：宿主条目合并进 rootfs（去重，保留 rootfs 原有行）
+        for host_hosts in ["/etc/hosts", "/system/etc/hosts"] {
+            if let Ok(txt) = fs::read_to_string(host_hosts) {
+                let _ = net::merge_hosts_into_rootfs(&txt, &rootfs.join("etc/hosts"));
+                break;
+            }
+        }
+    }
+
+    /// 网络边界报告（`moxsh-proot-distro net` 的 Rust 侧主体）。
+    ///
+    /// 对已安装发行版现场生成画像：探测 IPv6/出网、读取 rootfs 内
+    /// resolv.conf 与 hosts 状态。**不改动任何配置**——纯报告语义，
+    /// 用户确认后再由安装路径重写。
+    pub fn net_report(&self, id: &str) -> ProotResult<String> {
+        self.check_id(id)?;
+        let rootfs = self.distro_rootfs(id);
+        if !rootfs.is_dir() {
+            return Err(ProotError::DistroNotInstalled(id.to_string()));
+        }
+        let system_csv = self.dns_servers.join(",");
+        let profile = net::build_profile(&system_csv);
+        let resolv = rootfs.join("etc/resolv.conf");
+        let servers_in_use: Vec<String> = fs::read_to_string(&resolv)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.strip_prefix("nameserver "))
+            .map(|s| s.trim().to_string())
             .collect();
-        let _ = fs::write(&resolv, content);
+        let hosts_lines = fs::read_to_string(rootfs.join("etc/hosts"))
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+            .count();
+        let egress_ok = net::probe_egress();
+        let mut report = net::network_report(&profile, 0, egress_ok);
+        report.push_str(&format!(
+            "rootfs 现状：resolv.conf {} 条 nameserver [{}]；hosts {} 条\n",
+            servers_in_use.len(),
+            servers_in_use.join(", "),
+            hosts_lines
+        ));
+        Ok(report)
     }
 
     /// 删除发行版（先删标记再删目录，防呆：不存在报 DistroNotInstalled）。
