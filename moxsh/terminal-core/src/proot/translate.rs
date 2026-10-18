@@ -9,7 +9,11 @@
 //! - 绑定 guest 端 `!` 前缀 = "不隔离"（no-isolate）：正向映射生效，
 //!   但反向还原与 stat 伪装跳过（guest 看到的是宿主真实属性）。
 //! - 未命中任何绑定的绝对路径一律落到 rootfs 前缀下（`-r` 语义）。
-//! - 相对路径按 guest 当前 cwd 绝对化后再翻译（对齐上游 build_current_path）。
+//! - **相对路径原样直通、不做翻译**：内核按**已翻译的** cwd/dirfd 解析
+//!   相对路径（chdir 在 enter 停已翻成 host 路径，dirfd 来自已翻译的
+//!   openat），解析天然落在 host 视图的正确位置；tracer 若自行"按 cwd
+//!   绝对化"必然用错 cwd 快照——guest 视角的 cwd 只存在于 guest 程序心里，
+//!   tracer 无从准确得知（M5.2 教训见 guest_to_host 文档）。
 //! - `/` 与 rootfs 根等价；已含 rootfs 前缀的 host 路径重复翻译是幂等的。
 //!
 //! 所有函数不触碰进程/文件系统状态，全部可用 `cargo test` 直接验证。
@@ -42,14 +46,13 @@ pub enum FakeRootAction {
 
 /// 路径翻译规则集。
 ///
-/// 持有：rootfs 前缀、绑定表（顺序即优先级，后绑定优先）、fake root 标志、
-/// guest 侧当前工作目录（用于相对路径绝对化）。
+/// 持有：rootfs 前缀、绑定表（顺序即优先级，后绑定优先）、fake root 标志。
+/// 不持有 cwd——相对路径一律直通（见模块文档），无需追踪 guest 视角 cwd。
 #[derive(Debug, Clone)]
 pub struct TranslateRules {
     rootfs: PathBuf,
     bindings: Vec<Binding>,
     fake_root: bool,
-    cwd: PathBuf,
 }
 
 impl TranslateRules {
@@ -60,7 +63,6 @@ impl TranslateRules {
             rootfs: normalize(&rootfs.to_string_lossy()),
             bindings: Vec::new(),
             fake_root: false,
-            cwd: PathBuf::from("/"),
         }
     }
 
@@ -84,12 +86,6 @@ impl TranslateRules {
         self
     }
 
-    /// 设置 guest 侧初始 cwd（相对路径翻译的基准，默认 `/`）。
-    pub fn set_cwd(&mut self, cwd: &str) -> &mut Self {
-        self.cwd = normalize(cwd);
-        self
-    }
-
     /// 启用/关闭 fake root（上游 `-0`）。
     pub fn set_fake_root(&mut self, on: bool) -> &mut Self {
         self.fake_root = on;
@@ -102,7 +98,6 @@ impl TranslateRules {
         for g in ["/dev", "/proc", "/sys", "/storage", "/system", "/apex"] {
             r.add_binding(g, g);
         }
-        r.set_cwd("/root");
         r.set_fake_root(true);
         r
     }
@@ -147,27 +142,38 @@ impl TranslateRules {
     /// guest → host 主入口。
     ///
     /// 规则顺序：
-    /// 1. 规范化 + 相对路径按 cwd 绝对化；
+    /// 1. 相对路径（不以 `/ 开头）原样直通，不做任何翻译/规范化；
     /// 2. 幂等：已是 host 路径（带 rootfs 前缀）则原样返回；
     /// 3. 绑定表最长前缀命中（同长时后绑定覆盖）→ host 绑定前缀 + 剩余组件；
     /// 4. 未命中 → rootfs 前缀拼接。
+    ///
+    /// guest → host 正向翻译（路径类 syscall 的 enter 停调用）。
+    ///
+    /// **相对路径原样直通**（M5.2 修复，此前此处是按 cwd 绝对化的错误实现）：
+    /// 内核按**已翻译的** cwd/dirfd 解析相对路径——chdir 在 enter 停已翻成
+    /// host 路径（内核 cwd 即 host 目录），dirfd 来自已翻译的 openat（其
+    /// dentry 即 host 目录），故相对路径的解析天然落在 host 视图的正确位置。
+    /// tracer 自行"按 guest cwd 绝对化"则必然用错 cwd 快照：guest 视角的
+    /// cwd 只存在于 guest 程序心里（dash 的 `cd` 内置命令更新的是 $PWD），
+    /// tracer 无从准确得知。实测事故：chdir 进绑定目录后 `cat marker`，
+    /// "marker" 被翻成 "/marker"（按初始 cwd "/" 拼接）→ ENOENT；该 bug
+    /// 曾被"无 scratch 就跳过翻译"的兜底掩盖，scratch 重定位落地后暴露。
+    /// 上游 proot 对相对路径同样原样放行（不做 translate）。
     pub fn guest_to_host(&self, path: &str) -> PathBuf {
+        if !path.starts_with('/') {
+            // 相对路径：直通。连 normalize 也不做——"a/../b" 的词法化简
+            // 与内核的符号链接语义不符（a 是符号链接时内核解析结果不同），
+            // 原样交给内核才是权威。
+            return PathBuf::from(path);
+        }
         let norm = normalize(path);
-        let abs = if norm.is_absolute() {
-            norm
-        } else {
-            // 相对路径：按 guest cwd 绝对化（内核随后按已翻译的 host cwd 解析，
-            // 但显式 open("/...") 前的中间拼接仍需正确视图）。
-            join_path(&self.cwd, &norm)
-        };
-
         // 幂等：调用方把已翻译的 host 路径再次传入（典型：readlink 返回值回环），
         // 直接返回，避免二次叠加 rootfs 前缀。
-        if self.has_rootfs_prefix(&abs) {
-            return abs;
+        if self.has_rootfs_prefix(&norm) {
+            return norm;
         }
 
-        let comps = split_comps(&abs);
+        let comps = split_comps(&norm);
 
         // 最长前缀优先；用 `>=` 使同长后绑定覆盖先绑定（对齐上游绑定栈顶优先）。
         let mut best_len = 0usize;
@@ -274,12 +280,16 @@ impl TranslateRules {
     }
 
     /// 判断绝对路径是否已带 rootfs 前缀（幂等翻译判定）。
+    ///
+    /// **rootfs="/" 必须返回 false**：该模式下「套 rootfs 前缀」是恒等操作，
+    /// 若按「任何绝对路径都已带前缀」短路，绑定匹配会被整体跳过——
+    /// `-r /` 无隔离直通模式下所有 `-b` 绑定静默失效（M4.1 修复，
+    /// 回归测试见 tests/proot_engine.rs 用例 4）。
     fn has_rootfs_prefix(&self, abs: &Path) -> bool {
         let comps = split_comps(abs);
         let rcomps = split_comps(&self.rootfs);
         if self.rootfs == Path::new("/") {
-            // rootfs=/ 时任何绝对路径都视为已带前缀（上游 rootfs=/ 的平凡情形）。
-            return abs.is_absolute();
+            return false;
         }
         strip_prefix_comps(&comps, &rcomps).is_some()
     }
@@ -292,6 +302,16 @@ impl TranslateRules {
         let rcomps = split_comps(&self.rootfs);
         strip_prefix_comps(comps, &rcomps)
             .map(|rest| rest.iter().map(|s| s.as_str()).collect())
+    }
+
+    /// 公开判定：该绝对（宿主）路径是否落在 rootfs 前缀内。
+    ///
+    /// 符号链接规范化（[`crate::proot::symlink_fix`]）据此区分
+    /// 「rootfs 内链接（可安全改写相对）」与「绑定/宿主路径链接
+    /// （保持绝对，交绑定语义）」。`-r /` 恒 false（宿主即 guest，
+    /// 无可改写对象）。
+    pub fn is_under_rootfs(&self, abs: &Path) -> bool {
+        self.has_rootfs_prefix(abs)
     }
 }
 
@@ -361,10 +381,18 @@ fn join_path(base: &Path, rel: &Path) -> PathBuf {
     out
 }
 
-/// 把剩余组件转回相对 Path（空 → "."）。
+/// 把剩余组件转回相对 Path（空 → 空 PathBuf，即"绑定根本身"）。
+///
+/// **不返回 "."**：精确命中绑定根时若拼出 `host/.`，本引擎的原地改写模型
+/// （enter 停把 guest 路径写回 tracee 原缓冲区）会因路径变长撞 `can_fit`
+/// 长度检查而整个跳过翻译——chdir 进绑定根目录将静默不翻译，guest 视角
+/// 直接穿帮（M5.1 抓出：`/tmp/g` → `/tmp/h/.` 长 2 字节被拒）。
+/// 上游 proot 的 `/.` 是为其"分配新缓冲区"模型保留"末组件必须是目录"
+/// 语义准备的；本引擎无二次解析层，裸 host 路径即正确。反向还原
+/// （host_to_guest，getcwd 复原）同理受益：否则会打印 `/tmp/g/.`。
 fn make_rel(rest: &[String]) -> PathBuf {
     if rest.is_empty() {
-        PathBuf::from(".")
+        PathBuf::new()
     } else {
         PathBuf::from(rest.join("/"))
     }
@@ -383,6 +411,19 @@ mod tests {
         // 嵌套绑定测试素材：/dev/urandom 细绑定覆盖 /dev 粗绑定（最长前缀优先）。
         r.add_binding("/dev/urandom", "/data/local/tmp/urandom");
         r
+    }
+
+    /// rootfs="/"（无隔离直通）下绑定必须生效——幂等短路曾让此模式绑定全灭。
+    #[test]
+    fn rootfs_slash_bindings_still_apply() {
+        let mut r = TranslateRules::new(Path::new("/"));
+        r.add_binding("/sdcard", "/storage/emulated/0");
+        assert_eq!(
+            r.guest_to_host("/sdcard/a.txt"),
+            Path::new("/storage/emulated/0/a.txt")
+        );
+        // 未绑定路径在 rootfs=/ 下恒等直通。
+        assert_eq!(r.guest_to_host("/etc/hosts"), Path::new("/etc/hosts"));
     }
 
     /// 1. 根路径 `/` 落到 rootfs 本身。
@@ -410,6 +451,20 @@ mod tests {
     fn binding_prefix_hit() {
         let r = rules();
         assert_eq!(r.guest_to_host("/dev"), PathBuf::from("/dev"));
+    }
+    /// 3.5 精确命中绑定根：双向都不允许 `/.` 后缀（M5.1）。
+    #[test]
+    fn binding_exact_root_no_dot_suffix() {
+        // 精确命中绑定根：双向都不允许 `/.` 后缀（M5.1）——
+        // guest→host 的 `/.` 会让 enter 停原地改写撞 can_fit 被拒；
+        // host→guest 的 `/.` 会让 getcwd 复原打印出 `/tmp/g/.`。
+        let mut r = TranslateRules::new(Path::new("/"));
+        r.add_binding("/tmp/g", "/tmp/h");
+        assert_eq!(r.guest_to_host("/tmp/g"), PathBuf::from("/tmp/h"));
+        assert_eq!(r.host_to_guest(Path::new("/tmp/h")).unwrap(), "/tmp/g");
+        // 子路径不受影响。
+        assert_eq!(r.guest_to_host("/tmp/g/x"), PathBuf::from("/tmp/h/x"));
+        assert_eq!(r.host_to_guest(Path::new("/tmp/h/x")).unwrap(), "/tmp/g/x");
     }
 
     /// 4. 绑定子路径继承：/dev/null → /dev/null。
@@ -446,14 +501,18 @@ mod tests {
         assert_eq!(r.guest_to_host(host.to_str().unwrap()), host);
     }
 
-    /// 8. 相对路径按 guest cwd 绝对化后翻译。
+    /// 8. 相对路径原样直通（M5.2）：内核按已翻译的 cwd/dirfd 解析，
+    ///    tracer 任何"按 cwd 绝对化"都必然用错快照——实测 `cat marker`
+    ///    曾被翻成 "/marker" 而 ENOENT（详见 guest_to_host 文档）。
     #[test]
-    fn relative_path_joins_cwd() {
+    fn relative_path_passthrough() {
         let r = rules();
-        let mut r2 = r.clone();
-        r2.set_cwd("/root");
+        assert_eq!(r.guest_to_host("notes.txt"), PathBuf::from("notes.txt"));
+        assert_eq!(r.guest_to_host("marker"), PathBuf::from("marker"));
+        assert_eq!(r.guest_to_host("./a/../b"), PathBuf::from("./a/../b"));
+        // 绝对路径仍走完整翻译（回归保护：修复不能波及绝对路径语义）。
         assert_eq!(
-            r2.guest_to_host("notes.txt"),
+            r.guest_to_host("/root/notes.txt"),
             PathBuf::from("/data/data/com.moxsh/containers/ubuntu/rootfs/root/notes.txt")
         );
     }

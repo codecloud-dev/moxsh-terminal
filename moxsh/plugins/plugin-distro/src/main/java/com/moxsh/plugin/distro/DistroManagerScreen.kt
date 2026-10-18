@@ -89,9 +89,24 @@ fun DistroManagerScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        // 生产实现：把 content uri 拷贝为本地临时 tar（contentResolver.openInputStream），
-        // 再调 ProotManager.restore(tmpPath, "custom")；此处为骨架，直接注释说明。
-        // 注意：native 不识别 content://，必须先落一份私有临时文件。
+        val ctx = LocalContext.current
+        // native 只认本地路径：content:// uri 先拷成 cacheDir 私有临时文件。
+        scope.launch {
+            val tmp = java.io.File(ctx.cacheDir, "restore-${System.currentTimeMillis()}.tar")
+            val copied = runCatching {
+                ctx.contentResolver.openInputStream(uri)?.use { input ->
+                    tmp.outputStream().use { output -> input.copyTo(output) }
+                } ?: error("无法打开所选文件")
+            }.isSuccess
+            if (!copied) {
+                activeInstallId = null
+                return@launch
+            }
+            val ok = ProotManager.restore(tmp.absolutePath, "custom")
+            tmp.delete()
+            if (ok) distros = ProotManager.listInstalled()
+            activeInstallId = null
+        }
     }
 
     Box(modifier.fillMaxSize()) {

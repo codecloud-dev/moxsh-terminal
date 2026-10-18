@@ -106,15 +106,19 @@ unsafe fn write_cstr_buf(out: *mut c_char, cap: usize, s: &str) -> c_int {
 
 /// 安装发行版：`id` 为预置 id（ubuntu/debian/kali/alpine）或自定义容器名。
 /// `cache_tar` 为已下载归档路径（可 null：内部 curl 兜底，Android 建议先下载）。
+/// `dns_csv` 为宿主系统 DNS 的 CSV 串（如 `"192.168.1.1,223.5.5.5"`，可 null：
+/// 用默认国内公共 DNS）——PRoot 共享宿主网络栈，但 guest glibc 读的是
+/// rootfs 内的 resolv.conf，必须落成真实可解析地址。
 /// 需要外部下载时返回 -6（ProotError::DownloadRequired）。
 ///
 /// # Safety
-/// `id`/`moxsh_root` 必须指向合法 NUL 结尾 UTF-8 字符串；`cache_tar` 可为 null。
+/// `id`/`moxsh_root` 必须指向合法 NUL 结尾 UTF-8 字符串；`cache_tar`/`dns_csv` 可为 null。
 #[no_mangle]
 pub unsafe extern "C" fn moxsh_proot_install(
     id: *const c_char,
     moxsh_root: *const c_char,
     cache_tar: *const c_char,
+    dns_csv: *const c_char,
 ) -> c_int {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；unsafe 操作收敛于内层块。
     // P3 panic 屏障：安装链路（下载/解压/落盘）体量大，内部异常折叠为 -99。
@@ -123,7 +127,11 @@ pub unsafe extern "C" fn moxsh_proot_install(
     let (Some(id), Some(root)) = (read_opt_cstr(id), read_opt_cstr(moxsh_root)) else {
         return -1;
     };
-    let mgr = proot::distro::DistroManager::new(std::path::Path::new(&root));
+    let mut mgr = proot::distro::DistroManager::new(std::path::Path::new(&root));
+    // 宿主系统 DNS 优先（经 sanitize_dns_csv 清洗防 resolv.conf 注入）。
+    if let Some(csv) = read_opt_cstr(dns_csv) {
+        mgr.set_dns_servers_csv(&csv);
+    }
     let mut progress: ProgressCallback = Box::new(|_, _, _| {});
     let r = match proot::distro::DistroManager::find_spec(&id) {
         Ok(spec) => {

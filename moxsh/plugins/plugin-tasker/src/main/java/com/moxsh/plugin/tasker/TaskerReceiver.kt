@@ -28,9 +28,11 @@ import kotlin.concurrent.thread
 class TaskerReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        // 调用方鉴权由 manifest 的 android:permission="com.termux.permission.RUN_COMMAND"
+        // 调用方鉴权由 manifest 的 android:permission="com.moxsh.permission.RUN_COMMAND"
         // （signature 级）在系统侧强制：仅同签名 App（含本应用自身）可投递此广播，
         // 第三方 App（含外部 Tasker）无法直接触发命令执行。下方仅做语义校验。
+        // 注意：不可用 com.termux.permission.RUN_COMMAND —— 与已安装 Termux 的同名
+        // 权限定义冲突会让整包安装失败（INSTALL_FAILED_DUPLICATE_PERMISSION）。
         if (intent.action != TaskerPluginContract.ACTION_RUN) return
         val command = intent.getStringExtra(TaskerPluginContract.EXTRA_COMMAND)
         if (command.isNullOrBlank()) {

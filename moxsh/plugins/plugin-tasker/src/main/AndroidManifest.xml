@@ -11,11 +11,15 @@
           android:permission=signature 级权限在系统侧强制——仅同签名 App（含本应用自身）
           可投递此广播，第三方 App（含外部 Tasker）无法直接触发命令执行。
           若需外部 Tasker 联动，应改为同签名桥接组件，而非放开此接收器。
+
+          权限名用 moxsh 自有的 com.moxsh.permission.RUN_COMMAND（由 plugin-api 声明）：
+          绝不能声明/引用 com.termux.permission.RUN_COMMAND —— 与已安装的 Termux
+          同名权限定义冲突会导致整包安装失败（INSTALL_FAILED_DUPLICATE_PERMISSION）。
         -->
         <receiver
             android:name=".TaskerReceiver"
             android:exported="true"
-            android:permission="com.termux.permission.RUN_COMMAND">
+            android:permission="com.moxsh.permission.RUN_COMMAND">
             <intent-filter>
                 <action android:name="com.moxsh.plugin.tasker.RUN" />
             </intent-filter>

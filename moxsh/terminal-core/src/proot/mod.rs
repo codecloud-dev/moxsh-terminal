@@ -13,6 +13,8 @@
 //!
 //! 模块结构：
 //! - [`translate`]：路径翻译规则引擎（纯函数，单测覆盖）
+//! - [`elf`]：ELF/shebang 解析 + execve 链解析（guest 解释器问题）
+//! - [`symlink_fix`]：绝对符号链接规范化 + 运行时走查（link2symlink 升级解法）
 //! - [`ptrace`]：ptrace 拦截器（enter/exit 双停 + 寄存器改写）
 //! - [`distro`]：发行版管理（安装/删除/备份/恢复/登录命令）
 //! - [`cli`]：`proot` / `proot-distro` 等价 CLI（脚本兼容层）
@@ -22,7 +24,9 @@
 
 pub mod cli;
 pub mod distro;
+pub mod elf;
 pub mod ptrace;
+pub mod symlink_fix;
 pub mod translate;
 
 use std::fmt;
@@ -43,6 +47,8 @@ pub enum ProotError {
     DistroAlreadyInstalled(String),
     /// 发行版未安装。
     DistroNotInstalled(String),
+    /// 发行版不支持当前宿主架构（arch_map 未收录，或无对应架构的 rootfs URL）。
+    DistroUnsupportedArch { id: String, host_arch: String },
     /// 需要外部下载缓存：纯 Rust HTTP(S) 会引入 reqwest/rustls，违反依赖极简
     /// 约束，Android 端由 Kotlin 层下载到缓存后传入 `install`。
     DownloadRequired(String),
@@ -66,6 +72,11 @@ impl fmt::Display for ProotError {
             ProotError::DistroUnknown(id) => write!(f, "未知发行版: {}", id),
             ProotError::DistroAlreadyInstalled(id) => write!(f, "发行版已安装: {}", id),
             ProotError::DistroNotInstalled(id) => write!(f, "发行版未安装: {}", id),
+            ProotError::DistroUnsupportedArch { id, host_arch } => write!(
+                f,
+                "发行版 {} 不支持当前架构 {}（可换 ubuntu/debian/alpine，或用自定义 rootfs）",
+                id, host_arch
+            ),
             ProotError::DownloadRequired(u) => write!(f, "需要先下载缓存: {}", u),
             ProotError::ChecksumMismatch { expected, got } => {
                 write!(f, "SHA-256 校验失败: 期望 {} 实得 {}", expected, got)
@@ -113,6 +124,7 @@ impl ProotError {
             ProotError::Io(_) => -9,
             ProotError::BufferTooSmall { .. } => -10,
             ProotError::Ptrace(_) => -11,
+            ProotError::DistroUnsupportedArch { .. } => -12,
         }
     }
 }
@@ -161,10 +173,10 @@ pub fn translate_selftest() -> usize {
     let once = r.guest_to_host("/usr/lib");
     pass += (r.guest_to_host(once.to_str().unwrap_or("")) == once) as usize;
 
-    // 9) 相对路径按 cwd 绝对化。
-    let mut r = TranslateRules::new(rf);
-    r.set_cwd("/root");
-    pass += (r.guest_to_host("notes") == rf.join("root/notes")) as usize;
+    // 9) 相对路径原样直通（M5.2：内核按已翻译的 cwd/dirfd 解析，
+    //    tracer 自行绝对化必然用错 cwd 快照）。
+    let r = TranslateRules::new(rf);
+    pass += (r.guest_to_host("notes") == PathBuf::from("notes")) as usize;
 
     // 10) fake root /proc 身份文件标记。
     let r = TranslateRules::with_distro_defaults(rf);
@@ -303,7 +315,9 @@ impl ProotConfig {
                 rules.add_binding(guest, host);
             }
         }
-        rules.set_cwd(&self.cwd);
+        // cwd 不再进规则集：相对路径一律直通（M5.2，见 translate::guest_to_host）。
+        // 初始 cwd 的落地由 spawn 时的 chdir 完成（cli::run_native 计算翻译后
+        // 的 host 路径传入 spawn_traced_with_cwd）。
         rules.set_fake_root(self.fake_root);
         rules
     }

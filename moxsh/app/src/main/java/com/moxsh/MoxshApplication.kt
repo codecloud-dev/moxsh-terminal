@@ -6,6 +6,7 @@ import com.moxsh.auth.SessionStore
 import com.moxsh.cloud.CommandHistoryStore
 import com.moxsh.shared.BootstrapState
 import com.moxsh.shared.ExecutionEngine
+import com.moxsh.shared.ProotManager
 import com.moxsh.ui.settings.MoxshPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,10 @@ class MoxshApplication : Application() {
 
         // 插件宿主装配（D5 体系②）：内置原生玻璃插件注册 + 会话事件桥
         PluginManager.init(this)
+
+        // PRoot 容器管理器初始化（发行版安装/备份/登录命令的 Kotlin 数据层，
+        // 委托 terminal-core ProotNative 的 JNI 实现）
+        ProotManager.init(this)
 
         // 云同步命令捕获（云同步 MVP）：仅「已登录 + 用户开启」时入队；
         // 捕获在输入写入 PTY 成功后透传，任何异常不影响终端输入主路径。
