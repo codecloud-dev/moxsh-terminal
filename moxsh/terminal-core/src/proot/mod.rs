@@ -17,6 +17,7 @@
 //! - [`symlink_fix`]：绝对符号链接规范化 + 运行时走查（link2symlink 升级解法）
 //! - [`ptrace`]：ptrace 拦截器（enter/exit 双停 + 寄存器改写）
 //! - [`distro`]：发行版管理（安装/删除/备份/恢复/登录命令）
+//! - [`net`]：网络栈（DNS 双栈/hosts 同步/IPv6 探测/边界报告，M7 重写）
 //! - [`cli`]：`proot` / `proot-distro` 等价 CLI（脚本兼容层）
 //!
 //! 本模块错误类型按 `thiserror` 的展开风格**手写** `Display`/`Error` 实现——
@@ -25,6 +26,7 @@
 pub mod cli;
 pub mod distro;
 pub mod elf;
+pub mod net;
 pub mod ptrace;
 pub mod symlink_fix;
 pub mod translate;
