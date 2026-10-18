@@ -23,7 +23,7 @@ flate2 = "=1.1.10"
 
 # 构建脚本依赖：cc 用于在 Android 目标下把 cpp/bridge.cpp 与 arch/neon.s 编入 cdylib（见 build.rs）。
 [build-dependencies]
-cc = "=1.5.1"
+cc = "=1.8.0"
 
 [profile.release]
 opt-level = 3
