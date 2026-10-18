@@ -460,7 +460,10 @@ pub fn syscall_plan_internal(inr: u64) -> SyscallPlan {
                 ret_buf_slot: if inr == READLINKAT { Some(2) } else { Some(1) },
             }
         }
-        // symlinkat 的 target 也是 guest 视角路径，需一并翻译；
+        // symlinkat 的 target 是链接内容也要翻——宿主内核按字面解析链接
+        // 目标，不翻则绝对 target 指向宿主 /bin/...（与 symlink 老接口同
+        // 策略）；相对 target 由 guest_to_host 原样直通（链接目录结构在
+        // 宿主侧同构，相对语义天然保持——见 translate::guest_to_host）。
         // target 无 dirfd 语义，仅 linkpath 受 newdirfd 修饰。
         SYMLINKAT => SyscallPlan::rewrite(
             Some(PathArg { slot: 0, dirfd_slot: None }),
@@ -489,8 +492,9 @@ pub fn syscall_plan_internal(inr: u64) -> SyscallPlan {
             Some(PathArg { slot: 1, dirfd_slot: None }),
         ),
         // symlink 老接口：target（槽 0）是链接内容也要翻——宿主内核按字面
-        // 解析链接目标，不翻则链指向宿主 /bin/...（与 symlinkat 同策略）；
-        // linkpath（槽 1）是创建位置。
+        // 解析链接目标，不翻则绝对 target 指向宿主 /bin/...（与 symlinkat
+        // 同策略；相对 target 由 guest_to_host 原样直通，链接目录结构在
+        // 宿主侧同构，相对语义天然保持）；linkpath（槽 1）是创建位置。
         sysnr::SYMLINK => SyscallPlan::rewrite(
             Some(PathArg { slot: 0, dirfd_slot: None }),
             Some(PathArg { slot: 1, dirfd_slot: None }),
@@ -615,6 +619,18 @@ pub enum RewriteOutcome {
 /// 让原路径直通内核（结果通常是 ENOENT，等价于未做绑定，绝不损坏子进程）。
 pub fn can_fit(original_len: usize, new_len: usize) -> bool {
     new_len < original_len + 1
+}
+
+/// 相对 guest 路径按基准目录绝对化（纯函数，便于单测）。
+///
+/// `base` 为 guest 视角目录（cwd 或 execveat 的 dirfd 反查值），`rel` 为
+/// 相对路径串。词法规范化（`normalize`）只处理 `.`/`..` 组件——exec 链
+/// 解析只读文件头，不依赖符号链接语义，与 [`translate::guest_to_host`]
+/// 对普通 syscall 相对路径"原样直通"的策略适用范围不同。
+fn join_guest_path(base: &str, rel: &str) -> String {
+    normalize(&format!("{}/{}", base.trim_end_matches('/'), rel))
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// 从子进程内存读取以 NUL 结尾的路径字符串。
@@ -1028,17 +1044,87 @@ impl Tracer {
         let Ok(guest_path) = read_child_cstr(pid, path_addr) else {
             return RewriteOutcome::Unreadable;
         };
-        // 相对路径按 guest cwd 绝对化（sh 的 `./script`）：内核 cwd 是已
-        // 翻译的宿主目录（chdir 在 enter 停已翻），readlink 后 host→guest
-        // 反推；失败则原样传入（resolve_exec_chain 读不到会停链 → Direct）。
-        let guest_abs = if guest_path.starts_with('/') {
-            guest_path.clone()
+        self.execve_common(pid, regs, guest_path, argv_addr, None, 0)
+    }
+
+    /// EXECVEAT enter：与 [`Tracer::handle_execve_enter`] 同一套显式解释器
+    /// 调用改写，差异仅在参数布局与相对路径的解析基准：
+    ///
+    /// - 参数布局：`execveat(dirfd, path, argv, envp, flags)` ⇒ path 槽 1、
+    ///   argv 槽 2（execve 是 0/1）；flags 槽 4 在改写时丢弃（execve 无此
+    ///   参，AT_SYMLINK_NOFOLLOW 对 exec 语义无效）；
+    /// - path 空串 ⇒ `AT_EMPTY_PATH`（fexecve 系）：目标即 dirfd 已打开的
+    ///   文件，经 `/proc/<pid>/fd/N` 反查 guest 路径；
+    /// - path 相对 ⇒ 以 dirfd 为基准（`AT_FDCWD` 等负值退回 guest cwd）。
+    ///
+    /// fd 反查失败（memfd、O_PATH 病态对象、fd 已关）⇒ Unchanged 放行，
+    /// 内核给出权威错误——与上游"翻译不了就透传"同口径。
+    pub fn handle_execveat_enter(&self, pid: libc::pid_t, regs: &mut Regs) -> RewriteOutcome {
+        let dirfd = regs.arg(0) as i32;
+        let path_addr = regs.arg(1);
+        let argv_addr = regs.arg(2);
+        if path_addr == 0 || argv_addr == 0 {
+            return RewriteOutcome::Unchanged;
+        }
+        let Ok(guest_path) = read_child_cstr(pid, path_addr) else {
+            return RewriteOutcome::Unreadable;
+        };
+        let (raw, dirfd_base) = if guest_path.is_empty() {
+            // AT_EMPTY_PATH：目标即 fd 本身；反查出的已是绝对 guest 路径
+            match self.fd_to_guest_path(pid, dirfd) {
+                Some(p) => (p, None),
+                None => return RewriteOutcome::Unchanged,
+            }
+        } else if guest_path.starts_with('/') || dirfd < 0 {
+            (guest_path, None) // 绝对路径忽略 dirfd；负 dirfd（AT_FDCWD）走 cwd
+        } else {
+            // 相对路径 + 有效 dirfd：以 dirfd 为解析基准；反查失败退回 cwd
+            (guest_path, self.fd_to_guest_path(pid, dirfd))
+        };
+        let envp_addr = regs.arg(3);
+        let outcome = self.execve_common(pid, regs, raw, argv_addr, dirfd_base, 1);
+        if matches!(outcome, RewriteOutcome::WrittenRelocated) {
+            // execveat → execve 收尾两件套（参数已按 execve 布局写入
+            // arg0=path / arg1=argv，见 execve_common）：
+            // 1) envp 从槽 3 搬到槽 2——execveat 布局 argv=2/envp=3，
+            //    execve 是 argv=1/envp=2，不搬则新程序拿原 argv 指针当
+            //    envp（实测静默错乱）；
+            // 2) 号换成 execve——不换内核按 execveat 语义把 arg0 当
+            //    dirfd，指针值即 EBADF（实测 "Bad file descriptor"）。
+            regs.set_arg(2, envp_addr);
+            regs.set_nr(sysnr::EXECVE);
+        }
+        outcome
+    }
+
+    /// execve/execveat 共用的改写主体（改写布局与降级策略见
+    /// [`Tracer::handle_execve_enter`] 文档）。
+    ///
+    /// `raw_guest`：guest 原始路径串；`argv_addr`：原 argv 数组地址；
+    /// `dirfd_base`：相对路径的解析基准（guest 视角目录，None ⇒ 用 cwd）；
+    /// `path_slot`：path 参数所在的寄存器槽（execve=0 / execveat=1）——
+    /// Direct 回落时按它翻路径，写死 0 会把 execveat 的 dirfd 当路径读
+    /// （实测 Unreadable → 内核 ENOENT）。
+    fn execve_common(
+        &self,
+        pid: libc::pid_t,
+        regs: &mut Regs,
+        raw_guest: String,
+        argv_addr: u64,
+        dirfd_base: Option<String>,
+        path_slot: u8,
+    ) -> RewriteOutcome {
+        // 相对路径按基准绝对化（sh 的 `./script`、execveat 的 dirfd 相对
+        // 路径）：基准是 guest 视角目录（宿主 cwd/fd 均已翻译，反推可得）。
+        // 反推失败则原样传入（resolve_exec_chain 读不到会停链 → Direct）。
+        let guest_abs = if raw_guest.starts_with('/') {
+            raw_guest.clone()
+        } else if let Some(base) = &dirfd_base {
+            join_guest_path(base, &raw_guest)
         } else {
             match self.guest_cwd(pid) {
-                Some(cwd) => normalize(&format!("{}/{}", cwd, guest_path))
-                    .to_string_lossy()
-                    .into_owned(),
-                None => guest_path.clone(),
+                Some(cwd) => join_guest_path(&cwd, &raw_guest),
+                None => raw_guest.clone(),
             }
         };
         let host = self.rules.guest_to_host(&guest_abs);
@@ -1051,7 +1137,7 @@ impl Tracer {
                 // 静态 ELF / 链尾 loader 缺失：只翻路径（handle_enter 同款）。
                 let plan = SyscallPlan::rewrite(
                     Some(PathArg {
-                        slot: 0,
+                        slot: path_slot,
                         dirfd_slot: None,
                     }),
                     None,
@@ -1123,6 +1209,18 @@ impl Tracer {
         let host = std::fs::read_link(format!("/proc/{}/cwd", pid)).ok()?;
         let guest = self.rules.host_to_guest(&host)?;
         Some(guest)
+    }
+
+    /// fd → guest 路径：readlink `/proc/<pid>/fd/<fd>` 得宿主真实路径
+    /// （openat 在 enter 停已翻译，fd 的 dentry 即宿主目录/文件），再
+    /// host→guest 反推。execveat 的 AT_EMPTY_PATH / dirfd 相对路径基准。
+    /// 失败（fd 已关、memfd、O_PATH 病态对象）→ None。
+    fn fd_to_guest_path(&self, pid: libc::pid_t, fd: i32) -> Option<String> {
+        if fd < 0 {
+            return None;
+        }
+        let host = std::fs::read_link(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
+        self.rules.host_to_guest(&host)
     }
 
     /// 构造"偷换 guest 自身 mmap"用的参数快照（纯函数，便于单测）。
@@ -1864,16 +1962,16 @@ impl Tracer {
                     }
                 }
                 Op::RewriteOnEnter | Op::RewriteEnterRestoreExit => {
-                    // EXECVE 特判：动态 ELF 必须走「显式解释器调用」——
-                    // 只翻 path 的话内核按 PT_INTERP 在宿主命名空间找 guest
-                    // loader 必然 ENOENT（guest shell exec 动态二进制全灭，
-                    // 见 [Tracer::handle_execve_enter] 文档）。
+                    // EXECVE/EXECVEAT 特判：动态 ELF 必须走「显式解释器
+                    // 调用」——只翻 path 的话内核按 PT_INTERP 在宿主命名
+                    // 空间找 guest loader 必然 ENOENT（guest shell exec
+                    // 动态二进制全灭，见 [Tracer::handle_execve_enter] 文档）。
                     // 改写可能重指参数寄存器（path/argv 双槽走 scratch 重定位），
                     // 故需在改写后把寄存器写回 tracee。
-                    let outcome = if to_internal_nr(regs.nr()) == Some(sysnr::EXECVE) {
-                        self.handle_execve_enter(pid, &mut regs)
-                    } else {
-                        self.handle_enter(pid, &mut regs, &plan)
+                    let outcome = match to_internal_nr(regs.nr()) {
+                        Some(sysnr::EXECVE) => self.handle_execve_enter(pid, &mut regs),
+                        Some(sysnr::EXECVEAT) => self.handle_execveat_enter(pid, &mut regs),
+                        _ => self.handle_enter(pid, &mut regs, &plan),
                     };
                     if matches!(outcome, RewriteOutcome::WrittenRelocated) {
                         self.set_regs(pid, &regs, entering)?;
@@ -2293,6 +2391,25 @@ mod tests {
         let p = syscall_plan_internal(sysnr::SYMLINKAT);
         assert_eq!(p.args[0], Some(PathArg { slot: 0, dirfd_slot: None }));
         assert_eq!(p.args[1], Some(PathArg { slot: 2, dirfd_slot: Some(1) }));
+    }
+
+    /// execveat：path 在槽 1 + dirfd 槽 0（execve 是槽 0 无 dirfd）——
+    /// 显式解释器调用改写见 [Tracer::handle_execveat_enter]。
+    #[test]
+    fn plan_execveat() {
+        let p = syscall_plan_internal(sysnr::EXECVEAT);
+        assert_eq!(p.op, Op::RewriteOnEnter);
+        assert_eq!(p.args[0], Some(PathArg { slot: 1, dirfd_slot: Some(0) }));
+        assert_eq!(p.args[1], None);
+    }
+
+    /// join_guest_path：相对 guest 路径的基准绝对化（纯词法）。
+    #[test]
+    fn join_guest_path_cases() {
+        assert_eq!(join_guest_path("/", "script"), "/script");
+        assert_eq!(join_guest_path("/tmp", "./x"), "/tmp/x");
+        assert_eq!(join_guest_path("/a/b", "../c"), "/a/c");
+        assert_eq!(join_guest_path("/root", "/abs"), "/root/abs"); // 调用方保证 rel 相对，此处仅防呆
     }
 
     /// stat/lstat（x86_64 老接口）：单路径槽 0，无 dirfd——musl stat()/
