@@ -1,0 +1,73 @@
+name: Android CI
+
+# 验证 Kotlin / Gradle 构建。本仓库不提交 gradlew（wrapper jar 无法在沙箱生成），
+# 由 gradle/setup-gradle 直接安装 Gradle 8.7 构建；本地开发者见
+# gradle/wrapper/gradle-wrapper.properties 注释用 `gradle wrapper` 生成。
+#
+# terminal-core 经 `cargo ndk` 出 native .so，故 CI 需 JDK17 + Android SDK/NDK + Rust。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 构建并验证（assembleDebug）
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK（cmdline-tools + 接受许可证）
+        uses: android-actions/setup-android@v3
+
+      - name: 安装 SDK platform / build-tools / NDK
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125"
+          yes | sdkmanager --licenses >/dev/null || true
+
+      - name: 定位并导出 NDK
+        id: ndk
+        run: |
+          NDK_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}/ndk/26.1.10909125"
+          echo "ndk-home=$NDK_HOME" >> "$GITHUB_OUTPUT"
+          echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+
+      - name: Set up Rust（android 目标）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+
+      - name: 安装 cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Rust 缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: terminal-core
+
+      - name: Set up Gradle 8.7
+        uses: gradle/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+          validate-wrappers: false
+
+      - name: 构建（assembleDebug）
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: 上传 Debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moxsh-app-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
