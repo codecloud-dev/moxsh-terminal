@@ -1,52 +1,38 @@
 package com.moxsh.shared
 
 import android.content.Context
-import com.moxsh.core.ProotNative
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.URL
 
 /**
- * PRoot 容器管理器（M4.2 图形化管理全家桶的数据层，D12/D13/D14）。
+ * PRoot 容器管理器（数据层，D12/D13/D14）。
  *
- * 职责：把 native 层（libmoxshcore.so 的 `moxsh_proot_*` C-ABI，对应
- * `terminal-core/src/lib.rs` 导出的 proot 系列函数）包装成 Kotlin 友好 API，
- * 供 plugin-distro 的四件套界面（发行版管理器 / 图形包管理器 / 资源监控 /
- * 小白向导）与 plugin-ai 的 Agent 工具调用，全程零命令行。
+ * 0.4.0 重构：proot 引擎不再打包进 App。运行时按需从官方国内源
+ * （Gitee `thousand-code-crafts/moxsh-proot` 的 `proot-latest` 滚动发布）
+ * 下载最新版 `moxsh-proot-distro` + `moxsh-proot` 到 `$filesDir/proot/bin/`，
+ * 之后所有操作都 shell out 到下载的 CLI（install/login/remove/backup/restore/list），
+ * 用户因此始终拿到官方最新版，而非打包进去的旧版。
  *
- * **M4.1 修正**：本类早期版本自行声明了 6 个 `external fun`
- * （nativeListInstalled/nativeInstall/...），但 bridge.cpp 只实现了
- * `Java_com_moxsh_core_*` 系列，`Java_com_moxsh_shared_ProotManager_*`
- * 从未存在——运行时全部 UnsatisfiedLinkError。现改为委托
- * [com.moxsh.core.ProotNative]（terminal-core 模块，JNI 实现齐备），
- * 彻底消除死路。
- *
- * native 对应关系（terminal-core/src/lib.rs，Rust）：
- *  - listInstalled  -> `moxsh_proot_list_installed`（行协议解析）
- *  - install        -> `moxsh_proot_install`（下载 -> SHA-256 校验 -> 解压 -> 初始化）
- *  - remove         -> `moxsh_proot_remove`
- *  - loginCommand   -> `moxsh_proot_login`（拼 proot 启动命令行）
- *  - backup         -> `moxsh_proot_backup`（rootfs 打 tar 包）
- *  - restore        -> `moxsh_proot_restore`（tar 恢复为 rootfs）
- *
- * 安装目录约定：`$filesDir/proot/containers/<id>/rootfs`（与 Rust
- * DistroManager 布局一致；应用私有区，无需任何存储权限）。
+ * 安装目录约定：`$filesDir/proot/containers/<id>/rootfs`
+ * （与 moxsh-proot 引擎 DistroManager 布局一致；经 `MOXSH_ROOT` 环境变量告知引擎）。
  * 使用前必须 [init]（MoxshApplication.onCreate 已调用）。
  */
 object ProotManager {
 
-    /** 进度回调接口：安装为阻塞式 C-ABI（无 JNI 回调），按阶段粗粒度回调。 */
+    /** 进度回调接口（UI 层用）。 */
     interface ProgressListener {
-        /**
-         * @param percent 0-100 的整数进度（安装阶段粒度：开始 0 / 完成 100）。
-         * @param stage   阶段文案，如"安装 ubuntu-24.04"、"安装完成"。
-         */
         fun onProgress(percent: Int, stage: String)
     }
 
-    // ------------------------------------------------------------------
-    // 生命周期与路径
-    // ------------------------------------------------------------------
+    // ---- 官方国内源（Gitee，国内直连快、官方、最新）----
+    private const val GITEE_OWNER = "thousand-code-crafts"
+    private const val GITEE_REPO = "moxsh-proot"
+    private const val RELEASE_TAG = "proot-latest"
+    private val RELEASE_BASE =
+        "https://gitee.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$RELEASE_TAG"
 
     private var appCtx: Context? = null
 
@@ -57,7 +43,8 @@ object ProotManager {
 
     /**
      * 发行版安装基目录：`$filesDir/proot`。
-     * Rust 侧 rootfs 实际落在 `$moxshRoot/containers/<id>/rootfs`。
+     * 引擎经 `MOXSH_ROOT` 环境变量读取此目录，rootfs 实际落在
+     * `$moxshRoot/containers/<id>/rootfs`。
      */
     fun moxshRoot(): String {
         val ctx = appCtx ?: error("ProotManager.init(context) 未调用")
@@ -67,9 +54,67 @@ object ProotManager {
     /** 上下文就绪判断（未 init 时所有操作走兜底，不崩）。 */
     private fun ready(): Boolean = appCtx != null
 
-    // ------------------------------------------------------------------
-    // Kotlin 公开 API（界面层只用这些）
-    // ------------------------------------------------------------------
+    private fun engineDir(): File = File(moxshRoot(), "bin")
+
+    /** 当前设备 ABI → 资产后缀（arm64 优先，其次 x86_64）。 */
+    private fun abiSuffix(): String {
+        val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64"
+        return when {
+            abi.contains("arm64") || abi.contains("aarch64") -> "arm64"
+            abi.contains("x86_64") -> "amd64"
+            else -> "arm64"
+        }
+    }
+
+    private fun distroBin(): File = File(engineDir(), "moxsh-proot-distro")
+    private fun engineBin(): File = File(engineDir(), "moxsh-proot")
+
+    /**
+     * 确保引擎已下载：缺任一二进制即从 Gitee 拉最新版，并标记可执行。
+     * @return 两个二进制齐备且可执行返回 true。
+     */
+    private fun ensureEngine(): Boolean {
+        val dir = engineDir().also { it.mkdirs() }
+        val distro = distroBin()
+        val engine = engineBin()
+        val abi = abiSuffix()
+        val targets = listOf(
+            distro to "$RELEASE_BASE/moxsh-proot-distro-android-$abi",
+            engine to "$RELEASE_BASE/moxsh-proot-android-$abi",
+        )
+        for ((file, url) in targets) {
+            if (!file.canExecute() || file.length() == 0L) {
+                try {
+                    URL(url).openStream().use { input ->
+                        file.outputStream().use { out -> input.copyTo(out) }
+                    }
+                    file.setExecutable(true, false)
+                } catch (e: Throwable) {
+                    return false
+                }
+            }
+        }
+        return distro.canExecute() && engine.canExecute()
+    }
+
+    /** 在引擎 bin 目录约束下运行 proot-distro CLI，返回 stdout（trim）；失败返回 null。 */
+    private fun runDistro(args: List<String>): String? {
+        if (!ensureEngine()) return null
+        return try {
+            val pb = ProcessBuilder(distroBin().absolutePath, *args.toTypedArray())
+            val env = pb.environment()
+            val cur = System.getenv("PATH") ?: ""
+            env["PATH"] = "${engineDir().absolutePath}:$cur"
+            env["MOXSH_ROOT"] = moxshRoot()
+            pb.redirectErrorStream(true)
+            val p = pb.start()
+            val out = p.inputStream.bufferedReader().readText().trim()
+            val ok = p.waitFor() == 0
+            if (ok) out else null
+        } catch (e: Throwable) {
+            null
+        }
+    }
 
     /** 发行版信息（列表卡片直接渲染用）。 */
     data class DistroInfo(
@@ -80,44 +125,26 @@ object ProotManager {
         val installed: Boolean,
     )
 
-    /**
-     * 四大主流发行版预置目录（D14）+ 自定义入口说明。
-     * `installed` 字段为静态目录初始值，运行时以 [listInstalled] 合并为准。
-     */
+    /** 四大主流发行版预置目录 + 自定义入口。 */
     val AVAILABLE_DISTROS: List<DistroInfo> = listOf(
         DistroInfo("ubuntu-24.04", "Ubuntu", "24.04 LTS", 68L, false),
         DistroInfo("debian-12", "Debian", "12 Bookworm", 55L, false),
         DistroInfo("kali-rolling", "Kali", "rolling", 92L, false),
         DistroInfo("alpine-3.20", "Alpine", "3.20", 12L, false),
-        // 自定义入口：不占卡片位，UI 显示"从 tar 安装"表单（URL + 可选 sha256）
         DistroInfo("custom", "自定义 rootfs", "从 tar/URL 安装", 0L, false),
     )
 
-    /**
-     * 已安装 + 预置目录合并后的发行版列表（界面卡片数据源）。
-     * native 未就绪 / 未 init 时回退为静态 [AVAILABLE_DISTROS]（安装态全 false）。
-     */
+    /** 已安装发行版（仅本地校验 rootfs 目录是否存在，无网络，主线程安全）。 */
     fun listInstalled(): List<DistroInfo> {
-        if (!ready()) return AVAILABLE_DISTROS
-        val native = ProotNative()
-        return when (val r = native.listInstalled(moxshRoot())) {
-            is ProotNative.ProotResult.OkList -> {
-                val installedIds = r.distros.filter { it.initialized }.map { it.id }.toSet()
-                AVAILABLE_DISTROS.map { base ->
-                    base.copy(installed = base.id in installedIds)
-                }
-            }
-            else -> AVAILABLE_DISTROS
+        return AVAILABLE_DISTROS.map { base ->
+            val rootfs = File(moxshRoot(), "containers/${base.id}/rootfs")
+            base.copy(installed = rootfs.isDirectory)
         }
     }
 
     /**
-     * 一键安装（重操作：下载 + 校验 + 解压，在 IO 线程池执行）。
-     *
-     * @param id         发行版 id（[AVAILABLE_DISTROS] 中的，或自定义 id）。
-     * @param onProgress 进度回调（IO 线程触发，界面侧记得切回主线程更新状态）。
-     *                   C-ABI 为阻塞式无 JNI 回调，按开始/完成两点上报。
-     * @return 全部阶段成功返回 true；native 未就绪 / 校验失败返回 false。
+     * 一键安装（重操作：下载引擎 + 由引擎下载 rootfs，在 IO 线程执行）。
+     * @return 成功 true；引擎未就绪/下载失败 false。
      */
     suspend fun install(id: String, onProgress: (Int, String) -> Unit): Boolean =
         withContext(Dispatchers.IO) {
@@ -125,64 +152,66 @@ object ProotManager {
                 onProgress(0, "内核未就绪：ProotManager 未初始化")
                 return@withContext false
             }
-            onProgress(0, "安装 $id")
-            val ctx = appCtx!!
-            // 宿主系统 DNS 优先（PRoot 共享宿主网络栈，但 guest glibc 读
-            // rootfs 内 resolv.conf，必须落真实地址；失败回退国内公共 DNS）。
-            val dnsCsv = ProotNative().systemDnsCsv(ctx)
-            val ok = ProotNative().install(id, moxshRoot(), cacheTar = null, dnsCsv = dnsCsv).isSuccess
-            onProgress(if (ok) 100 else 0, if (ok) "安装完成" else "安装失败")
+            onProgress(5, "确保 moxsh-proot 引擎已下载")
+            if (!ensureEngine()) {
+                onProgress(0, "引擎下载失败（检查网络 / Gitee 可达性）")
+                return@withContext false
+            }
+            onProgress(15, "正在安装 $id（下载 rootfs）")
+            val ok = runDistro(listOf("install", id)) != null
+            onProgress(if (ok) 100 else 0, if (ok) "安装完成，可以启动了" else "安装失败")
             ok
         }
 
-    /** 删除发行版（IO 线程执行，删除 rootfs 目录树）。 */
+    /** 删除发行版（IO 线程）。 */
     suspend fun remove(id: String): Boolean = withContext(Dispatchers.IO) {
         if (!ready()) return@withContext false
-        ProotNative().remove(id, moxshRoot()).isSuccess
+        runDistro(listOf("remove", id)) != null
     }
 
     /**
-     * 生成进入发行版的 proot 启动命令行（同步即可）。
+     * 生成进入发行版的 proot 启动命令行。
      *
-     * 由 Rust 侧 `moxsh_proot_login` 生成（布局与绑定表同源，避免两套拼法漂移）；
-     * native 未就绪时用 Kotlin 兜底拼接（同样的 $moxshRoot/containers/<id>/rootfs
-     * 布局，保证界面在降级路径也能展示正确形态）。
+     * 优先用已下载引擎的 `login` 子命令（本地进程，无网络，主线程安全）；
+     * 引擎未下载时回退 Kotlin 兜底拼接（同样的 `$moxshRoot/containers/<id>/rootfs` 布局）。
      *
-     * 返回值直接交给 `ExecutionEngine.createSession(command = loginCommand(id), ...)`
-     * 执行即可进入发行版（见 DistroManagerScreen 的"启动"按钮注释）。
+     * 注意：返回的命令以裸名 `moxsh-proot` 引用引擎，终端会话需将其 bin 目录
+     * （`$filesDir/proot/bin`）纳入 PATH，否则执行时找不到引擎。
      */
     fun loginCommand(id: String): String {
-        if (ready()) {
-            when (val r = ProotNative().login(id, moxshRoot())) {
-                is ProotNative.ProotResult.OkCmd -> return r.command
-                else -> Unit
+        val distro = distroBin()
+        if (distro.canExecute()) {
+            try {
+                val pb = ProcessBuilder(distro.absolutePath, "login", id)
+                val env = pb.environment()
+                env["MOXSH_ROOT"] = moxshRoot()
+                pb.redirectErrorStream(true)
+                val p = pb.start()
+                val out = p.inputStream.bufferedReader().readText().trim()
+                if (p.waitFor() == 0 && out.isNotBlank()) return out
+            } catch (_: Throwable) {
+                // 落到兜底拼接
             }
         }
-        // 纯 Kotlin 兜底拼接（与 Rust 布局对齐；未 init 时用占位路径展示形态）。
         val root = if (ready()) {
             "${moxshRoot()}/containers/$id/rootfs"
         } else {
             "<filesDir>/proot/containers/$id/rootfs"
         }
-        return "proot --kill-on-exit -r $root -0 -w /root -b /dev -b /proc -b /sys " +
+        return "moxsh-proot -r $root -0 -w /root -b /dev -b /proc -b /sys " +
             "/bin/env -i HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin " +
             "/bin/bash -l"
     }
 
-    /**
-     * 备份发行版 rootfs 为 tar（IO 线程执行）。
-     * @param outPath 输出 tar 绝对路径；界面侧约定导出到
-     *                `/sdcard/Download/moxsh-backups/<id>-<时间戳>.tar`
-     *                （Android 10+ 实际经 MediaStore.Downloads 写入，见界面注释）。
-     */
+    /** 备份发行版 rootfs 为 tar（IO 线程）。 */
     suspend fun backup(id: String, outPath: String): Boolean = withContext(Dispatchers.IO) {
         if (!ready()) return@withContext false
-        ProotNative().backup(id, moxshRoot(), outPath).isSuccess
+        runDistro(listOf("backup", id, outPath)) != null
     }
 
-    /** 从 tar 恢复发行版（IO 线程执行；[id] 可为已有发行版或自定义新 id）。 */
+    /** 从 tar 恢复发行版（IO 线程）。 */
     suspend fun restore(tarPath: String, id: String): Boolean = withContext(Dispatchers.IO) {
         if (!ready()) return@withContext false
-        ProotNative().restore(id, moxshRoot(), tarPath).isSuccess
+        runDistro(listOf("restore", id, tarPath)) != null
     }
 }
