@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # 只依赖 libc：所有内存安全敏感逻辑均在 Rust 内自研，避免外部 crate 在 NDK target 下的编译不确定性。
 # 版本全部用 "=x.y.z" 精确锁定（与 Cargo.lock 双保险）：上游小版本更新不会意外改变 CI 构建输入。
-libc = "=0.2.189"
+libc = "=0.2.190"
 # .mox 包归档解压/打包（moxpkg.rs）。两 crate 均纯 Rust（flate2 默认
 # miniz_oxide 后端），NDK target 可编（依赖约束：本文件仅允许新增
 # tar/flate2，不引 thiserror/reqwest/sha2 等，校验复用 crypto::sha256）。
