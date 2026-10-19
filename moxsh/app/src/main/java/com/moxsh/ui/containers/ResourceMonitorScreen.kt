@@ -41,7 +41,7 @@ fun ResourceMonitorScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val diskHist = remember { mutableStateListOf(*List(15) { Random.nextInt(59, 63) }.toTypedArray()) }
     val procs = remember {
         mutableStateListOf(
-            Proc(1024, "termux", 12, 84),
+            Proc(1024, "proot", 12, 84),
             Proc(1188, "apt", 4, 32),
             Proc(1310, "python3", 7, 56),
             Proc(1402, "nginx", 1, 6),

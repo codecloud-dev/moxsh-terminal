@@ -2,6 +2,7 @@ package com.moxsh.plugin.ai
 
 import android.content.Context
 import com.moxsh.shared.ExecutionEngine
+import com.moxsh.shared.ProotManager
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.delay
@@ -89,11 +90,13 @@ object AgentToolRegistry {
 
     /** 全部工具（顺序即模型看到的清单顺序，常用在前）。 */
     val tools: List<AgentTool> = listOf(
+        installDistro(),
         installPkg(),
         changeRepo(),
         runCommand(),
         explainError(),
         openStore(),
+        backupDistro(),
     )
 
     /** 按名查找工具（模型给了未注册名时返回 null，执行器回传错误文本）。 */
@@ -105,6 +108,32 @@ object AgentToolRegistry {
     }
 
     // ---------------- 各工具实现 ----------------
+
+    /**
+     * 安装发行版：调 ProotManager.install，下载/校验/解压进度经 onProgress
+     * 实时回传（UI 进度显示 + 汇总给 AI）。属于大流量重操作，标 HIGH，
+     * AgentExecutor 会在执行前统一挂玻璃确认卡（见 [AgentExecutor.executeTool]）。
+     */
+    private fun installDistro() = AgentTool(
+        name = "install_distro",
+        displayName = "安装发行版",
+        description = "一键安装一个 Linux 发行版（图形化，无需命令行）。可选：" +
+            "ubuntu-24.04 / debian-12 / kali-rolling / alpine-3.20。会下载数百 MB，安装完成前请勿关闭应用。",
+        parametersJson = schema {
+            prop("id", "string", "发行版 id：ubuntu-24.04 / debian-12 / kali-rolling / alpine-3.20")
+            required("id")
+        },
+        danger = DangerLevel.HIGH,
+    ) { args, tc ->
+        val id = args.optString("id", "ubuntu-24.04")
+        val stages = StringBuilder()
+        val ok = ProotManager.install(id) { percent, stage ->
+            tc.onProgress("[$id] $percent% $stage")
+            stages.appendLine("$percent% $stage")
+        }
+        if (ok) "发行版 $id 安装成功。可用 backup_distro 提醒用户备份，用 run_command 验证。进度：\n$stages"
+        else "发行版 $id 安装失败（内核未就绪或校验未通过）。进度：\n$stages"
+    }
 
     /**
      * 安装软件包：在当前发行版会话里用包管理器装包（apt/apk 由发行版决定）。
@@ -216,6 +245,27 @@ object AgentToolRegistry {
     ) { _, _ ->
         // UI 层监听该结果文本，触发导航到 plugin-store 页面。
         "__NAVIGATE__:store"
+    }
+
+    /**
+     * 备份发行版：ProotManager.backup 打 tar 导出到 Download 目录。
+     * 输出文件若同名会被覆盖（覆盖风险），标 HIGH，由 AgentExecutor 挂确认卡。
+     */
+    private fun backupDistro() = AgentTool(
+        name = "backup_distro",
+        displayName = "备份发行版",
+        description = "把发行版 rootfs 打包为 tar 导出到 Download/moxsh-backups 目录，防止重置丢失环境。",
+        parametersJson = schema {
+            prop("id", "string", "发行版 id，如 ubuntu-24.04")
+            required("id")
+        },
+        danger = DangerLevel.HIGH,
+    ) { args, tc ->
+        val id = args.optString("id", "ubuntu-24.04")
+        val out = "/sdcard/Download/moxsh-backups/$id-${System.currentTimeMillis()}.tar"
+        val ok = ProotManager.backup(id, out)
+        if (ok) "备份完成：$out。请把文件位置告诉用户。"
+        else "备份失败（内核未就绪或发行版不存在）。"
     }
 
     // ---------------- 内部辅助 ----------------
