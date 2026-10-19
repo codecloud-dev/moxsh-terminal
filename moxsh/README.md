@@ -53,10 +53,9 @@ moxsh/
 │   ├── cpp/bridge.cpp         # 最小 JNI 桥接
 │   ├── arch/neon.s            # arm64 NEON 热路径
 │   └── src/                   # session/pty/parser/screen/ring/renderer/ipc/compat/crypto/pkgmgr
-│                              # + proot/（D12 PRoot 引擎：translate/ptrace/distro/cli）
 │                              # + moxpkg.rs（D15 .mox 包解析/验签）
 ├── shared/                    # Kotlin 共享库：ExecutionEngine / IpcServer / CompatShim
-│                              # + ProotManager / MoxPackage / BootstrapInstaller(BootstrapState)
+│                              # + MoxPackage / BootstrapInstaller(BootstrapState)
 ├── ui/                        # 玻璃 UI 组件库（GlassSurface/GlassTopBar/...）
 └── plugins/
     ├── plugin-core/           # 原生插件框架（PluginContract/PluginHost）
@@ -66,7 +65,6 @@ moxsh/
     ├── plugin-boot/           # 开机自启（BootReceiver + 玻璃配置）
     ├── plugin-tasker/         # Tasker 联动
     ├── plugin-widget/         # 玻璃桌面小部件
-    ├── plugin-distro/         # 图形化管理四件套（发行版/包管理/资源监控/小白向导）
     ├── plugin-store/          # .mox 插件商店（一键安装/启停/更新/本地上传/售卖徽章）
     └── plugin-ai/             # AI Agent（OpenAI 兼容+国内预置 / 技能系统 / 工具调用 / 玻璃对话栏）
 
@@ -108,7 +106,7 @@ push 到 `main`/`dev` 即触发 `.github/workflows/build.yml`：
 所有子系统均已从骨架填满为真实实现：
 
 - `terminal-core`：**Rust 内核完整实现**——PTY fork/exec、VT 状态机（UTF-8/中文/emoji）、屏幕网格、回滚 + mmap 兜底、NEON 热路径、IPC 加固、兼容路由、双协议包管理、**PRoot 引擎**（路径翻译 20 单测 + ptrace 拦截 + 四大发行版管理）、**.mox 包格式**（解析/验签/防逃逸）。全内核 **60+ 单元测试**。
-- `shared`：ExecutionEngine（多会话+泵循环）、IpcServer（HMAC 握手）、CompatShim（termux-* 路由 + `$PREFIX` 布局落地）、ProotManager、MoxPackage、**BootstrapInstaller/BootstrapState**（首装流水线，App 启动自动触发）。
+- `shared`：ExecutionEngine（多会话+泵循环）、IpcServer（HMAC 握手）、CompatShim（termux-* 路由 + `$PREFIX` 布局落地）、MoxPackage、**BootstrapInstaller/BootstrapState**（首装流水线，App 启动自动触发）。
 - `app`：TerminalView 真实 Canvas 渲染（16 字节 Cell/256 色/滚动/捏合缩放）、多会话玻璃标签栏、ExtraKeys 真发 VT 序列、设置页持久化。
 - `plugins/*`（10 个）：全部经 PluginContract 注册；含图形化管理四件套、.mox 商店、AI Agent（国内预置服务商 + 技能系统 + 高危确认卡）。
 
