@@ -136,7 +136,6 @@ dependencies {
     implementation(project(":ui"))
     implementation(project(":plugins:plugin-core"))
     implementation(project(":plugins:plugin-float"))
-    implementation(project(":plugins:plugin-distro"))
     implementation(project(":plugins:plugin-styling"))
     implementation(project(":plugins:plugin-boot"))
     implementation(project(":plugins:plugin-widget"))

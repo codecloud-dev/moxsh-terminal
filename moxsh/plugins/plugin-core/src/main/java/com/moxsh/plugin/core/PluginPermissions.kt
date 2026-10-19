@@ -17,9 +17,6 @@ object PluginPermissions {
     /** 图形化安装软件包（moxpkg / apt）。 */
     const val INSTALL_PKG = "install_pkg"
 
-    /** 安装 / 管理 PRoot 发行版。 */
-    const val INSTALL_DISTRO = "install_distro"
-
     /** 修改软件源配置。 */
     const val CHANGE_REPO = "change_repo"
 
@@ -57,7 +54,7 @@ object PluginPermissions {
 
     /** 全部权限（工具方法用，不作为 manifest 值）。 */
     val ALL: Set<String> = setOf(
-        RUN_COMMAND, INSTALL_PKG, INSTALL_DISTRO, CHANGE_REPO, EXPLAIN_ERROR,
+        RUN_COMMAND, INSTALL_PKG, CHANGE_REPO, EXPLAIN_ERROR,
         MANAGE_SESSIONS, READ_SCREEN, POST_NOTIFICATION, CLIPBOARD, VIBRATE,
         NETWORK, STORAGE, REGISTER_SKILL, SUBSCRIBE_EVENTS,
     )
