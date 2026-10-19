@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moxsh.auth.LoginActivity
+import com.moxsh.plugin.distro.DistroManagerScreen
 import com.moxsh.shared.BootstrapState
 import com.moxsh.shared.ExecutionEngine
 import com.moxsh.ui.ai.AiPanel
@@ -251,10 +252,19 @@ fun MoxshRoot() {
                     onImport = { importLauncher.launch(arrayOf("application/zip")) },
                 )
                 MoxshPage.CATALOG -> when (catalogTop) {
+                    "distro" -> DistroManagerScreen(
+                        onBack = { catalogTop = "hub" },
+                        onOpenTerminal = { cmd ->
+                            newSession("distro", SessionEnv.CONTAINER, "/root", cmd)
+                            catalogTop = "hub"
+                            page = MoxshPage.TERMINAL
+                        },
+                        onOpenPackageManager = { catalogTop = "pkgs" },
+                    )
                     "pkgs" -> PackageManagerScreen(onBack = { catalogTop = "hub" })
                     "monitor" -> ResourceMonitorScreen(onBack = { catalogTop = "hub" })
                     else -> CategoryHub(
-                        onOpenDistro = { },
+                        onOpenDistro = { catalogTop = "distro" },
                         onOpenPkgs = { catalogTop = "pkgs" },
                         onOpenMonitor = { catalogTop = "monitor" },
                         onOpenWizard = { showWizard = true },
