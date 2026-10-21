@@ -1,3 +1,5 @@
+> **🌐 主仓库在 GitHub** — [`codecloud-dev/moxsh-terminal`](https://github.com/codecloud-dev/moxsh-terminal) 是唯一主源：Issue、Pull Request、功能讨论请统一提交到 GitHub。[Gitee 镜像](https://gitee.com/thousand-code-crafts/moxsh-terminal) 仅供国内高速只读访问，每小时从 GitHub 自动同步。
+
 <p align="center">
   <img src="assets/logo.svg" width="128" alt="moxsh 液态玻璃标志">
 </p>
