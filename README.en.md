@@ -1,3 +1,5 @@
+> **🌐 Canonical repository is on GitHub** — [`codecloud-dev/moxsh-terminal`](https://github.com/codecloud-dev/moxsh-terminal) is the single source of truth: please file all issues and pull requests there. The [Gitee mirror](https://gitee.com/thousand-code-crafts/moxsh-terminal) is a read-only copy synced hourly for faster access in mainland China.
+
 <p align="center">
   <img src="assets/logo.svg" width="128" alt="moxsh liquid-glass logo">
 </p>
