@@ -33,7 +33,7 @@
 
 - README 新增「大版本进度（MoX 全家桶 1.0.0）」对照表，标注 6 个公开仓库的 1.0.0 状态
 
-[1.0.0]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v1.0.0
+[1.0.0]: https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=releases/tag/v1.0.0
 
 ## [0.6.2] - 2026-10-06
 
@@ -46,7 +46,7 @@
 - **版本号回归**:`versionName` 由遗留的 `0.5.0` 修正为 `0.6.2`(此前 v0.6.0 发布包内 APK 仍显示 0.5.0)。
 - **4 处编译错误**:`KeyboardOptions` 导入修正为 `androidx.compose.foundation.text`(`GlassWidgets` / `EmailSignUpCard` / `TerminalView` —— 本项目所用 Compose 版本中 `KeyboardOptions` 位于 `foundation.text`,而非 `ui.text.input`);`SettingsScreen` 补 `stringResource` 与 `com.moxsh.R` 导入;`EmailSignUpCard` 注册成功回调改用局部非空 `val`,规避委托属性(自定义 getter)的智能转型失败。
 
-[0.6.2]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.2
+[0.6.2]: https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=releases/tag/v0.6.2
 
 ## [0.6.1] - 2026-09-30
 
@@ -65,7 +65,7 @@
 
 - `.gitignore` 补充 `node_modules/` 与本地仓库副本目录，避免 `git add -A` 将其以 gitlink(160000) 形式误纳入索引
 
-[0.6.1]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.1
+[0.6.1]: https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=releases/tag/v0.6.1
 
 ## [0.6.0] - 2026-09-28
 
@@ -86,7 +86,7 @@
 - GitHub 用户名更名为 `codecloud-dev`（全量替换 + 官网 base64）
 - 全套文档（README/CHANGELOG/CONTRIBUTING/SECURITY/CODE_OF_CONDUCT/SETUP/验收）统一液态玻璃视觉装饰
 
-[0.6.0]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.6.0
+[0.6.0]: https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=releases/tag/v0.6.0
 
 ## [0.5.1] - 2026-09-28
 
@@ -101,7 +101,7 @@
 - `LoginActivity` 缺失 `setContent` 导入导致 compileReleaseKotlin 失败（登录模块首个真实编译通过版本）
 - CI 构建加重试与失败诊断（自动建 issue 暴露尾部日志）
 
-[0.5.1]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.5.1
+[0.5.1]: https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=releases/tag/v0.5.1
 
 ## [0.5.0] - 2026-09-27
 
@@ -125,5 +125,5 @@
 - 项目为 100% clean-room 实现：包层面兼容 Termux 生态，代码层面零复用
 - 与 Termux 的关系详见 [README](README.md#和-termux-是什么关系)
 
-[Unreleased]: https://github.com/codecloud-dev/moxsh-terminal/compare/v1.0.0...HEAD
-[0.5.0]: https://github.com/codecloud-dev/moxsh-terminal/releases/tag/v0.5.0
+[Unreleased]: https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=compare/v1.0.0...HEAD
+[0.5.0]: https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=releases/tag/v0.5.0
