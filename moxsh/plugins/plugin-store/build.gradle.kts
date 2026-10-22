@@ -54,7 +54,13 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        // MOX_STORE_SECRET 走 buildConfigField 注入，必须显式开特性
+        // （AGP 8 默认关闭，漏开报 "defaultConfig contains custom BuildConfig
+        // fields, but the feature is disabled"）
+        buildConfig = true
+    }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 }
 
