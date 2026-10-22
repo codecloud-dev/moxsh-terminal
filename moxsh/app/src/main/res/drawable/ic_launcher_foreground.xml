@@ -3,22 +3,18 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- moxsh 品牌 M 终端字形，取自仓库 assets/logo.svg（青→靛→粉渐变背景之上） -->
+    <!-- MoX 统一标志前景层：M 粗圆头笔画 + 白色块光标。
+         几何由 assets/mox-logo.svg（viewBox 64）等比放大 1.6875 倍到 108，
+         与官网 favicon / 仓库 logo.svg / 社交图完全同源。 -->
     <group
         android:fillColor="#00000000"
-        android:strokeColor="#0b0e1a"
-        android:strokeWidth="8"
+        android:strokeColor="#0b0d12"
+        android:strokeWidth="10.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round">
-        <!-- 左竖 -->
-        <path android:pathData="M34 36 L34 73" />
-        <!-- 中 V（向下的一笔，构成 M）左半 -->
-        <path android:pathData="M34 36 L54 63" />
-        <!-- 中 V 右半 -->
-        <path android:pathData="M54 63 L74 36" />
-        <!-- 右竖 -->
-        <path android:pathData="M74 36 L74 73" />
-        <!-- 底部下划线 -->
-        <path android:pathData="M34 81 L74 81" />
+        <!-- M：终端窗口的字母化身 -->
+        <path android:pathData="M25.3 75.9 L25.3 38.8 L48.9 61.6 L72.6 38.8 L72.6 75.9" />
     </group>
+    <!-- 块光标：贴在 M 右侧的实心白块——终端 blinking cursor，亦是 X 的交叉意象 -->
+    <path android:pathData="M73.4 56.5 h10.1 v18.6 h-10.1 z" android:fillColor="#ffffff" />
 </vector>
