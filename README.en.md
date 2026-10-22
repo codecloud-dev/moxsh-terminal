@@ -1,4 +1,4 @@
-> **🌐 Canonical repository is on GitHub** — [`codecloud-dev/moxsh-terminal`](https://mox-site.pages.dev/go.html?r=moxsh-terminal) is the single source of truth: please file all issues and pull requests there. The [Gitee mirror](https://gitee.com/thousand-code-crafts/moxsh-terminal) is a read-only copy synced hourly for faster access in mainland China.
+> **🌐 Canonical repository is on GitHub** — [`codecloud-dev/moxsh-terminal`](https://mox-site.pages.dev/go?r=moxsh-terminal) is the single source of truth: please file all issues and pull requests there. The [Gitee mirror](https://gitee.com/thousand-code-crafts/moxsh-terminal) is a read-only copy synced hourly for faster access in mainland China.
 
 <p align="center">
   <img src="assets/logo.svg" width="128" alt="moxsh liquid-glass logo">
@@ -26,7 +26,7 @@
 
 <p align="center"><img src="assets/demo.svg" width="760" alt="moxsh-terminal animation: installing moxsh from the command line, with a looping progress bar and blinking cursor"></p>
 
-<p align="center"><b>⭐ If moxsh is useful to you, please give it a <a href="https://mox-site.pages.dev/go.html?r=moxsh-terminal">star</a> — it helps more people get a smooth Linux terminal on their phone!</b></p>
+<p align="center"><b>⭐ If moxsh is useful to you, please give it a <a href="https://mox-site.pages.dev/go?r=moxsh-terminal">star</a> — it helps more people get a smooth Linux terminal on their phone!</b></p>
 
 
 
@@ -35,8 +35,8 @@
 > This is an early-stage project — **bugs exist, and probably plenty of them.** I'm not pretending it's perfect.
 > Every pitfall you hit and every gripe you have is a chance to help make it better.
 
-- 💥 Crashed / black screen / won't run? → [File a bug report](https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=issues)
-- 💡 Want a feature? → [Open a feature request](https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=issues)
+- 💥 Crashed / black screen / won't run? → [File a bug report](https://mox-site.pages.dev/go?r=moxsh-terminal&p=issues)
+- 💡 Want a feature? → [Open a feature request](https://mox-site.pages.dev/go?r=moxsh-terminal&p=issues)
 - 🗯️ Just want to rant or nitpick? → Issues are welcome too, label it whatever 😄
 
 I read every issue and fix what I can, fast. Let's grow this from "runs" to "delightful" 💪
