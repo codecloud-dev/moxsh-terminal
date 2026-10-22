@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// 与 app/build.gradle.kts 同一坑（曾由 3fd6d46 修复）：Gradle Kotlin DSL 脚本里写
+// 全限定名 java.util.Properties 会因根标识符 java 解析失败报 "Unresolved reference: util"
+// （连带 load 也 unresolved，见 plugin-store 历史 CI 事故 #63~#83）。必须显式 import。
+import java.util.Properties
+
 android {
     namespace = "com.moxsh.plugin.store"
     compileSdk = 34
@@ -11,7 +16,7 @@ android {
     // local.properties 的 MOX_STORE_SECRET），源码不保留明文密钥；
     // 未注入时回退为开发期本地包验签占位常量。
     val localProps =
-        java.util.Properties().apply {
+        Properties().apply {
             val f = project.rootProject.file("local.properties")
             if (f.exists()) f.inputStream().use { load(it) }
         }
