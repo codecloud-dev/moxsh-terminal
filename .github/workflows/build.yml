@@ -46,14 +46,27 @@ jobs:
       # 无需 android-actions/setup-android —— 该 Action 在新版 cmdline-tools 上
       # 会因安装过时包名 "tools" 而失败（sdkmanager exit 1）。
 
-      - name: Install NDK 26.1.10909125
+      - name: Install NDK 26.1.10909125 (with retry)
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           [ -x "$SDKMANAGER" ] || SDKMANAGER="$(command -v sdkmanager)"
-          if [ ! -d "$ANDROID_HOME/ndk/26.1.10909125" ]; then
-            yes | "$SDKMANAGER" "ndk;26.1.10909125" > /dev/null
-          else
+          if [ -d "$ANDROID_HOME/ndk/26.1.10909125" ]; then
             echo "NDK 26.1.10909125 已预装，跳过安装"
+          else
+            # sdkmanager 从 dl.google.com 拉 NDK zip 偶发断流/坏包
+            # （Error reading Zip content from a SeekableByteChannel → exit 1）。
+            # 重试 5 次，每次清掉半成品下载目录，避免坏包被复用。
+            ok=0
+            for i in 1 2 3 4 5; do
+              echo "=== NDK 安装尝试 $i/5 ==="
+              rm -rf "$ANDROID_HOME/.download" "$ANDROID_HOME/ndk/26.1.10909125" 2>/dev/null || true
+              if yes | "$SDKMANAGER" "ndk;26.1.10909125" > /dev/null 2>&1 \
+                 && [ -d "$ANDROID_HOME/ndk/26.1.10909125" ]; then
+                echo "NDK 安装成功（第 $i 次）"; ok=1; break
+              fi
+              echo "第 $i 次失败，10s 后重试…"; sleep 10
+            done
+            [ "$ok" = 1 ] || { echo "NDK 26.1.10909125 安装失败（5 次尝试）"; exit 1; }
           fi
 
       - name: Set ANDROID_NDK_HOME
@@ -121,6 +134,8 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # 商店验签密钥（P0 守卫：release 未注入即构建失败，禁止回退公开占位值）
+          MOX_STORE_SECRET: ${{ secrets.MOX_STORE_SECRET }}
         run: |
           set +e
           n=0
