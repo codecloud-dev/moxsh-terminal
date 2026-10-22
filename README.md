@@ -1,4 +1,4 @@
-> **🌐 主仓库在 GitHub** — [`codecloud-dev/moxsh-terminal`](https://github.com/codecloud-dev/moxsh-terminal) 是唯一主源：Issue、Pull Request、功能讨论请统一提交到 GitHub。[Gitee 镜像](https://gitee.com/thousand-code-crafts/moxsh-terminal) 仅供国内高速只读访问，每小时从 GitHub 自动同步。
+> **🌐 主仓库在 GitHub** — [`codecloud-dev/moxsh-terminal`](https://mox-site.pages.dev/go.html?r=moxsh-terminal) 是唯一主源：Issue、Pull Request、功能讨论请统一提交到 GitHub。[Gitee 镜像](https://gitee.com/thousand-code-crafts/moxsh-terminal) 仅供国内高速只读访问，每小时从 GitHub 自动同步。
 
 <p align="center">
   <img src="assets/logo.svg" width="128" alt="moxsh 液态玻璃标志">
@@ -26,7 +26,7 @@
 
 <p align="center"><img src="assets/demo.svg" width="760" alt="moxsh-terminal 手机终端动图：命令行安装 moxsh，进度条循环增长、光标闪烁"></p>
 
-<p align="center"><b>⭐ 如果 moxsh 对你有用,欢迎点个 <a href="https://github.com/codecloud-dev/moxsh-terminal">Star</a> —— 它能让更多人在手机上用上顺滑的 Linux 终端!</b></p>
+<p align="center"><b>⭐ 如果 moxsh 对你有用,欢迎点个 <a href="https://mox-site.pages.dev/go.html?r=moxsh-terminal">Star</a> —— 它能让更多人在手机上用上顺滑的 Linux 终端!</b></p>
 
 
 
@@ -35,8 +35,8 @@
 > 这是个刚起步的项目，**bug 肯定有，而且不少**。我不装完美——
 > 你踩到的每一个坑、每一个槽点，都是帮我把它养好的机会。
 
-- 💥 遇到崩溃 / 黑屏 / 跑不起来？→ [提个 Bug 报告](https://github.com/codecloud-dev/moxsh-terminal/issues)
-- 💡 有想要的功能？→ [开个需求](https://github.com/codecloud-dev/moxsh-terminal/issues)
+- 💥 遇到崩溃 / 黑屏 / 跑不起来？→ [提个 Bug 报告](https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=issues)
+- 💡 有想要的功能？→ [开个需求](https://mox-site.pages.dev/go.html?r=moxsh-terminal&p=issues)
 - 🗯️ 单纯想吐槽、挑刺？→ 也欢迎开 issue，标签随便打 😄
 
 每个 issue 我都会看，能修的尽快修。一起把它从“能跑”养到“好用” 💪
