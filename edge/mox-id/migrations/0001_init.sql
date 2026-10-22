@@ -43,3 +43,13 @@ CREATE TABLE IF NOT EXISTS email_bindings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_email_bindings_email ON email_bindings (email);
+
+-- 校验端防爆破：同一 (github, email) 的失败尝试计数（防 6 位验证码被在线枚举）
+-- key 为 SHA-256("vfail|github|email")，不存明文 login / 邮箱
+-- 追加进 0001 而非新建 0002：部署流水线对本文件是「直接执行、全表 IF NOT EXISTS」，
+-- 对已初始化的库只会补建这一张表，不会动既有数据。
+CREATE TABLE IF NOT EXISTS email_verify_fail (
+  key          TEXT    PRIMARY KEY,
+  fails        INTEGER NOT NULL DEFAULT 0,
+  window_start INTEGER NOT NULL           -- 当前失败窗口起点（毫秒）
+);

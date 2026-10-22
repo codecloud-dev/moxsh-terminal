@@ -49,6 +49,11 @@ export interface Env {
 const CODE_TTL_MS = 10 * 60 * 1000;   // 验证码 10 分钟有效
 const RESEND_COOLDOWN_MS = 60 * 1000; // 同一主体重发间隔 60s
 
+/** 校验端防爆破：同一 (github, email) 每小时最多失败尝试次数 */
+const VERIFY_FAIL_LIMIT = 10;
+/** 失败计数窗口 */
+const VERIFY_FAIL_WINDOW = 3600 * 1000;
+
 /** 主体维度：同一 GitHub 账号每小时最多发几封 */
 const LIMIT_PER_HOUR_SUBJECT = 5;
 /** IP 维度：同一客户端 IP 每小时最多发几封（防换账号刷量） */
@@ -111,14 +116,25 @@ function isEmailValid(email: string): boolean {
   if (e.length > 254) return false;
   const at = e.indexOf('@');
   if (at <= 0 || at !== e.lastIndexOf('@')) return false;
+  const local = e.slice(0, at);
   const domain = e.slice(at + 1);
-  return (
-    domain.length >= 3 &&
-    domain.includes('.') &&
-    !domain.startsWith('.') &&
-    !domain.endsWith('.') &&
-    !domain.includes('..')
-  );
+  // 本地段 ≤64，且不能以点开头/结尾或出现连续点
+  if (local.length > 64 || local.startsWith('.') || local.endsWith('.') || local.includes('..')) {
+    return false;
+  }
+  // 字符集校验：原实现只查域名形状，会放行 "a b@ex ample.com" 这类含空格/控制字符的
+  // 畸形地址——它们会被投递服务 4xx 拒绝，既空耗限流配额，又是下文熔断器的误触发源
+  if (!/^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$/.test(local)) return false;
+  if (domain.length < 3) return false;
+  // 域名按 hostname 形状校验：拒绝空格、下划线、空标签（".."）、首尾 '-'
+  if (
+    !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(
+      domain,
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -235,7 +251,8 @@ async function checkLimits(
   // 4) 主体小时配额
   const perHourSubject = await countSince(db, 'github', login, now - hour);
   if (perHourSubject >= LIMIT_PER_HOUR_SUBJECT) {
-    return { retryAfter: hour, reason: '本账号今日发信次数过多，请明天再试' };
+    // 注意：LIMIT_PER_HOUR_SUBJECT 是每小时配额，原文案写成「今日/明天」与实际窗口不符
+    return { retryAfter: hour, reason: '本账号发信次数过多，请稍后再试' };
   }
 
   // 5) IP 小时 / 天配额
@@ -263,36 +280,66 @@ async function checkLimits(
   return null;
 }
 
-/** 记录本次发信（同时刷新主体与 IP 的冷却窗口）。 */
-async function markSent(db: D1Database, login: string, ip: string): Promise<void> {
-  const now = Date.now();
-  const subjectKey = await hashKey(`subject|${login}`);
-  const ipKey = await hashKey(`ip|${ip}`);
-  const stmts = [
-    db
-      .prepare('INSERT OR REPLACE INTO email_rate_limit (key, last_sent) VALUES (?, ?)')
-      .bind(subjectKey, now),
-    db
-      .prepare('INSERT OR REPLACE INTO email_rate_limit (key, last_sent) VALUES (?, ?)')
-      .bind(ipKey, now),
-    // 发信成功即重置熔断计数
-    db.prepare('UPDATE email_breaker SET fail_count = 0, tripped_at = NULL WHERE id = 1'),
-  ];
-  await db.batch(stmts);
+/**
+ * 发信前**原子抢占**主体/IP 冷却窗口（条件 UPSERT，WHERE 未命中则 changes=0）。
+ *
+ * 原实现的 checkLimits 只读先查、markSent 后写，并发请求会同时通过全部限流造成刷信；
+ * 这里改为写侧把关：写入成功才真正占用 60s 窗口，把并发/重放绕过的可能压到零。
+ *
+ * 说明：主体先抢、IP 后抢；万一 IP 未抢到，主体窗口已占用——最多少发一封，
+ * 不会放过超额请求（该请求本来就会被 IP 冷却拒绝）。
+ */
+async function claimCooldown(db: D1Database, keys: string[]): Promise<boolean> {
+  const floor = Date.now() - RESEND_COOLDOWN_MS;
+  for (const key of keys) {
+    const r = await db
+      .prepare(
+        `INSERT INTO email_rate_limit (key, last_sent) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET last_sent = excluded.last_sent
+         WHERE email_rate_limit.last_sent < ?`,
+      )
+      .bind(key, Date.now(), floor)
+      .run();
+    if ((r.meta?.changes ?? 0) !== 1) return false;
+  }
+  return true;
 }
 
-/** 发信失败累加熔断计数。 */
+/** 发信成功：重置熔断计数（冷却窗口已在发信前抢占）。 */
+async function resetBreaker(db: D1Database): Promise<void> {
+  await db
+    .prepare('UPDATE email_breaker SET fail_count = 0, tripped_at = NULL WHERE id = 1')
+    .run();
+}
+
+/**
+ * 发信失败累加熔断计数。
+ * 只应计入**服务侧**故障；请求侧 4xx（邮箱被拒等）见 handleSendCode 的过滤。
+ */
 async function markFailure(db: D1Database): Promise<void> {
+  const now = Date.now();
   await db
     .prepare(
       `INSERT INTO email_breaker (id, fail_count, tripped_at)
        VALUES (1, 1, NULL)
        ON CONFLICT(id) DO UPDATE SET
          fail_count = fail_count + 1,
-         tripped_at = CASE WHEN fail_count + 1 >= ${CIRCUIT_BREAK_FAILURES} THEN ${Date.now()}
-                           ELSE tripped_at END`,
+         tripped_at = CASE WHEN fail_count + 1 >= ? THEN ? ELSE tripped_at END`,
     )
+    .bind(CIRCUIT_BREAK_FAILURES, now)
     .run();
+}
+
+/** 服务端未配置密钥/发件人——属配置问题而非发信通道故障，不计熔断。 */
+class MailConfigError extends Error {}
+
+/** 投递服务返回非 2xx；status 供上层区分请求侧（4xx）/ 服务侧（5xx/401/403）故障。 */
+class MailDeliveryError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
 }
 
 /**
@@ -308,11 +355,11 @@ async function deliverViaResend(
   login: string,
 ): Promise<void> {
   if (!env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY 未配置（wrangler secret put RESEND_API_KEY）');
+    throw new MailConfigError('RESEND_API_KEY 未配置（wrangler secret put RESEND_API_KEY）');
   }
   const from = env.MAIL_FROM ?? env.MAIL_FALLBACK_TO;
   if (!from) {
-    throw new Error('MAIL_FROM 未配置（wrangler secret put MAIL_FROM）');
+    throw new MailConfigError('MAIL_FROM 未配置（wrangler secret put MAIL_FROM）');
   }
 
   const resp = await fetch('https://api.resend.com/emails', {
@@ -338,7 +385,7 @@ async function deliverViaResend(
 
   if (!resp.ok) {
     // 只记录状态码，不记录响应体中可能含邮箱/密钥的内容
-    throw new Error(`发信服务返回 ${resp.status}`);
+    throw new MailDeliveryError(`发信服务返回 ${resp.status}`, resp.status);
   }
 }
 
@@ -360,23 +407,53 @@ async function handleSendCode(request: Request, env: Env): Promise<Response> {
     return fail(limited.reason, 429, { retry_after: limited.retryAfter });
   }
 
-  const code = generateCode();
-  try {
-    await deliverViaResend(env, target, code, session.login);
-  } catch (e) {
-    await markFailure(env.DB);
-    console.error('deliver failed:', (e as Error)?.message);
-    return fail('验证码发送失败，请稍后再试', 502);
+  // 发信前原子抢占冷却窗口（checkLimits 是只读预检，并发下可被同时绕过）
+  const claimed = await claimCooldown(env.DB, [
+    await hashKey(`subject|${session.login}`),
+    await hashKey(`ip|${ip}`),
+  ]);
+  if (!claimed) {
+    return fail('发送过于频繁，请稍后再试', 429, {
+      retry_after: Math.ceil(RESEND_COOLDOWN_MS / 1000),
+    });
   }
 
-  await markSent(env.DB, session.login, ip);
-
+  // 先落库再发信：原顺序是「先发信后写入」，D1 写入一旦失败，用户已收到的
+  // 验证码永远无法校验，冷却窗口也被白扣。发信失败时再把预置记录删掉，
+  // 避免污染目标邮箱的每小时配额。
+  const code = generateCode();
+  const now = Date.now();
   await env.DB.prepare(
     `INSERT INTO email_codes (email, github, code, ip, expires_at, used, created_at)
      VALUES (?, ?, ?, ?, ?, 0, ?)`,
   )
-    .bind(target, session.login, code, ip, Date.now() + CODE_TTL_MS, Date.now())
+    .bind(target, session.login, code, ip, now + CODE_TTL_MS, now)
     .run();
+
+  try {
+    await deliverViaResend(env, target, code, session.login);
+  } catch (e) {
+    await env.DB.prepare('DELETE FROM email_codes WHERE email = ? AND github = ? AND code = ?')
+      .bind(target, session.login, code)
+      .run();
+
+    if (e instanceof MailConfigError) {
+      // 未配置密钥/发件人：不是通道故障，不计熔断，直接报 503 便于部署排障
+      console.error('mail not configured:', e.message);
+      return fail('发信服务未配置，暂不可用', 503);
+    }
+
+    // 仅服务侧故障计入熔断（5xx / 401 / 403 / 网络异常）；请求侧 4xx
+    // （如邮箱被服务商拒绝）是调用方问题，不应把公共发信通道拖到全院熔断
+    const status = e instanceof MailDeliveryError ? e.status : undefined;
+    if (typeof status !== 'number' || status >= 500 || status === 401 || status === 403) {
+      await markFailure(env.DB);
+    }
+    console.error('deliver failed:', e instanceof Error ? e.message : String(e));
+    return fail('验证码发送失败，请稍后再试', 502);
+  }
+
+  await resetBreaker(env.DB);
 
   return json({ ok: true, cooldown: Math.ceil(RESEND_COOLDOWN_MS / 1000) });
 }
@@ -395,6 +472,25 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
   if (!email || !isEmailValid(email)) return fail('邮箱格式不正确');
   if (!code || !/^\d{6}$/.test(code)) return fail('请输入 6 位数字验证码');
   const target = email.trim().toLowerCase();
+  const now = Date.now();
+
+  // 防爆破：验证码只有 6 位（10^6 空间），若无失败计数，拿到他人令牌后可在线
+  // 枚举到 TTL 结束为止。按 (github, email) 计失败次数，超限即锁窗口。
+  const vfailKey = await hashKey(`vfail|${session.login}|${target}`);
+  const vfail = await env.DB.prepare(
+    'SELECT fails, window_start FROM email_verify_fail WHERE key = ?',
+  )
+    .bind(vfailKey)
+    .first<{ fails: number; window_start: number }>();
+  if (
+    vfail &&
+    vfail.fails >= VERIFY_FAIL_LIMIT &&
+    now - vfail.window_start < VERIFY_FAIL_WINDOW
+  ) {
+    return fail('校验尝试次数过多，请稍后再试', 429, {
+      retry_after: Math.ceil((VERIFY_FAIL_WINDOW - (now - vfail.window_start)) / 1000),
+    });
+  }
 
   const row = await env.DB.prepare(
     `SELECT code, expires_at, used FROM email_codes
@@ -406,21 +502,30 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
 
   // 不区分「不存在」与「错误」，避免被用来探测邮箱
   if (!row || row.used || Date.now() > row.expires_at) {
+    // 记录一次失败尝试（窗口过期则重新计）
+    await env.DB.prepare(
+      `INSERT INTO email_verify_fail (key, fails, window_start) VALUES (?, 1, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         fails = CASE WHEN window_start < ? THEN 1 ELSE fails + 1 END,
+         window_start = CASE WHEN window_start < ? THEN ? ELSE window_start END`,
+    )
+      .bind(vfailKey, now, now - VERIFY_FAIL_WINDOW, now - VERIFY_FAIL_WINDOW, now)
+      .run();
     return fail('验证码已过期或错误');
   }
 
-  await env.DB.prepare(
-    'UPDATE email_codes SET used = 1 WHERE email = ? AND github = ? AND code = ?',
-  )
-    .bind(target, session.login, code)
-    .run();
-
-  const now = Date.now();
-  await env.DB.prepare(
-    'INSERT OR REPLACE INTO email_bindings (github, email, verified, bound_at) VALUES (?, ?, 0, ?)',
-  )
-    .bind(session.login, target, now)
-    .run();
+  // 标记已消费 + 写入绑定 + 清除失败计数（一批完成，避免「码已消费但绑定失败」）
+  await env.DB.batch([
+    env.DB
+      .prepare('UPDATE email_codes SET used = 1 WHERE email = ? AND github = ? AND code = ?')
+      .bind(target, session.login, code),
+    env.DB
+      .prepare(
+        'INSERT OR REPLACE INTO email_bindings (github, email, verified, bound_at) VALUES (?, ?, 0, ?)',
+      )
+      .bind(session.login, target, now),
+    env.DB.prepare('DELETE FROM email_verify_fail WHERE key = ?').bind(vfailKey),
+  ]);
 
   return json({ ok: true, email: target, verified: false, bound_at: now });
 }
@@ -432,12 +537,18 @@ export default {
     // 健康检查：部署后确认 Worker 存活用。
     // 必须放在方法/路径检查之前 —— 否则GET /health 会被 405 挡掉，无法探活。
     if (url.pathname === '/health') {
-      const configured = Boolean(env.RESEND_API_KEY && (env.MAIL_FROM || env.MAIL_FALLBACK_TO));
+      const from = env.MAIL_FROM ?? env.MAIL_FALLBACK_TO;
+      // 占位符域名（CI 未注入 Variable MAIL_FROM 时残留）视为未配置：
+      // 否则 /health 显示已配置，实际每一封都被 Resend 403 拒绝
+      const configured = Boolean(
+        env.RESEND_API_KEY && from && !from.includes('REPLACE_WITH_YOUR_DOMAIN'),
+      );
       return json({ ok: true, service: 'mox-id-email', mail_configured: configured });
     }
 
     if (request.method === 'OPTIONS') return withCors(json({ ok: true }), request);
-    if (request.method !== 'POST') return fail('仅支持 POST', 405);
+    // 405 也要带 CORS 头：否则浏览器把跨域方法错误报成 CORS 错误，掩盖真实状态码
+    if (request.method !== 'POST') return withCors(fail('仅支持 POST', 405), request);
 
     try {
       switch (url.pathname) {
