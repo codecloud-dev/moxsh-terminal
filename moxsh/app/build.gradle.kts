@@ -91,6 +91,16 @@ android {
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     packaging { jniLibs.useLegacyPackaging = true }
+
+    lint {
+        // targetSdk 28 是功能性硬需求：Android 10+（API 29+）对 targeting 29+ 的应用
+        // 实施 W^X 限制，app 私有目录里的 bootstrap/proot 可执行文件无法 exec
+        // （真机 SELinux 直接拒），降到 28 才能"装上即用"。
+        // 且本应用不走 Google Play 分发（官网 / GitHub Releases 直发 APK），
+        // Play 的 targetSdk 政策（ExpiredTargetSdkVersion）不适用。
+        // 精准关掉这一个检查，不用 abortOnError=false（那会埋掉真问题）。
+        disable 'ExpiredTargetSdkVersion'
+    }
 }
 
 // ── 运行环境 bootstrap 包：构建时尽力拉取进 assets（实现"装上即用"，避免首次启动联网下载）──
