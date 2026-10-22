@@ -99,7 +99,9 @@ android {
         // 且本应用不走 Google Play 分发（官网 / GitHub Releases 直发 APK），
         // Play 的 targetSdk 政策（ExpiredTargetSdkVersion）不适用。
         // 精准关掉这一个检查，不用 abortOnError=false（那会埋掉真问题）。
-        disable("ExpiredTargetSdkVersion")
+        // AGP 8.5 的 Lint DSL 接口只有 disable 属性（Set），没有 vararg 方法
+        // （方法仅存在于实现类，Groovy 动态派发才可用）——Kotlin DSL 必须用属性形式。
+        disable += "ExpiredTargetSdkVersion"
     }
 }
 
