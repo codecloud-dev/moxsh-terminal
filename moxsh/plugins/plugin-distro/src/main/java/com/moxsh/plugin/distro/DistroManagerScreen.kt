@@ -89,7 +89,11 @@ fun DistroManagerScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        val ctx = LocalContext.current
+        // ⚠️ 此回调不是 @Composable 上下文（Activity 结果到达时才调用），
+        // 不能调 LocalContext.current（Compose 编译器报
+        // "@Composable invocations can only happen from the context of a
+        // @Composable function"）——直接用外层 composable 作用域捕获的 context。
+        val ctx = context
         // native 只认本地路径：content:// uri 先拷成 cacheDir 私有临时文件。
         scope.launch {
             val tmp = java.io.File(ctx.cacheDir, "restore-${System.currentTimeMillis()}.tar")
