@@ -99,7 +99,7 @@ android {
         // 且本应用不走 Google Play 分发（官网 / GitHub Releases 直发 APK），
         // Play 的 targetSdk 政策（ExpiredTargetSdkVersion）不适用。
         // 精准关掉这一个检查，不用 abortOnError=false（那会埋掉真问题）。
-        disable 'ExpiredTargetSdkVersion'
+        disable("ExpiredTargetSdkVersion")
     }
 }
 
