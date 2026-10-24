@@ -29,5 +29,19 @@ jobs:
           git remote add gitee "https://gitee.com/${GITEE_REPO}.git"
           git config --local "http.https://gitee.com/.extraheader" \
             "Authorization: Basic $(printf 'thousand-code-crafts:%s' "$GITEE_TOKEN" | base64 -w0)"
-          git push --prune gitee "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
-          echo "镜像完成：$(git rev-parse --short HEAD) → gitee.com/${GITEE_REPO}"
+          # Gitee 偶发连接超时（>300s），自动重试 3 次兜底
+          for attempt in 1 2 3; do
+            echo "::group::镜像尝试第 $attempt 次"
+            if git push --prune gitee "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"; then
+              echo "::endgroup::"
+              echo "镜像完成：$(git rev-parse --short HEAD) → gitee.com/${GITEE_REPO}"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::镜像 3 次尝试均失败"
+              exit 1
+            fi
+            echo "::warning::第 $attempt 次镜像失败，$((attempt * 30))s 后重试"
+            sleep $((attempt * 30))
+          done
