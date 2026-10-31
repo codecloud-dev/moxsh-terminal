@@ -30,7 +30,7 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.2.1")
     implementation("androidx.activity:activity-compose:1.9.0")
     // 协程（AgentExecutor 工具循环、SSE 流式读取、前台服务 scope）
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     // AndroidX 注解（ForegroundServiceType 声明用）
     implementation("androidx.annotation:annotation:1.8.0")
     // NotificationCompat（AiService 常驻通知；core 是 ui 的传递依赖，这里显式声明）
