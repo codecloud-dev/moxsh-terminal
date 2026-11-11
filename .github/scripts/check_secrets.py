@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """扫描仓库中误提交的密钥 / 令牌（CI 防泄漏）。
 
-用法：python3 .github/scripts/check_secrets.py
+用法：python3 .github/scripts/check_secrets.py [--self-test]
 退出码：发现疑似密钥→1；干净→0。
 """
 import os
@@ -20,6 +20,11 @@ EXCLUDE_PATHS = (
     ".sample",
     "/.github/scripts/",   # 脚本自身含模式字符串，避免自匹配
     "/gradle/wrapper/",
+    # 2026-11-11 审计补充：本地 /workspace 会把 Termux 上游 vendored 源码
+    # （termux-src，含大量 @VAR@ / project.property 模板占位符）拼进工作区。
+    # 它不是本仓代码，也不在 CI 的干净 checkout 里；纳入扫描只会产生
+    # 28 条 generic_secret 误报（实测基线 37 条里占 28 条）。
+    "/termux-src/",
 )
 # 跳过的扩展名（二进制 / 非源码）
 SKIP_EXT = {
@@ -70,16 +75,50 @@ SELF_TEST_SAMPLES = {
     "cf_api_token": "CLOUDFLARE_API_TOKEN = " + "a" * 40,
     "ed25519_seed": "ED25519_PRIVATE_KEY = " + "a" * 64,
 }
-# 这些是文档/模板里的占位符，必须**不**命中，避免规则过宽刷屏
+# 这些是文档/模板/环境变量引用，必须**不**命中，避免宽规则刷屏。
 SELF_TEST_SAFE = [
     "password = ${KEYSTORE_PASSWORD}",
     "password = REPLACE_WITH_YOUR_PASSWORD",
     "const token = process.env.GITHUB_TOKEN;",
+    # 2026-11-11 补充：本地实扫抓到的 generic_secret 真实误报形态
+    "client_secret = os.getenv('GITHUB_CLIENT_SECRET')",
+    'private_key = "<YOUR_PRIVATE_KEY>"',
+    "password = project.property('signingPassword')",
+    'secret = "env.MOX_STORE_SECRET"',
 ]
+
+# 仅对宽规则 generic_secret 生效：这些标记说明值是模板 / 环境变量引用，
+# 不是硬编码密钥。强特征规则（ghp_ / AKIA / PEM ...）绝不受影响，
+# 避免「一行里有 env. 就把真 token 也放过」的安全削弱。
+PLACEHOLDER_MARKERS = (
+    "replace_with", "${", "<your", "your_", "changeme", "placeholder",
+    "example_key", "example_secret", "dummy", "process.env", "os.getenv",
+    "getenv(", "secrets.", "vars.", "env.", "project.",
+)
+
+
+def looks_like_placeholder(line: str) -> bool:
+    low = line.lower()
+    return any(m in low for m in PLACEHOLDER_MARKERS)
+
+
+def scan_line(line: str):
+    """返回 (label, match) 或 None。主流程与自测共用，保证两者口径一致。"""
+    # 模板变量对任何规则都不可能是真密钥（如 ${KEYSTORE_PASSWORD}）
+    if "replace_with" in line.lower() or "${" in line:
+        return None
+    for label, rx in RULES:
+        m = rx.search(line)
+        if not m:
+            continue
+        if label == "generic_secret" and looks_like_placeholder(line):
+            continue
+        return (label, m)
+    return None
 
 
 def self_test() -> int:
-    """验证：① 每条规则都有样例且能命中；② 占位符样例不会被误报。"""
+    """验证：① 每条规则都有样例且能命中；② 占位符无误报；③ 过滤没吃掉真密钥。"""
     labels = {label for label, _ in RULES}
     missing = labels - set(SELF_TEST_SAMPLES)
     if missing:
@@ -92,16 +131,18 @@ def self_test() -> int:
     if bad:
         print(f"❌ 自测失败：以下规则未命中自己的样例：{bad}")
         return 1
+    # 占位符过滤不能把真实样例一起吃掉
+    eaten = [label for label, sample in SELF_TEST_SAMPLES.items() if not scan_line(sample)]
+    if eaten:
+        print(f"❌ 自测失败：占位符过滤误吃真实密钥样例：{eaten}")
+        return 1
     for safe in SELF_TEST_SAFE:
-        # 复用主流程的占位符过滤规则
-        low = safe.lower()
-        if "replace_with" in low or "${" in safe:
-            continue
-        hit = [label for label, rx in RULES if rx.search(safe)]
+        hit = scan_line(safe)
         if hit:
-            print(f"❌ 自测失败：占位符被误报为密钥：{safe!r} → {hit}")
+            print(f"❌ 自测失败：占位符被误报为密钥：{safe!r} → {hit[0]}")
             return 1
-    print(f"✅ 规则自测通过：{len(RULES)} 条规则全部命中样例，{len(SELF_TEST_SAFE)} 条占位符无误报。")
+    print(f"✅ 规则自测通过：{len(RULES)} 条规则全部命中样例，"
+          f"{len(SELF_TEST_SAFE)} 条占位符无误报，过滤未误吃真实样例。")
     return 0
 
 
@@ -114,11 +155,24 @@ def should_scan(path: str) -> bool:
     return True
 
 
+def is_nested_git_repo(dirpath: str) -> bool:
+    """本地 /workspace 会把 mox-id / mox-site 等独立仓作为子目录嵌进来。
+    它们是各自的仓库、各有自己的 secret-scan，不应算进本仓扫描结果。
+    CI 是干净 checkout（无嵌套 .git），这个剪枝不改变 CI 的扫描范围。
+    """
+    return (os.path.abspath(dirpath) != os.path.abspath(REPO_ROOT)
+            and os.path.exists(os.path.join(dirpath, ".git")))
+
+
 def main() -> int:
     hits = []
     for root, dirs, files in os.walk(REPO_ROOT):
-        # 剪枝：跳过忽略目录
-        dirs[:] = [d for d in dirs if not any(seg in os.path.join(root, d) for seg in EXCLUDE_PATHS)]
+        # 剪枝：跳过忽略目录 + 跳过嵌套的其它 git 仓库
+        dirs[:] = [
+            d for d in dirs
+            if not any(seg in os.path.join(root, d) for seg in EXCLUDE_PATHS)
+            and not is_nested_git_repo(os.path.join(root, d))
+        ]
         for name in files:
             full = os.path.join(root, name)
             rel = os.path.relpath(full, REPO_ROOT)
@@ -129,15 +183,10 @@ def main() -> int:
                     continue
                 with open(full, "r", encoding="utf-8", errors="ignore") as f:
                     for ln, line in enumerate(f, 1):
-                        # 跳过明显占位符 / 模板变量，避免误报
-                        low = line.lower()
-                        if "replace_with" in low or "${" in line:
-                            continue
-                        for label, rx in RULES:
-                            m = rx.search(line)
-                            if m:
-                                hits.append((rel, ln, label, m.group(0)[:24]))
-                                break
+                        hit = scan_line(line)
+                        if hit:
+                            label, m = hit
+                            hits.append((rel, ln, label, m.group(0)[:24]))
             except OSError:
                 continue
 
