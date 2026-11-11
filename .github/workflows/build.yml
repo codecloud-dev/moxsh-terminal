@@ -77,7 +77,7 @@ jobs:
         with:
           targets: aarch64-linux-android, x86_64-linux-android
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
