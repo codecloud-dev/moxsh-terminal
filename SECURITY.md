@@ -58,5 +58,15 @@ moxsh 是一个终端与容器环境，以下行为属于**设计预期**，不�
 
 ## 加密通信与签名
 
-- .mox 包使用 HMAC-SHA256 签名（见 `docs/plugins.md`）
 - 发行版 rootfs 下载强制 sha256 校验，国内镜像与官方源结果必须一致
+- **插件签名现状（2026-11-11 复核后如实标注）**：当前实现使用共享密钥 HMAC-SHA256 校验
+  （见 `moxsh/plugins/plugin-store/src/main/java/com/moxsh/plugin/store/StoreRepository.kt`）。
+  密钥由构建期 `MOX_STORE_SECRET` 注入 `BuildConfig`；`plugin-store/build.gradle.kts` 已做
+  **fail-closed**：release 构建若未注入真实密钥会直接构建失败，禁止回退到源码里的开发期占位常量，
+  因此「反编译 APK 直接取得生产签名密钥」这条旧描述已不再成立。
+- **仍未收口的差距（真实存在）**：`moxsh-suite/spec/plugin-manifest.schema.json` 定义了
+  ed25519 / rsa-pss / ecdsa 非对称签名、`keyId` 密钥轮换与 `timestamp` 时间戳；
+  `moxsh-plugins/schema/catalog.schema.json` 与 `schema/entry-schema.json` 已于 2026-11-11
+  补齐同构的 `integrity` / `signature` / `signingKeyId` 字段（契约先行），但**终端侧验签代码尚未迁移**：
+  仍是对称 HMAC、无 `keyId` 轮换、不校验签名过期或撤销。共享密钥一旦从已分发 APK 中被提取，
+  伪造官方插件仍是有效攻击面。这是**已知差距**，不是设计选择，欢迎通过私密渠道报告。

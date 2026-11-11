@@ -327,78 +327,82 @@ class OpenAiCompatTransport(
      * 注意：body 流只能消费一次，因此用手动 readLine 而非 useLines，方便两条路径共享。
      */
     private fun parseSseStream(conn: HttpURLConnection): AiResponse {
-        val content = StringBuilder()
-        // index -> (id, name, argumentsBuf)：tool_calls 按 index 增量聚合。
-        val calls = LinkedHashMap<Int, Triple<String?, String?, StringBuilder>>()
+        // 2026-11-11 审计修复：SSE 流的 BufferedReader 原先从不 close，
+        // 非流式回退分支还会提前 return，长会话/大响应会持续泄漏 FD。
+        // 用 use {} 包住整段解析：正常结束、提前返回、抛异常都会关闭读流。
+        return BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
+            val content = StringBuilder()
+            // index -> (id, name, argumentsBuf)：tool_calls 按 index 增量聚合。
+            val calls = LinkedHashMap<Int, Triple<String?, String?, StringBuilder>>()
 
-        val reader = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8))
-        var firstLine = true
+            var firstLine = true
 
-        var line = reader.readLine()
-        while (line != null) {
-            val l = line.trim()
-            if (firstLine && l.startsWith("{")) {
-                // 网关忽略 stream=true，返回整体 JSON：读完剩余部分走非流式解析。
-                val sb = StringBuilder(l)
-                while (reader.readLine()?.let { sb.append(it.trim()); true } == true) { /* 读尽 */ }
-                return parseNonStreamBody(sb.toString())
-            }
-            firstLine = false
+            var line = reader.readLine()
+            while (line != null) {
+                val l = line.trim()
+                if (firstLine && l.startsWith("{")) {
+                    // 网关忽略 stream=true，返回整体 JSON：读完剩余部分走非流式解析。
+                    val sb = StringBuilder(l)
+                    while (reader.readLine()?.let { sb.append(it.trim()); true } == true) { /* 读尽 */ }
+                    return@use parseNonStreamBody(sb.toString())
+                }
+                firstLine = false
 
-            if (l.startsWith("data:")) {
-                val payload = l.removePrefix("data:").trim()
-                if (payload == "[DONE]") break // 结束哨兵
-                val obj = runCatching { JSONObject(payload) }.getOrNull()
-                if (obj != null) {
-                    val choices = obj.optJSONArray("choices")
-                    if (choices != null && choices.length() > 0) {
-                        val delta = choices.getJSONObject(0).optJSONObject("delta")
-                        if (delta != null) {
-                            // 文本增量 -> 拼接 + 实时回调 UI（打字机效果的数据源）。
-                            val piece = delta.optString("content", "")
-                            if (piece.isNotEmpty()) {
-                                content.append(piece)
-                                onDelta?.invoke(piece)
-                            }
-                            // 工具调用增量：按 index 聚合（首块带 id/name，后续块续 arguments 分片）。
-                            val tcarr = delta.optJSONArray("tool_calls")
-                            if (tcarr != null) {
-                                for (i in 0 until tcarr.length()) {
-                                    val tc = tcarr.getJSONObject(i)
-                                    val idx = tc.optInt("index", 0)
-                                    val slot = calls.getOrPut(idx) {
-                                        Triple(null as String?, null as String?, StringBuilder())
+                if (l.startsWith("data:")) {
+                    val payload = l.removePrefix("data:").trim()
+                    if (payload == "[DONE]") break // 结束哨兵
+                    val obj = runCatching { JSONObject(payload) }.getOrNull()
+                    if (obj != null) {
+                        val choices = obj.optJSONArray("choices")
+                        if (choices != null && choices.length() > 0) {
+                            val delta = choices.getJSONObject(0).optJSONObject("delta")
+                            if (delta != null) {
+                                // 文本增量 -> 拼接 + 实时回调 UI（打字机效果的数据源）。
+                                val piece = delta.optString("content", "")
+                                if (piece.isNotEmpty()) {
+                                    content.append(piece)
+                                    onDelta?.invoke(piece)
+                                }
+                                // 工具调用增量：按 index 聚合（首块带 id/name，后续块续 arguments 分片）。
+                                val tcarr = delta.optJSONArray("tool_calls")
+                                if (tcarr != null) {
+                                    for (i in 0 until tcarr.length()) {
+                                        val tc = tcarr.getJSONObject(i)
+                                        val idx = tc.optInt("index", 0)
+                                        val slot = calls.getOrPut(idx) {
+                                            Triple(null as String?, null as String?, StringBuilder())
+                                        }
+                                        val id = tc.optString("id", "")
+                                        val fn = tc.optJSONObject("function")
+                                        val name = fn?.optString("name", "") ?: ""
+                                        val args = fn?.optString("arguments", "") ?: ""
+                                        val merged = if (id.isNotEmpty() || name.isNotEmpty()) {
+                                            Triple(
+                                                slot.first ?: id.ifEmpty { null },
+                                                slot.second ?: name.ifEmpty { null },
+                                                slot.third,
+                                            )
+                                        } else slot
+                                        if (args.isNotEmpty()) merged.third.append(args)
+                                        calls[idx] = merged
                                     }
-                                    val id = tc.optString("id", "")
-                                    val fn = tc.optJSONObject("function")
-                                    val name = fn?.optString("name", "") ?: ""
-                                    val args = fn?.optString("arguments", "") ?: ""
-                                    val merged = if (id.isNotEmpty() || name.isNotEmpty()) {
-                                        Triple(
-                                            slot.first ?: id.ifEmpty { null },
-                                            slot.second ?: name.ifEmpty { null },
-                                            slot.third,
-                                        )
-                                    } else slot
-                                    if (args.isNotEmpty()) merged.third.append(args)
-                                    calls[idx] = merged
                                 }
                             }
                         }
                     }
                 }
+                line = reader.readLine()
             }
-            line = reader.readLine()
-        }
 
-        return AiResponse(
-            content = content.toString(),
-            toolCalls = calls.entries.sortedBy { it.key }.mapNotNull { (_, v) ->
-                val id = v.first ?: return@mapNotNull null
-                val name = v.second ?: return@mapNotNull null
-                ToolCall(id, name, v.third.toString().ifBlank { "{}" })
-            },
-        )
+            AiResponse(
+                content = content.toString(),
+                toolCalls = calls.entries.sortedBy { it.key }.mapNotNull { (_, v) ->
+                    val id = v.first ?: return@mapNotNull null
+                    val name = v.second ?: return@mapNotNull null
+                    ToolCall(id, name, v.third.toString().ifBlank { "{}" })
+                },
+            )
+        }
     }
 
     /** 非流式回退解析：一次性 JSON，choices[0].message。 */
@@ -464,7 +468,10 @@ object AiConfigStore {
     fun load(ctx: Context): AiConfig {
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val provider = runCatching {
-            AiProvider.valueOf(p.getString(KEY_PROVIDER, AiProvider.Zhipu.name)!!)
+            // 2026-11-11 审计修复：getString 带默认值仍可能返回 null（外部写入了显式 null、
+            // 或 SharedPreferences 被清空），!! 会 NPE。改为 Elvis 回退默认提供商；
+            // runCatching 继续兜住「存了已下线的枚举名」导致的 IllegalArgumentException。
+            AiProvider.valueOf(p.getString(KEY_PROVIDER, null) ?: AiProvider.Zhipu.name)
         }.getOrDefault(AiProvider.Zhipu)
         val enc = p.getString(KEY_API_KEY_ENC, null)
         return AiConfig(
