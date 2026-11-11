@@ -57,7 +57,7 @@ android {
         // fields, but the feature is disabled"）
         buildConfig = true
     }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
+    composeOptions { kotlinCompilerExtensionVersion = "1.5.15" }
 }
 
 // P0 fail-closed 守卫（2026-11-11 二次修复）：
