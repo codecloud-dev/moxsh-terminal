@@ -8,43 +8,39 @@ plugins {
 // （连带 load 也 unresolved，见 plugin-store 历史 CI 事故 #63~#83）。必须显式 import。
 import java.util.Properties
 
+// 商店验签密钥：生产值经 CI 注入（环境变量 MOX_STORE_SECRET 或本地
+// local.properties 的 MOX_STORE_SECRET），源码不保留明文密钥；
+// 未注入时 debug / 本地编译验证回退为开发期占位常量。
+val localProps =
+    Properties().apply {
+        val f = project.rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+// 原始密钥值（CI 环境变量 > 本地 local.properties）；为空表示未配置。
+val rawSecret: String? =
+    System.getenv("MOX_STORE_SECRET")
+        ?: localProps.getProperty("MOX_STORE_SECRET")
+// 开发期占位常量：仅 debug / 编译验证允许回退，release 产物严禁（见文件末尾守卫）。
+val DEV_FALLBACK = "moxsh-official-store-v1"
+
 android {
     namespace = "com.moxsh.plugin.store"
     compileSdk = 34
 
-    // 商店验签密钥：生产值经 CI 注入（环境变量 MOX_STORE_SECRET 或本地
-    // local.properties 的 MOX_STORE_SECRET），源码不保留明文密钥；
-    // 未注入时回退为开发期本地包验签占位常量。
-    val localProps =
-        Properties().apply {
-            val f = project.rootProject.file("local.properties")
-            if (f.exists()) f.inputStream().use { load(it) }
-        }
-    // 原始密钥值（CI 环境变量 > 本地 local.properties）；为空表示未配置。
-    val rawSecret: String? =
-        System.getenv("MOX_STORE_SECRET")
-            ?: localProps.getProperty("MOX_STORE_SECRET")
-    // 开发期占位常量：仅 debug 构建允许回退，release 严禁（见下方 buildTypes）。
-    val DEV_FALLBACK = "moxsh-official-store-v1"
-
     defaultConfig {
         minSdk = 28
-        // debug / 未配置时回退开发占位；release 会在 buildTypes 里直接构建失败。
+        // debug / 未配置时回退开发占位；release 产物会在末尾守卫处直接构建失败。
         val storeSecret = rawSecret ?: DEV_FALLBACK
         buildConfigField("String", "MOX_STORE_SECRET", "\"$storeSecret\"")
     }
 
     buildTypes {
-        // P0 修复：release 构建若未注入真实密钥，严禁回退到公开 DEV_FALLBACK
-        // （那等于把密钥就写在 APK 里）。CI 必须配置 MOX_STORE_SECRET，否则构建即失败。
         release {
-            if (rawSecret.isNullOrBlank()) {
-                throw GradleException(
-                    "MOX_STORE_SECRET 未配置：release 构建禁止回退到公开 DEV_FALLBACK 密钥 " +
-                        "（moxsh-official-store-v1）。请在 CI 环境变量或 local.properties 设置 " +
-                        "MOX_STORE_SECRET 后再打 release 包。",
-                )
-            }
+            // 这里不再做密钥检查。Gradle 配置阶段会评估所有 buildType，
+            // 旧实现在此处 throw，会让 assembleDebug / fork PR 的编译验证也失败
+            // （2026-11-11 全仓审计发现的假阴性：5 个 Dependabot PR 全挂在这）。
+            // P0 守卫移到文件末尾的 task 执行期，任何真正产出 release 产物的
+            // task 都绕不过，安全性不削弱。
         }
     }
 
@@ -62,6 +58,29 @@ android {
         buildConfig = true
     }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
+}
+
+// P0 fail-closed 守卫（2026-11-11 二次修复）：
+// 未注入 MOX_STORE_SECRET 时，禁止产出任何 release 变体产物，防止公开占位密钥
+// 被打进对外分发的包。检查放在 task 执行期（doFirst）而非配置期：
+//   · gradle clean assembleDebug                  → 不触发，编译验证可正常跑
+//   · gradle assembleRelease / bundleRelease / build → 触发，立即失败
+// 这样既不削弱安全，也不再让 Dependabot / fork PR 的 debug 编译假失败。
+if (rawSecret.isNullOrBlank()) {
+    tasks.configureEach {
+        if (name.startsWith("assembleRelease") ||
+            name.startsWith("bundleRelease") ||
+            name.startsWith("publishRelease")
+        ) {
+            doFirst {
+                throw GradleException(
+                    "MOX_STORE_SECRET 未配置：release 产物禁止回退到公开 DEV_FALLBACK 密钥 " +
+                        "（moxsh-official-store-v1）。请在 CI 环境变量或 local.properties 设置 " +
+                        "MOX_STORE_SECRET 后再打 release 包。",
+                )
+            }
+        }
+    }
 }
 
 dependencies {

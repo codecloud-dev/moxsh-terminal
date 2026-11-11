@@ -176,6 +176,26 @@ impl Line {
     }
 }
 
+/// 主屏幕快照：进入 `?1049` / `?47` 备用屏时保存，退出时整屏还原。
+///
+/// 2026-11-11 审计修复：旧实现遇到 `?1049h` 只做 `erase_in_display(2)`，
+/// 退出（`?1049l`）什么也不做——vim / less / htop 退出后主屏内容永久丢失，
+/// 表现为「花屏 / 残留」。这里把进入前的网格、光标、SGR、滚动区全部存下来。
+struct AltScreenState {
+    cols: usize,
+    rows: usize,
+    cells: Vec<Cell>,
+    cursor_x: usize,
+    cursor_y: usize,
+    saved_x: usize,
+    saved_y: usize,
+    cur_fg: u32,
+    cur_bg: u32,
+    cur_attrs: u16,
+    scroll_top: usize,
+    scroll_bottom: usize,
+}
+
 pub struct Screen {
     pub cols: usize,
     pub rows: usize,
@@ -199,6 +219,8 @@ pub struct Screen {
     /// 自上次绘制以来的脏行集合（绝对行号 = history.len() + 可见行号）。
     pub dirty: std::collections::HashSet<usize>,
     pub(crate) max_history: usize,
+    /// 备用屏快照（None = 当前在主屏）。
+    alt_saved: Option<AltScreenState>,
 }
 
 impl Screen {
@@ -223,6 +245,7 @@ impl Screen {
             title: String::new(),
             dirty: std::collections::HashSet::new(),
             max_history,
+            alt_saved: None,
         }
     }
 
@@ -414,6 +437,66 @@ impl Screen {
         self.cursor_x = nx.clamp(0, self.cols as i32 - 1) as usize;
         self.cursor_y = ny.clamp(0, self.rows as i32 - 1) as usize;
         self.pending_wrap = false;
+    }
+
+    /// 进入备用屏（DECSET 1049/47/1047）：先存主屏快照，再清屏并把光标归零。
+    /// 幂等：程序重复发 `?1049h` 不会覆盖快照，避免嵌套进入时把主屏弄丢。
+    pub fn enter_alt_screen(&mut self) {
+        if self.alt_saved.is_some() {
+            return;
+        }
+        self.alt_saved = Some(AltScreenState {
+            cols: self.cols,
+            rows: self.rows,
+            cells: self.cells.clone(),
+            cursor_x: self.cursor_x,
+            cursor_y: self.cursor_y,
+            saved_x: self.saved_x,
+            saved_y: self.saved_y,
+            cur_fg: self.cur_fg,
+            cur_bg: self.cur_bg,
+            cur_attrs: self.cur_attrs,
+            scroll_top: self.scroll_top,
+            scroll_bottom: self.scroll_bottom,
+        });
+        self.erase_in_display(2);
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.pending_wrap = false;
+    }
+
+    /// 退出备用屏（DECRST 1049/47/1047）：还原进入前的整屏与光标。
+    /// 期间发生过 resize 时按交集复制，尺寸外区域留空，绝不越界 panic。
+    pub fn exit_alt_screen(&mut self) {
+        let Some(st) = self.alt_saved.take() else {
+            return;
+        };
+        self.cells = vec![Cell::default(); self.cols * self.rows];
+        let rows = st.rows.min(self.rows);
+        let cols = st.cols.min(self.cols);
+        for r in 0..rows {
+            for c in 0..cols {
+                self.cells[r * self.cols + c] = st.cells[r * st.cols + c];
+            }
+        }
+        self.cursor_x = st.cursor_x.min(self.cols.saturating_sub(1));
+        self.cursor_y = st.cursor_y.min(self.rows.saturating_sub(1));
+        self.saved_x = st.saved_x.min(self.cols.saturating_sub(1));
+        self.saved_y = st.saved_y.min(self.rows.saturating_sub(1));
+        self.cur_fg = st.cur_fg;
+        self.cur_bg = st.cur_bg;
+        self.cur_attrs = st.cur_attrs;
+        self.scroll_top = st.scroll_top.min(self.rows.saturating_sub(1));
+        self.scroll_bottom = st.scroll_bottom.min(self.rows.saturating_sub(1));
+        self.pending_wrap = false;
+        for r in 0..self.rows {
+            self.mark(r);
+        }
+    }
+
+    /// 当前是否处于备用屏（供私有模式状态同步）。
+    pub fn in_alt_screen(&self) -> bool {
+        self.alt_saved.is_some()
     }
 
     pub fn save_cursor(&mut self) {
