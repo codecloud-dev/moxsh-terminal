@@ -12,7 +12,28 @@ enum State {
     CsiEntry,
     CsiParam,
     OscString,
+    /// OSC 以 ST（ESC \\）结束时，等待第二字节 `\`。
+    OscEscape,
     Charset,
+}
+
+/// 终端私有模式状态（DECSET / DECRST）。
+///
+/// 2026-11-11 审计修复：旧解析器遇到 `?2004` / `?1006` / `?1000` 一律静默丢弃，
+/// 上层输入层根本拿不到「程序要求括号粘贴 / SGR 鼠标上报」的信号。这里把状态
+/// 显式记录并暴露；渲染/输入层按需消费（当前 App 输入层尚未全部接入，属已知差距）。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Modes {
+    /// ?1000 / ?1002 / ?1003：鼠标事件上报。
+    pub mouse: bool,
+    /// ?1006：SGR 扩展鼠标坐标编码。
+    pub sgr_mouse: bool,
+    /// ?1015：urxvt 鼠标编码。
+    pub urxvt_mouse: bool,
+    /// ?2004：括号粘贴（paste 应用 \x1b[200~ / \x1b[201~ 包裹）。
+    pub bracketed_paste: bool,
+    /// ?1049 / ?47 / ?1047：备用屏。
+    pub alt_screen: bool,
 }
 
 pub struct Parser {
@@ -24,6 +45,13 @@ pub struct Parser {
     g1_graphic: bool,
     /// UTF-8 多字节累积缓冲（用于把跨字节序列合成一个码点）。
     utf8: Vec<u8>,
+    /// 当前 CSI 是否为私有模式（`?` 前缀）。
+    private: bool,
+    /// 已解析的私有模式状态，供输入/渲染层消费。
+    pub modes: Modes,
+    /// OSC 52 请求写入剪贴板的 base64 原文（不含 `c;` 选择子）。
+    /// 核心库不碰系统剪贴板（无平台权限、也不该有），由上层解码后决定如何处理。
+    pub clipboard: Option<String>,
 }
 
 impl Default for Parser {
@@ -41,6 +69,9 @@ impl Parser {
             osc_buf: String::new(),
             g1_graphic: false,
             utf8: Vec::new(),
+            private: false,
+            modes: Modes::default(),
+            clipboard: None,
         }
     }
 
@@ -66,6 +97,11 @@ impl Parser {
             State::CsiEntry => self.csi_entry(screen, b),
             State::CsiParam => self.csi_param(screen, b),
             State::OscString => self.osc_string(screen, b),
+            State::OscEscape => {
+                // ST 的第二字节 `\`：吞掉，绝不把它当可打印字符写进屏幕。
+                // 容错：即便下一字节不是 `\` 也只丢弃这一个字节，不污染主屏。
+                self.state = State::Ground;
+            }
             State::Charset => {
                 // ESC ( B / ESC ) 0 等之后的单字节
                 if b == b'0' {
@@ -153,6 +189,7 @@ impl Parser {
                 self.state = State::CsiEntry;
                 self.params.clear();
                 self.cur_param = 0;
+                self.private = false;
             }
             b']' => {
                 self.state = State::OscString;
@@ -201,7 +238,7 @@ impl Parser {
                 self.push_param();
                 self.state = State::CsiParam;
             }
-            b'?' => { /* 私有模式前缀忽略 */ }
+            b'?' => { self.private = true; }
             _ => {
                 self.dispatch_csi(screen, b);
                 self.state = State::Ground;
@@ -318,34 +355,54 @@ impl Parser {
             }
             b's' => screen.save_cursor(),
             b'u' => screen.restore_cursor(),
-            b'h' | b'l' => {
-                // 私有模式（如 ?25h 显示光标 / ?1049 交替屏幕）简要处理
-                if p.first().copied() == Some(25) {
-                    screen.cursor_visible = final_byte == b'h';
-                } else if p.first().copied() == Some(1049) {
-                    // 交替屏幕：简单清屏
-                    if final_byte == b'h' {
-                        screen.erase_in_display(2);
+            b'h' | b'l' if self.private => {
+                // 2026-11-11 审计修复：私有模式不再只处理 ?25 / ?1049 且不再静默清屏。
+                // 支持一次多个模式（CSI ?1049;1006;2004h），并同步记录到 self.modes。
+                let set = final_byte == b'h';
+                let ms: Vec<u32> = p.to_vec();
+                for m in ms {
+                    match m {
+                        25 => screen.cursor_visible = set,
+                        47 | 1047 | 1049 => {
+                            if m == 1049 && set {
+                                screen.save_cursor();
+                            }
+                            if set {
+                                screen.enter_alt_screen();
+                            } else {
+                                screen.exit_alt_screen();
+                                if m == 1049 {
+                                    screen.restore_cursor();
+                                }
+                            }
+                        }
+                        1000 | 1002 | 1003 => self.modes.mouse = set,
+                        1006 => self.modes.sgr_mouse = set,
+                        1015 => self.modes.urxvt_mouse = set,
+                        2004 => self.modes.bracketed_paste = set,
+                        _ => {}
                     }
-                } else if (p.first().copied() == Some(47) || p.first().copied() == Some(1047)) && final_byte == b'h' {
-                    screen.erase_in_display(2);
                 }
+                self.modes.alt_screen = screen.in_alt_screen();
+            }
+            b'h' | b'l' => {
+                // 非私有 CSI h/l（如插入模式）当前渲染层不支持，明确忽略，
+                // 不再被误当成 DECSET 触发备用屏。
             }
             _ => {}
         }
     }
 
     fn osc_string(&mut self, screen: &mut Screen, b: u8) {
-        if b == 0x07 || b == 0x1b {
-            // OSC 结束（BEL 或 ST）。解析标题：\x1b]0;TITLE\x07
-            if let Some(idx) = self.osc_buf.find(';') {
-                let command = &self.osc_buf[..idx];
-                let value = &self.osc_buf[idx + 1..];
-                if command == "0" || command == "2" {
-                    screen.title = value.to_string();
-                }
-            }
+        if b == 0x07 {
+            // BEL 终止：单字节，直接收尾。
+            self.finish_osc(screen);
             self.state = State::Ground;
+        } else if b == 0x1b {
+            // ST 终止（ESC \）：先收尾，再吞掉后续 `\`。旧实现在这里直接回
+            // Ground，导致 `\` 被当成普通字符打印到屏幕上（标题栏之后多出反斜杠）。
+            self.finish_osc(screen);
+            self.state = State::OscEscape;
         } else if b >= 0x20 {
             // P2 修复：OSC 缓冲上限 4KiB，超出进入静默丢弃态（仍消费字节直到终止符），
             // 防无终止符的无限 OSC 流把 String 撑到 OOM。
@@ -354,6 +411,29 @@ impl Parser {
             }
         }
     }
+
+    fn finish_osc(&mut self, screen: &mut Screen) {
+        if let Some(idx) = self.osc_buf.find(';') {
+            let command = &self.osc_buf[..idx];
+            let value = &self.osc_buf[idx + 1..];
+            match command {
+                "0" | "2" => screen.title = value.to_string(),
+                // OSC 52：程序请求写系统剪贴板，格式 `52;c;<base64>`。
+                // 只记录原始 base64，不在此处写剪贴板（核心库无平台权限）；
+                // `52;c;?` 是查询剪贴板，需要宿主回写 PTY，当前不支持，忽略。
+                "52" => {
+                    if let Some(b64) = value.strip_prefix("c;") {
+                        if b64 != "?" {
+                            self.clipboard = Some(b64.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.osc_buf.clear();
+    }
+
 }
 
 /// 图形字符集近似映射（DEC Special Graphics → Unicode）。
@@ -540,4 +620,98 @@ mod tests {
         assert_eq!(s.cell_at(0, 3).code, 0);
         assert_eq!(s.cursor_x, 4);
     }
+
+    // ===== 2026-11-11 全仓审计回归：终端备用屏 / 私有模式 / OSC52 =====
+
+    /// ?1049 进出备用屏必须还原主屏内容与光标（旧实现退出时只留花屏）。
+    #[test]
+    fn audit_alt_screen_1049_saves_and_restores() {
+        let mut s = Screen::new(10, 3, 16);
+        let mut p = Parser::new();
+        p.feed(&mut s, b"MAIN");
+        s.set_cursor(4, 1);
+        p.feed(&mut s, b"\x1b[?1049h");
+        assert!(s.in_alt_screen(), "应进入备用屏");
+        assert!(p.modes.alt_screen);
+        assert_eq!(s.cell_at(0, 0).code, 0, "进入备用屏应清屏");
+        p.feed(&mut s, b"VIM");
+        assert_eq!(s.cell_at(0, 0).code, 'V' as u32);
+        p.feed(&mut s, b"\x1b[?1049l");
+        assert!(!s.in_alt_screen(), "应退回主屏");
+        assert!(!p.modes.alt_screen);
+        assert_eq!(s.cell_at(0, 0).code, 'M' as u32, "主屏内容必须还原");
+        assert_eq!(s.cell_at(0, 3).code, 'N' as u32);
+        assert_eq!((s.cursor_x, s.cursor_y), (4, 1), "1049 应同时恢复光标");
+    }
+
+    /// 重复 ?1049h 不能覆盖快照（嵌套进入不得丢主屏）。
+    #[test]
+    fn audit_alt_screen_double_enter_is_idempotent() {
+        let mut s = Screen::new(8, 2, 8);
+        let mut p = Parser::new();
+        p.feed(&mut s, b"AB");
+        p.feed(&mut s, b"\x1b[?1049h\x1b[?1049h");
+        p.feed(&mut s, b"\x1b[?1049l");
+        assert_eq!(s.cell_at(0, 0).code, 'A' as u32);
+        assert_eq!(s.cell_at(0, 1).code, 'B' as u32);
+    }
+
+    /// ?47 / ?1047 只切屏不负责保存光标。
+    #[test]
+    fn audit_alt_screen_47_toggles() {
+        let mut s = Screen::new(8, 2, 8);
+        let mut p = Parser::new();
+        p.feed(&mut s, b"XY\x1b[?47h");
+        assert!(s.in_alt_screen());
+        p.feed(&mut s, b"\x1b[?47l");
+        assert!(!s.in_alt_screen());
+        assert_eq!(s.cell_at(0, 0).code, 'X' as u32);
+    }
+
+    /// 一次多个私有模式 + 状态真实可查，不再静默丢弃。
+    #[test]
+    fn audit_private_modes_are_recorded() {
+        let mut s = Screen::new(10, 3, 16);
+        let mut p = Parser::new();
+        p.feed(&mut s, b"\x1b[?2004h\x1b[?1006h\x1b[?1000h\x1b[?1015h");
+        assert!(p.modes.bracketed_paste, "?2004");
+        assert!(p.modes.sgr_mouse, "?1006");
+        assert!(p.modes.mouse, "?1000");
+        assert!(p.modes.urxvt_mouse, "?1015");
+        p.feed(&mut s, b"\x1b[?2004;1006l");
+        assert!(!p.modes.bracketed_paste, "分号批量 DECRST");
+        assert!(!p.modes.sgr_mouse, "分号批量 DECRST");
+    }
+
+    /// 非私有 CSI h 不得被误判成 DECSET。
+    #[test]
+    fn audit_non_private_csi_h_is_not_decset() {
+        let mut s = Screen::new(10, 3, 16);
+        let mut p = Parser::new();
+        p.feed(&mut s, b"\x1b[4h");
+        assert!(!s.in_alt_screen());
+    }
+
+    /// OSC 52 剪贴板内容被捕获；ST（ESC \）不再漏出反斜杠字符。
+    #[test]
+    fn audit_osc52_and_st_terminator() {
+        let mut s = Screen::new(10, 3, 16);
+        let mut p = Parser::new();
+        p.feed(&mut s, b"\x1b]52;c;aGVsbG8=\x07");
+        assert_eq!(p.clipboard.as_deref(), Some("aGVsbG8="));
+        p.feed(&mut s, b"\x1b]0;title\x1b\\OK");
+        assert_eq!(s.title, "title");
+        assert_eq!(s.cell_at(0, 0).code, 'O' as u32, "ST 的 \\ 不能被打印");
+        assert_eq!(s.cell_at(0, 1).code, 'K' as u32);
+    }
+
+    /// OSC 52 查询（`?`）不应被当成剪贴板写入。
+    #[test]
+    fn audit_osc52_query_ignored() {
+        let mut s = Screen::new(10, 3, 16);
+        let mut p = Parser::new();
+        p.feed(&mut s, b"\x1b]52;c;?\x07");
+        assert_eq!(p.clipboard, None);
+    }
+
 }

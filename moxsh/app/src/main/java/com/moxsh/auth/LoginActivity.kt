@@ -216,7 +216,10 @@ private fun GitHubLoginContent(
 
         profile != null && phase != Phase.Loading -> {
             Text(
-                stringResource(R.string.mox_login_logged_in) + " · ${profile!!.login}",
+                // 2026-11-11 审计修复：外层已判 profile != null，但 Compose 重组期间
+                // ViewModel 的 StateFlow 可能已把它清成 null（登出/切换账号），
+                // !! 会直接 NPE 崩 App。用安全调用即可，空值退化为空串不影响排版。
+                stringResource(R.string.mox_login_logged_in) + " · ${profile?.login.orEmpty()}",
                 color = GlassTokens.onGlass,
             )
             Text(
@@ -393,8 +396,13 @@ private fun EmailLoginContent(
                             status = ctx.getString(R.string.mox_email_login_no_password)
                         }
                         EmailBindingStore.verifyPassword(ctx, password) -> {
-                            EmailSessionStore.set(ctx, EmailBindingStore.get(ctx)!!)
-                            activeEmail = EmailBindingStore.get(ctx)
+                            // 2026-11-11 审计修复：不再用 !! 强取绑定邮箱。
+                            // 密码校验通过只说明「此刻有绑定」，并发的清除绑定 / 数据迁移
+                            // 仍可能让第二次 get 返回 null；只在取到值时写入会话。
+                            EmailBindingStore.get(ctx)?.let { boundEmail ->
+                                EmailSessionStore.set(ctx, boundEmail)
+                                activeEmail = boundEmail
+                            }
                             password = ""
                             Toast.makeText(
                                 ctx,

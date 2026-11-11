@@ -1,6 +1,6 @@
 [package]
 name = "moxsh-terminal-core"
-version = "0.1.1"
+version = "1.0.0"
 edition = "2021"
 description = "moxsh 终端内核：Rust 全包实现（PTY/VT 解析/屏幕/回滚/IPC/包管理/兼容层），零外部依赖，通过 cdylib 暴露 C-ABI 供 Kotlin/JNI 调用。"
 

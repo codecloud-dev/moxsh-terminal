@@ -42,7 +42,67 @@ RULES = [
         r"(?i)(?:client[_-]?secret|client_secret|api[_-]?key|secret|private[_-]?key|"
         r"access[_-]?token|auth[_-]?token|password|passwd)\s*[:=]\s*[\"']?[A-Za-z0-9/+_@.#-]{16,}[\"']?")),
     ("bearer_token", re.compile(r"Bearer\s+[A-Za-z0-9._\-]{20,}")),
+    # 2026-11-11 审计补充：原先只有通用 token/私钥模式，缺签名密钥、JWT 与
+    # 国内/CI 平台专用凭据。Gitee PAT 本身无特征前缀，靠 generic_secret 覆盖，
+    # 这里补的是「变量名 + 值」这种最容易误提交的形态。
+    ("keystore_base64", re.compile(r"(?i)KEYSTORE_BASE64\s*[:=]\s*['\"]?[A-Za-z0-9+/=]{120,}")),
+    ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")),
+    ("gitee_token", re.compile(r"(?i)GITEE_(?:TOKEN|PAT|ACCESS_TOKEN)\s*[:=]\s*['\"]?[A-Za-z0-9]{20,}")),
+    ("cf_api_token", re.compile(r"(?i)CLOUDFLARE_API_TOKEN\s*[:=]\s*['\"]?[A-Za-z0-9_-]{30,}")),
+    ("ed25519_seed", re.compile(r"(?i)(?:ED25519|PRIVATE_KEY|SEED)\s*[:=]\s*['\"]?[A-Fa-f0-9]{64}['\"]?")),
 ]
+
+# 每条规则的自测样例：CI 先跑 --self-test，确保规则没有被误删 / 改坏到失效。
+# 审计原文点名「没校验脚本本身的覆盖度」，这里把覆盖度变成可执行断言。
+SELF_TEST_SAMPLES = {
+    "github_pat": "github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz1234567890",
+    "github_token_ghp": "ghp_" + "a" * 36,
+    "aws_key": "AKIA" + "A" * 16,
+    "google_api": "AIza" + "a" * 35,
+    "slack_token": "xoxb-123456789012-abcdefghijkl",
+    "stripe_key": "sk_live_" + "a" * 24,
+    "pem_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----",
+    "generic_secret": 'password = "supersecretvalue123456"',
+    "bearer_token": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456",
+    "keystore_base64": "KEYSTORE_BASE64 = " + "A" * 160,
+    "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnopqrstuvwxyz12",
+    "gitee_token": "GITEE_TOKEN = " + "a" * 32,
+    "cf_api_token": "CLOUDFLARE_API_TOKEN = " + "a" * 40,
+    "ed25519_seed": "ED25519_PRIVATE_KEY = " + "a" * 64,
+}
+# 这些是文档/模板里的占位符，必须**不**命中，避免规则过宽刷屏
+SELF_TEST_SAFE = [
+    "password = ${KEYSTORE_PASSWORD}",
+    "password = REPLACE_WITH_YOUR_PASSWORD",
+    "const token = process.env.GITHUB_TOKEN;",
+]
+
+
+def self_test() -> int:
+    """验证：① 每条规则都有样例且能命中；② 占位符样例不会被误报。"""
+    labels = {label for label, _ in RULES}
+    missing = labels - set(SELF_TEST_SAMPLES)
+    if missing:
+        print(f"❌ 自测失败：以下规则缺少样例：{sorted(missing)}")
+        return 1
+    bad = []
+    for label, sample in SELF_TEST_SAMPLES.items():
+        if not any(rx.search(sample) for name, rx in RULES if name == label):
+            bad.append(label)
+    if bad:
+        print(f"❌ 自测失败：以下规则未命中自己的样例：{bad}")
+        return 1
+    for safe in SELF_TEST_SAFE:
+        # 复用主流程的占位符过滤规则
+        low = safe.lower()
+        if "replace_with" in low or "${" in safe:
+            continue
+        hit = [label for label, rx in RULES if rx.search(safe)]
+        if hit:
+            print(f"❌ 自测失败：占位符被误报为密钥：{safe!r} → {hit}")
+            return 1
+    print(f"✅ 规则自测通过：{len(RULES)} 条规则全部命中样例，{len(SELF_TEST_SAFE)} 条占位符无误报。")
+    return 0
 
 
 def should_scan(path: str) -> bool:
@@ -94,4 +154,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if "--self-test" in sys.argv:
+        sys.exit(self_test())
     sys.exit(main())

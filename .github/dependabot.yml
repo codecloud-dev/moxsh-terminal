@@ -1,22 +1,44 @@
 version: 2
 updates:
+  # 2026-11-11 审计收口：此前 weekly + 无分组 + 无 major 过滤，
+  # 一个月堆出 11 个 open PR，其中 9 个因「Dependabot 拿不到签名密钥」假失败。
+  # 现在：minor/patch 合并成每组 1 个 PR；major 升级不自动开 PR（破坏性升级需人工评估）；
+  # 频率降为 monthly，open 上限收紧。build.yml 已对无密钥 PR 改跑 assembleDebug。
   - package-ecosystem: "gradle"
     directory: "/moxsh"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 3
     labels: ["dependencies"]
+    groups:
+      gradle-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "cargo"
     directory: "/moxsh/terminal-core"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 3
     labels: ["dependencies"]
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     labels: ["dependencies", "ci"]
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
