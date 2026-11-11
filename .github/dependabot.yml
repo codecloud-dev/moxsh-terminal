@@ -33,6 +33,21 @@ updates:
       # 裸包名根本匹配不上。改用 group:* 通配覆盖该 group 下所有 artifact。
       - dependency-name: "androidx.core:*"
       - dependency-name: "androidx.browser:*"
+      # 2026-11-11 三修（PR #119 五轮真实 CI 逐层定位）：另一批「minor/patch」
+      # 库已经改用 Kotlin 2.x 编译，metadata 超出 Kotlin 1.9.x 编译器的
+      # 可读上限 2.0.0，构建会报几十个「Unresolved reference: listOf /
+      # runCatching / withContext」，看着像业务代码全错，实质是标准库
+      # classpath 被 incompatible classes 污染：
+      #   run 42987971371：coroutines 1.11.0 / kotlin-stdlib 2.2.20 → metadata 2.2.0
+      #   run 42988921137：annotation 1.11.0 / kotlin-stdlib 2.1.20 → metadata 2.1.0
+      # 这是 Kotlin 1.9.x → 2.x 工具链迁移（Compose Compiler Gradle Plugin /
+      # AGP / compileSdk 连锁变更），必须人工独立做，不能塞进自动分组 PR。
+      - dependency-name: "org.jetbrains.kotlinx:*"
+      - dependency-name: "androidx.annotation:*"
+      # Gradle 发行版大跳（8.7 → 8.14.6）与 AGP 8.5.0 / KGP 1.9.x 的组合
+      # 未单独验证，排除掉以免分组 PR 里混进无法归因的变量。
+      - dependency-name: "gradle"
+      - dependency-name: "gradle-wrapper"
 
   - package-ecosystem: "cargo"
     directory: "/moxsh/terminal-core"

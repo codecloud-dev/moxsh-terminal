@@ -45,6 +45,15 @@ jobs:
       - name: AAR metadata / compileSdk 约束自检
         run: python3 .github/scripts/check_sdk_boundaries.py moxsh
 
+      # 2026-11-11 第三层防回退（PR #119 五轮真实 CI 逐层定位）：
+      # coroutines 1.11.0 带 Kotlin 2.2.0 metadata、annotation 1.11.0 带 2.1.0，
+      # 而 Kotlin 1.9.x 编译器只能读到 2.0.0。报错表现为几十个
+      # 「Unresolved reference: listOf / runCatching」——看着像业务代码全错，
+      # 其实是标准库 classpath 被 incompatible classes 污染，极易误判。
+      # 这里在 Gradle 启动前把工具链边界说清楚。
+      - name: Kotlin 工具链 / metadata 约束自检
+        run: python3 .github/scripts/check_kotlin_toolchain.py moxsh
+
       # 防回归（真实事故）：曾声明 com.termux.permission.RUN_COMMAND 兼容 Termux，
       # 与已装 Termux 的同名权限定义冲突 → INSTALL_FAILED_DUPLICATE_PERMISSION，
       # 用户实测"与 termux 权限冲突无法安装"。禁止再抢注任何外部权限名。
