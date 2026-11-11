@@ -285,27 +285,34 @@ object BootstrapInstaller {
         val suffix = if (source.format == Format.ZIP) "zip" else "tar.gz"
         val out = File(ctx.cacheDir, "bootstrap.$suffix")
         val conn = URL(source.url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15_000
-        conn.readTimeout = 30_000
-        conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "moxsh-bootstrap/1.0")
-        if (conn.responseCode !in 200..299) {
-            throw BootstrapException("HTTP ${conn.responseCode}")
-        }
-        val total = conn.contentLengthLong
-        conn.inputStream.use { input ->
-            FileOutputStream(out).use { fos ->
-                val buf = ByteArray(64 * 1024)
-                var read: Int
-                var done = 0L
-                while (input.read(buf).also { read = it } != -1) {
-                    fos.write(buf, 0, read)
-                    done += read
-                    if (total > 0) onProgress((done * 100 / total).toInt().coerceIn(0, 100))
+        try {
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 30_000
+            conn.instanceFollowRedirects = true
+            conn.setRequestProperty("User-Agent", "moxsh-bootstrap/1.0")
+            if (conn.responseCode !in 200..299) {
+                throw BootstrapException("HTTP ${conn.responseCode}")
+            }
+            val total = conn.contentLengthLong
+            conn.inputStream.use { input ->
+                FileOutputStream(out).use { fos ->
+                    val buf = ByteArray(64 * 1024)
+                    var read: Int
+                    var done = 0L
+                    while (input.read(buf).also { read = it } != -1) {
+                        fos.write(buf, 0, read)
+                        done += read
+                        if (total > 0) onProgress((done * 100 / total).toInt().coerceIn(0, 100))
+                    }
                 }
             }
+            return out
+        } finally {
+            // 2026-11-11 审计修复：HttpURLConnection 没有 close()，只能 disconnect()。
+            // 原来只有成功路径走到文件返回，HTTP 非 2xx / 读写异常时连接不归还，
+            // 多次重试下载会持续占用连接池槽位。放进 finally 保证所有分支都释放。
+            conn.disconnect()
         }
-        return out
     }
 
     /** 计算文件 SHA-256 的 hex 字符串（流式，不占额外内存）。 */
