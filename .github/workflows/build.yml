@@ -92,10 +92,23 @@ jobs:
             cargo install cargo-ndk --version "^4" --locked
           fi
 
-      - name: Setup Gradle 8.9 (含缓存)
+      # 2026-11-11 审计修复：旧配置把 Gradle 版本写死 8.9，绕过了仓库 wrapper。
+      # Dependabot 升级 AGP（8.5.0 → 8.13.2）时已同步把 wrapper 提到 8.14.6，
+      # 但 CI 仍用 8.9 → "Minimum supported Gradle version is 8.13"（#116 假失败）。
+      # 现在从 wrapper 配置动态读取，AGP / Gradle 配套升级不会再被 CI 卡住。
+      - name: 读取 Gradle Wrapper 版本
+        id: gradle_version
+        run: |
+          VER=$(grep -oE 'gradle-[0-9]+(\.[0-9]+)*(-[a-z]+)?-bin\.zip' \
+            moxsh/gradle/wrapper/gradle-wrapper.properties | head -1 | sed -E 's/^gradle-//; s/-bin\.zip$//')
+          [ -n "$VER" ] || { echo "::error::无法从 gradle-wrapper.properties 解析 Gradle 版本"; exit 1; }
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Gradle 版本（来自 wrapper）: $VER"
+
+      - name: Setup Gradle (跟随 wrapper，含缓存)
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.9
+          gradle-version: ${{ steps.gradle_version.outputs.version }}
           cache-cleanup: on-success
 
       # 国内网络优化：优先走腾讯/阿里镜像（无网络时也兼容 google/mavenCentral）
