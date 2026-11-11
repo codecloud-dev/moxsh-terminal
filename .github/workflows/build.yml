@@ -37,6 +37,14 @@ jobs:
       - name: Kotlin / Compose Compiler 版本配对自检
         run: python3 .github/scripts/check_kotlin_compose_pair.py moxsh
 
+      # 2026-11-11 审计防回退：Dependabot 把 androidx.browser / androidx.core
+      # 升到 1.10.0 / 1.19.1（版本号只是 minor/patch），Gradle 要到
+      # :app:checkReleaseAarMetadata 才报「requires compileSdk 36/37、AGP 8.9.1/9.1.0」。
+      # 这实质是 SDK 大版本迁移，不是能自动合并的依赖升级。这里在 Gradle 启动前
+      # 把约束变成一句人话，避免每次都等 5 分钟编译才炸、还看不懂原因。
+      - name: AAR metadata / compileSdk 约束自检
+        run: python3 .github/scripts/check_sdk_boundaries.py moxsh
+
       # 防回归（真实事故）：曾声明 com.termux.permission.RUN_COMMAND 兼容 Termux，
       # 与已装 Termux 的同名权限定义冲突 → INSTALL_FAILED_DUPLICATE_PERMISSION，
       # 用户实测"与 termux 权限冲突无法安装"。禁止再抢注任何外部权限名。

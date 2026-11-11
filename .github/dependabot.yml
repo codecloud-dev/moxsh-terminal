@@ -26,8 +26,13 @@ updates:
       # 复核所有模块编译通过后再解除这里的 ignore。
       - dependency-name: "com.android.application"
       - dependency-name: "com.android.library"
-      - dependency-name: "androidx.core"
-      - dependency-name: "androidx.browser"
+      - dependency-name: "com.android.tools.build:gradle"
+      # 2026-11-11 二修：第一版写成裸包名 "androidx.core" / "androidx.browser"，
+      # 实测没挡住 #118 —— Gradle 依赖在 Dependabot 里的名字是完整的
+      # 「group:artifact」坐标（androidx.core:core-ktx、androidx.browser:browser），
+      # 裸包名根本匹配不上。改用 group:* 通配覆盖该 group 下所有 artifact。
+      - dependency-name: "androidx.core:*"
+      - dependency-name: "androidx.browser:*"
 
   - package-ecosystem: "cargo"
     directory: "/moxsh/terminal-core"
