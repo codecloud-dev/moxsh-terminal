@@ -464,7 +464,10 @@ object AiConfigStore {
     fun load(ctx: Context): AiConfig {
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val provider = runCatching {
-            AiProvider.valueOf(p.getString(KEY_PROVIDER, AiProvider.Zhipu.name)!!)
+            // 2026-11-11 审计修复：getString 带默认值仍可能返回 null（外部写入了显式 null、
+            // 或 SharedPreferences 被清空），!! 会 NPE。改为 Elvis 回退默认提供商；
+            // runCatching 继续兜住「存了已下线的枚举名」导致的 IllegalArgumentException。
+            AiProvider.valueOf(p.getString(KEY_PROVIDER, null) ?: AiProvider.Zhipu.name)
         }.getOrDefault(AiProvider.Zhipu)
         val enc = p.getString(KEY_API_KEY_ENC, null)
         return AiConfig(

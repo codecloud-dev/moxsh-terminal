@@ -58,5 +58,8 @@ moxsh 是一个终端与容器环境，以下行为属于**设计预期**，不�
 
 ## 加密通信与签名
 
-- .mox 包使用 HMAC-SHA256 签名（见 `docs/plugins.md`）
 - 发行版 rootfs 下载强制 sha256 校验，国内镜像与官方源结果必须一致
+- **插件签名现状（如实标注）**：当前实现使用共享密钥 HMAC-SHA256 校验（见 `moxsh/app/src/main/java/com/moxsh/store/StoreRepository.kt`）；
+  `moxsh-suite/spec/plugin-manifest.schema.json` 已定义 ed25519 / rsa-pss / ecdsa 非对称签名与 `keyId` 密钥轮换规格，
+  终端侧实现尚未迁移到该规格，`moxsh-plugins/schema/catalog.schema.json` 也尚无 `integrity` / `signature` 字段。
+  这是**已知差距**，不是设计选择；在迁移完成前，反编译 APK 取得兜底共享密钥伪造官方插件属于有效漏洞，欢迎报告。

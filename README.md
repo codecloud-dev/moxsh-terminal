@@ -85,7 +85,7 @@ moxsh 是 MoX 工具系列的第一块拼图。本仓库随全家桶一起升到
 | :---------------- | :---------------- | :------------- |
 | **agent-core**    | TS 通用内核 / SDK    | ✅ 已发布          |
 | **moxsh-plugins** | 插件清单（JSON）      | ✅ 已发布          |
-| **moxwebgpu**     | WebGPU / 渲染       | ✅ 已发布          |
+| **moxwebgpu**     | WebGPU / 渲染       | 🟡 源码可用（npm 待发布） |
 | **mox-site**      | 官方门户（静态站）     | ✅ 已发布          |
 | **moxsh-terminal**| Android 终端（本仓库） | 🔄 本次发布        |
 | **moxsh-suite**   | 全家桶 monorepo      | ⏳ 子模块收尾        |

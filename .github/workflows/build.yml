@@ -136,6 +136,17 @@ jobs:
           MOX_STORE_SECRET: ${{ secrets.MOX_STORE_SECRET }}
         run: |
           set +e
+          # 2026-11-11 审计修复：Dependabot / fork PR 拿不到仓库 Secrets，
+          # 旧流程必然在「release 未注入密钥」的 P0 守卫处失败 —— 这是假阴性，
+          # 既刷了一堆「CI 构建失败」issue，也让 11 个依赖 PR 全挂红。
+          # 无密钥时改跑 assembleDebug，只验证「依赖升级能否编译」，不做签名与发布。
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$MOX_STORE_SECRET" ]; then
+            echo "::notice::无签名密钥（Dependabot / fork PR）：改跑 assembleDebug 编译验证，跳过 release 签名"
+            gradle clean assembleDebug --stacktrace 2>&1 | tee /tmp/build.log
+            rc=${PIPESTATUS[0]}
+            if [ "$rc" -eq 0 ]; then echo "BUILD_OK=1" >> "$GITHUB_OUTPUT"; echo "DEBUG_BUILD_OK（依赖升级编译通过）"; exit 0; fi
+            echo "DEBUG_BUILD_FAIL rc=$rc"; echo "BUILD_OK=0" >> "$GITHUB_OUTPUT"; exit 1
+          fi
           n=0
           max=3
           until [ "$n" -ge "$max" ]; do
@@ -161,7 +172,8 @@ jobs:
       # 把真实报错建为一个 GitHub Issue（沙箱无法下载日志 zip / 读 step summary API，
       # 但 issue 可经 gh api 可靠读取），用于定位是网络抖动还是真实代码/配置错误。
       - name: 诊断构建错误（建 issue 暴露）
-        if: failure()
+        # PR（尤其 Dependabot）失败只在 PR 里看日志即可，不再开仓库级 issue 刷屏
+        if: failure() && github.event_name != 'pull_request'
         working-directory: moxsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -183,35 +195,59 @@ jobs:
           printf 'CI 构建失败（3 次重试均失败） @ %s\n\nrun: %s\n\n最后错误：\n\n```\n%s\n```\n' \
             "$SHA7" "${{ github.run_id }}" "$SUMMARY" \
             > /tmp/diag.md
-          # 建 issue（可见性好；仓库无 ci 标签，故不带 --label）
-          gh issue create \
-            --title "CI 构建失败 $SHA7 · run ${{ github.run_id }}" \
-            --body-file /tmp/diag.md 2>&1 | head -3 || echo "issue 创建失败（不影响主流程）"
+          # 查重（2026-11-11 审计修复）：同类 open issue 只追加一条精简评论，
+          # 不再每次失败都新建 issue（此前一个持续故障刷出 50+ 条重复告警）。
+          NUM=$(gh issue list --state open --limit 50 --json number,title \
+            -q '.[] | select(.title | test("CI 构建失败")) | .number' | head -1)
+          if [ -n "$NUM" ]; then
+            printf '⚠️ 同类失败再次发生：run `%s` · `%s` · %s\n\n详情见本次 Actions 日志（不重复贴大段日志，避免刷屏）。\n' \
+              "${{ github.run_id }}" "${{ github.sha }}" "$(date -u +%FT%TZ)" > /tmp/recur.md
+            gh issue comment "$NUM" --body-file /tmp/recur.md 2>&1 | head -2 || true
+          else
+            gh issue create \
+              --title "CI 构建失败 $SHA7 · run ${{ github.run_id }}" \
+              --body-file /tmp/diag.md 2>&1 | head -3 || echo "issue 创建失败（不影响主流程）"
+          fi
 
       - name: Upload APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: moxsh-apk
-          path: moxsh/app/build/outputs/apk/release/*.apk
+          # debug 构建（无密钥的 Dependabot PR）没有 release APK，找不到文件不应报警
+          path: |
+            moxsh/app/build/outputs/apk/release/*.apk
+            moxsh/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: ignore
           retention-days: 30
 
-      # 构建成功后直接用本地 APK 文件发布到 v0.6.2（不走 artifact 下载，沙箱/runner 均无法下载 artifacts）
-      # 仅依赖 Build 是否成功，与 Upload APK 步骤结果解耦（artifact 上传抖动不应阻断发布）。
-      - name: 发布到 v0.6.2 Release
-        if: steps.build.outcome == 'success'
+      # 2026-11-11 审计修复：旧流程把每次 push 的 APK 都覆盖到写死的 v0.6.2 tag，
+      #   而 build.gradle 里的 versionName 早已是 1.0.0 —— 用户永远看不到版本迭代。
+      #   改为 rolling tag `terminal-latest`（与 moxsh-proot 的 proot-latest 同思路）：
+      #   历史语义化版本（含 v0.6.2）保留不动、不再被覆盖；版本号从 build.gradle 真实读取写进说明。
+      #   仅依赖 Build 是否成功，与 Upload APK 步骤结果解耦（artifact 上传抖动不阻断发布）。
+      - name: 发布到 terminal-latest Release
+        if: steps.build.outcome == 'success' && github.event_name != 'pull_request' && env.KEYSTORE_BASE64 != ''
         working-directory: moxsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 首次构建时创建 v0.6.2 Release（含 tag），已存在则忽略
-          gh release create v0.6.2 \
-            --title "v0.6.2 · 云同步与玻璃增强" \
-            --notes "moxsh v0.6.2：PTY 内核强化 + 液态玻璃增强 + 命令云同步 MVP + 登录入口接线。详见 CHANGELOG.md" \
-            --latest 2>/dev/null || true
+          TAG="terminal-latest"
+          VER=$(grep -oE 'versionName\s*=\s*"[^"]+"' app/build.gradle | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          VER="${VER:-unknown}"
+          SHA7=$(echo '${{ github.sha }}' | cut -c1-7)
+          STAMP=$(date -u +%FT%TZ)
+          echo "发布 rolling release：$TAG（代码版本 $VER @ $SHA7）"
+          # 不存在则创建；已存在则刷新标题与说明（不改历史语义化 tag）
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "moxsh terminal · 滚动最新版" --notes "初始化" --latest || exit 1
+          fi
+          NOTES=$(printf 'moxsh-terminal 滚动构建（每次 push 到 main 自动刷新）。\n\n- 代码版本：`%s`\n- commit：`%s`\n- 构建时间：%s\n- 变更记录：见仓库 CHANGELOG.md 与 Releases 页面\n\n> 这是**滚动最新版**，不是语义化版本；需要固定版本请用带 `v` 前缀的历史 Release。' \
+            "$VER" "$SHA7" "$STAMP")
+          gh release edit "$TAG" --title "moxsh terminal $VER · 滚动最新版" --notes "$NOTES" || true
           for f in app/build/outputs/apk/release/*.apk; do
             [ -e "$f" ] || continue
-            gh release delete-asset v0.6.2 "$(basename "$f")" --yes 2>/dev/null || true
-            gh release upload v0.6.2 "$f"
+            gh release delete-asset "$TAG" "$(basename "$f")" --yes 2>/dev/null || true
+            gh release upload "$TAG" "$f" --clobber
           done
-          gh release view v0.6.2 --json assets --jq '.assets[] | {name, size, state}'
+          gh release view "$TAG" --json assets --jq '.assets[] | {name, size, state}'
