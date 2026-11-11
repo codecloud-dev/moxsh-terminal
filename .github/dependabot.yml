@@ -17,6 +17,17 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # 2026-11-11 审计补充：AGP 8.5 → 8.13 被判为 minor，但实测它连锁要求
+      # Gradle 8.13+、Kotlin/Compose 配套；同组的 androidx.browser 1.10.0 /
+      # androidx.core 1.19.1 又要求 compileSdk 36 / 37（本仓是 34）。
+      # 这类「版本号是 minor、实质是 SDK 大版本迁移」的升级不该塞进分组 PR，
+      # 否则每次都生成一个必挂红的巨型 PR（见已关闭的 #116）。
+      # 由人工做独立迁移：统一 compileSdk / targetSdk、CI 装对应 platform、
+      # 复核所有模块编译通过后再解除这里的 ignore。
+      - dependency-name: "com.android.application"
+      - dependency-name: "com.android.library"
+      - dependency-name: "androidx.core"
+      - dependency-name: "androidx.browser"
 
   - package-ecosystem: "cargo"
     directory: "/moxsh/terminal-core"

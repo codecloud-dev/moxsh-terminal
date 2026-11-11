@@ -30,6 +30,13 @@ jobs:
       - name: Kotlin 源码静态自检
         run: python3 .github/scripts/check_kotlin_lexer.py moxsh
 
+      # 2026-11-11 审计防回退：Dependabot 分组升 Kotlin 1.9.24 → 1.9.25 时，
+      # 不会同步 11 个模块的 kotlinCompilerExtensionVersion（仍 1.5.14），
+      # 编译器直接报 "Compose Compiler 1.5.14 requires Kotlin 1.9.24"。
+      # 这里在 Gradle 启动前就把配对关系卡住，避免 5 分钟编译后才炸。
+      - name: Kotlin / Compose Compiler 版本配对自检
+        run: python3 .github/scripts/check_kotlin_compose_pair.py moxsh
+
       # 防回归（真实事故）：曾声明 com.termux.permission.RUN_COMMAND 兼容 Termux，
       # 与已装 Termux 的同名权限定义冲突 → INSTALL_FAILED_DUPLICATE_PERMISSION，
       # 用户实测"与 termux 权限冲突无法安装"。禁止再抢注任何外部权限名。
