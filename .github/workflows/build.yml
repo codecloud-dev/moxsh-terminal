@@ -211,7 +211,7 @@ jobs:
 
       - name: Upload APK
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: moxsh-apk
           # debug 构建（无密钥的 Dependabot PR）没有 release APK，找不到文件不应报警
