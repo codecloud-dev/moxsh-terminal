@@ -51,7 +51,7 @@
 
 ## 执行
 
-发生滥用、 harassment 或其他不可接受的行为时，请通过 GitHub 私密渠道联系仓库维护者报告（仓库页 → Security → Report a vulnerability，或在相关讨论中私密 @维护者）。所有投诉都将被及时、公正地审查与调查。
+发生滥用、 harassment 或其他不可接受的行为时，请通过官网独立的行为准则投诉表单 https://mox-site.pages.dev/report 报告（与漏洞队列分开、支持匿名）。请勿使用 GitHub Security Advisory，那是安全漏洞专用通道。所有投诉都将被及时、公正地审查与调查。
 
 维护团队有义务对报告人保密，并尊重报告人的安全。违反行为准则且情节严重者，可能被暂时或永久封禁。
 

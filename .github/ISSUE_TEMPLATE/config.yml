@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: "🔐 报告安全漏洞（请勿公开发帖）"
-    url: "https://github.com/codecloud-dev/moxsh-terminal/security/advisories/new"
-    about: "走 SECURITY.md 的私密渠道，维护者 72 小时内确认。"
+    url: "https://mox-site.pages.dev/security"
+    about: "走 SECURITY.md 的私密渠道，维护者通常在 72 小时内确认。"
   - name: "💬 想聊 / 想赞助 / Just want to chat"
     url: "https://afdian.com/a/cloudharbor"
     about: "吐槽、赞助、或者只是打个招呼都行。"
