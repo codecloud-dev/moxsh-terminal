@@ -73,3 +73,9 @@ updates:
       actions-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+
+    ignore:
+      # actions 大版本升级会连带改 runner 镜像、Node/Python 默认版本与
+      # 权限模型，必须由人工跑一遍完整 CI 再决定，不收自动 PR。
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
