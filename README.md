@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=Latest&color=37d5d3" alt="Latest">
   <img src="https://img.shields.io/github/stars/codecloud-dev/moxsh-terminal?style=social" alt="GitHub Stars">
   <img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal?label=Discussions&color=ff7ac3" alt="社区讨论">
-  <img src="https://img.shields.io/badge/version-1.0.0-8a7bff" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.1-8a7bff" alt="version">
   <img src="https://img.shields.io/badge/license-GPL--3.0-37d5d3" alt="license">
   <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9+">
   <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust&logoColor=white" alt="Rust 内核">
@@ -85,11 +85,13 @@ moxsh 是 MoX 工具系列的第一块拼图。本仓库随全家桶一起升到
 | :---------------- | :---------------- | :------------- |
 | **agent-core**    | TS 通用内核 / SDK    | ✅ 已发布          |
 | **moxsh-plugins** | 插件清单（JSON）      | ✅ 已发布          |
-| **moxwebgpu**     | WebGPU / 渲染       | 🟡 源码可用（npm 待发布） |
+| **moxwebgpu**     | WebGPU / 渲染       | ✅ 已发布（npm @codecloud-dev/moxwebgpu） |
 | **mox-site**      | 官方门户（静态站）     | ✅ 已发布          |
-| **moxsh-terminal**| Android 终端（本仓库） | 🔄 本次发布        |
+| **moxsh-terminal**| Android 终端（本仓库） | ✅ 已发布          |
 | **moxsh-suite**   | 全家桶 monorepo      | ⏳ 子模块收尾        |
 
+> MoX 全家桶的 TS/JS 包（如 `@codecloud-dev/agent-core`、`@codecloud-dev/moxwebgpu`）已发布到 npm 的 `@codecloud-dev` 组织。
+>
 > moxbox / moxcode 仍属「规划中 · 待定」，本次大版本不做，留作后续空间。
 >
 > 本次 1.0.0 重点是**门面统一与里程碑**：应用图标换上与门户一致的 moxsh「M」品牌字形、版本号升 1.0.0；性能打磨（120Hz 渲染 / glyph atlas / NEON 向量化）、AI 端侧（llama.cpp）、.mox 生态等方向在 [docs/roadmap.md](docs/roadmap.md) 中显式记为「规划中 / 待定」，作为下一迭代空间，不在本次一次性做绝。

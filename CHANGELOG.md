@@ -11,11 +11,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-11-14
+
+维护与文档合规更新（全家桶依赖体检 / 文档与路线图复核）。不含功能性变更。
+
+### 维护
+
+- **版本号与文档一致性对齐**：README 版本徽章由遗留的 `1.0.0` 更正为 `1.0.1`，与 `moxsh/app/build.gradle.kts` 中已提交的 `versionName 1.0.1` / `versionCode 64` 及 SECURITY 支持矩阵保持一致（此前徽章滞后于代码）。
+- **全家桶依赖体检推进**：MoX 全家桶各仓库开展依赖体检与文档合规核查；破坏性依赖变更已按 2026-11-11 审计要求纳入 ignore 守门。
+
+### 文档
+
+- 更新 [docs/roadmap.md](docs/roadmap.md) 至 2026-11-14，新增「近期生态进展」小节，如实记录：MoX 全家桶 npm 包（`@codecloud-dev/agent-core`、`@codecloud-dev/moxwebgpu`）已发布到 `@codecloud-dev` 组织；官网 mox-site 完成安全加固（全响应统一安全头、Functions 漏头修复并上线）；各仓库依赖体检 / 文档合规推进中。
+- README「大版本进度」表更正：moxwebgpu 由「npm 待发布」更新为「已发布（npm）」，moxsh-terminal 标记为已发布。
+- 修正 README 中过时的版本徽章与里程碑描述。
+
 ## [Unreleased]
-
-### 已变更
-
-- 版本号对齐：terminal-core `0.1.1` → `1.0.0`，与已发布的 1.0.0 里程碑同步（此前代码版本长期滞后于文档）。
 
 ### 计划中
 
@@ -129,5 +140,6 @@
 - 项目为 100% clean-room 实现：包层面兼容 Termux 生态，代码层面零复用
 - 与 Termux 的关系详见 [README](README.md#和-termux-是什么关系)
 
-[Unreleased]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=compare/v1.0.0...HEAD
+[Unreleased]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=compare/v1.0.1...HEAD
+[1.0.1]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=releases/tag/v1.0.1
 [0.5.0]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=releases/tag/v0.5.0
