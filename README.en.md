@@ -7,16 +7,21 @@
 <h1 align="center">moxsh</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&label=CI%20Build&color=8a7bff" alt="CI Build">
-  <img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?label=Latest&color=37d5d3" alt="Latest">
-  <img src="https://img.shields.io/github/stars/codecloud-dev/moxsh-terminal?style=social" alt="GitHub Stars">
-  <img src="https://img.shields.io/github/discussions/codecloud-dev/moxsh-terminal?label=Discussions&color=ff7ac3" alt="Discussions">
-  <img src="https://img.shields.io/badge/version-1.0.1-8a7bff" alt="version">
-  <img src="https://img.shields.io/badge/license-GPL--3.0-37d5d3" alt="license">
-  <img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9+">
-  <img src="https://img.shields.io/badge/Core-Rust-000?logo=rust&logoColor=white" alt="Rust core">
-  <img src="https://img.shields.io/badge/UI-Liquid%20Glass-8a7bff" alt="Liquid Glass">
-  <img src="https://img.shields.io/badge/Kotlin-UI-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
+  <a href="https://github.com/codecloud-dev/moxsh-terminal"><img src="https://img.shields.io/badge/MoX_Series-%E6%B6%B2%E6%80%81%E7%8E%BB%E7%92%83%E7%BB%88%E7%AB%AF-8a7bff?style=for-the-badge&logo=github&logoColor=white" alt="MoX Series: 液态玻璃终端"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/blob/main/README.md"><img src="https://img.shields.io/badge/Rust-%E5%86%85%E6%A0%B8-14181A?style=for-the-badge&logo=rust&logoColor=CE412B" alt="Rust: 内核"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/blob/main/README.md"><img src="https://img.shields.io/badge/Kotlin-Compose_UI-14181A?style=for-the-badge&logo=kotlin&logoColor=7F52FF" alt="Kotlin: Compose UI"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/blob/main/README.md"><img src="https://img.shields.io/badge/Android-9%2B-14181A?style=for-the-badge&logo=android&logoColor=3DDC84" alt="Android: 9+"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/blob/main/README.md"><img src="https://img.shields.io/badge/PRoot-Linux_%E5%AE%B9%E5%99%A8-14181A?style=for-the-badge&logo=linux&logoColor=FCC624" alt="PRoot: Linux 容器"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/codecloud-dev/moxsh-terminal/build.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/releases"><img src="https://img.shields.io/github/v/release/codecloud-dev/moxsh-terminal?style=flat-square&label=release&color=37d5d3" alt="Latest release"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/blob/main/LICENSE"><img src="https://img.shields.io/github/license/codecloud-dev/moxsh-terminal?style=flat-square&color=37d5d3" alt="License"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/stargazers"><img src="https://img.shields.io/github/stars/codecloud-dev/moxsh-terminal?style=flat-square&color=ff7ac3" alt="Stars"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/commits/main"><img src="https://img.shields.io/github/last-commit/codecloud-dev/moxsh-terminal?style=flat-square&color=8a7bff" alt="Last commit"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal"><img src="https://img.shields.io/badge/platform-Android_%2F_Termux-3DDC84?style=flat-square" alt="platform: Android / Termux"></a>
+  <a href="https://github.com/codecloud-dev/moxsh-terminal/pulls"><img src="https://img.shields.io/badge/PRs-welcome-8a7bff?style=flat-square&logo=github&logoColor=white" alt="PRs welcome"></a>
 </p>
 
 
