@@ -9,6 +9,18 @@ fn main() {
     let is_android = target.contains("android");
 
     if is_android {
+        // ── 16KB page size 兼容（Google Play 自 2025-11-01 对 targetSdk 35+ 强制）──
+        // 让 ELF LOAD 段按 16KB 对齐，保证 libmoxshcore.so 在 16KB 页设备上可加载。
+        // 该 cdylib 的最终链接由 rustc 完成（cc crate 只产出 .o/.a 静态库），
+        // 故用 cargo:rustc-cdylib-link-arg 精确作用于 cdylib，再补一条 rustc-link-arg
+        // 覆盖所有链接目标做双保险。重复的 -z 参数对链接器无害。
+        // 仅 Android 目标生效：本机 `cargo test / cargo build`（TARGET 为宿主）不加这些
+        // NDK 链接参数，避免污染非 Android 构建。
+        println!("cargo:rustc-cdylib-link-arg=-Wl,-z,max-page-size=16384");
+        println!("cargo:rustc-cdylib-link-arg=-Wl,-z,common-page-size=16384");
+        println!("cargo:rustc-link-arg=-Wl,-z,max-page-size=16384");
+        println!("cargo:rustc-link-arg=-Wl,-z,common-page-size=16384");
+
         // C++ JNI 桥接：仅做 Android 端到 Rust C-ABI 的转发（D9：C++ 最小存在）
         // 仅在 Android 目标编译——本机 `cargo test`（无 NDK/ jni.h）仍可纯 Rust 通过。
         cc::Build::new()

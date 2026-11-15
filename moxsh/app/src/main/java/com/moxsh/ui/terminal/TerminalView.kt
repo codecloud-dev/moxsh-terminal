@@ -44,8 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moxsh.core.TerminalCore
 import com.moxsh.shared.ExecutionEngine
-import com.moxsh.ui.component.GlassSurface
-import com.moxsh.ui.component.GlassTokens
+import com.moxsh.ui.component.ClearContentSurface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -228,7 +227,9 @@ fun TerminalScreen(
     // 手势闭包里读到的最新字号（pointerInput 闭包随 fontSizeSp 变化用最新值）
     val currentFontSize by rememberUpdatedState(fontSizeSp)
 
-    GlassSurface(modifier, tint = GlassTokens.termTint) {
+    // 内容层：终端正文必须 100% 清晰可读——用完全不透明的 ClearContentSurface，
+    // 禁止玻璃、禁止顶部高光/移动光泽盖住文字（WWDC25：玻璃只进导航/悬浮层）。
+    ClearContentSurface(modifier) {
         Box(
             Modifier
                 .fillMaxSize()

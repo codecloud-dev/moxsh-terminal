@@ -32,7 +32,8 @@ jobs:
       - name: 安装 SDK platform / build-tools / NDK
         run: |
           export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
-          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125"
+          # app 模块 targetSdk/compileSdk 35（Play 16KB 合规），需 android-35 platform。
+          sdkmanager --install "platforms;android-35" "build-tools;34.0.0" "ndk;26.1.10909125"
           yes | sdkmanager --licenses >/dev/null || true
 
       - name: 定位并导出 NDK

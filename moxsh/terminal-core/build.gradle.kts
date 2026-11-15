@@ -46,6 +46,8 @@ android {
     // 注意：本模块不启用 externalNativeBuild——native 由 cargo-ndk 产出。
     // C++ JNI 桥接(bridge.cpp)与 NEON 汇编(neon.s)在 Rust crate 的 build.rs 内
     // 经 NDK clang 编译并链入同一个 libmoxshcore.so。
+    // 16KB 页兼容：libmoxshcore.so 的 ELF 段对齐由 build.rs 的
+    // -Wl,-z,max-page-size=16384 / common-page-size=16384 保证（targetSdk 35 合规）。
     packaging { jniLibs.useLegacyPackaging = true }
 }
 

@@ -96,6 +96,14 @@ fun StoreScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var installedTick by remember { mutableStateOf(0) }
     val installedIds = remember(installedTick) { StoreInstallManager.installedIds(context) }
 
+    // 目录就绪后做一次合规核对：本地已装的漏洞/过期版本会被真实隔离停用
+    // （reconcileInstalled 写隔离集；isEnabled 据此返回 false），并刷新列表以显示
+    // 「必须升级」态。商店一打开即生效，不依赖用户手动点检查更新。
+    LaunchedEffect(entries) {
+        StoreInstallManager.reconcileInstalled(context, entries)
+        installedTick++
+    }
+
     /** 安装完成后的统一收尾：刷新已安装列表。 */
     fun refreshInstalled() { installedTick++ }
 
@@ -141,7 +149,9 @@ fun StoreScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             )
             startInstall(entry, singleFileApi(tmp), context, installStates, scope,
                 onDone = { ok -> if (ok) refreshInstalled() },
-                setActive = { activeInstallId = it })
+                setActive = { activeInstallId = it },
+                // 本地上传也必须按可信目录策略校验（杜绝「上传旧包绕过回滚拦截」）。
+                policyCatalog = entries)
         }
     }
 
@@ -222,6 +232,7 @@ fun StoreScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             id = id,
                             catalogEntry = entries.firstOrNull { it.id == id },
                             enabled = StoreInstallManager.isEnabled(context, id),
+                            quarantined = StoreInstallManager.isQuarantined(context, id),
                             updatable = entries.any {
                                 it.id == id && it.version != StoreInstallManager.installedVersion(context, id)
                             },
@@ -234,7 +245,8 @@ fun StoreScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 entries.firstOrNull { it.id == id }?.let { e ->
                                     startInstall(e, defaultApi(), context, installStates, scope,
                                         onDone = { ok -> if (ok) refreshInstalled() },
-                                        setActive = { activeInstallId = it })
+                                        setActive = { activeInstallId = it },
+                                        policyCatalog = entries)
                                 }
                             },
                             onUninstall = { pendingUninstall = id },
@@ -249,7 +261,8 @@ fun StoreScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             onInstall = {
                                 startInstall(e, defaultApi(), context, installStates, scope,
                                     onDone = { ok -> if (ok) refreshInstalled() },
-                                    setActive = { activeInstallId = it })
+                                    setActive = { activeInstallId = it },
+                                    policyCatalog = entries)
                             },
                         )
                     }
@@ -329,12 +342,17 @@ internal fun startInstall(
     scope: kotlinx.coroutines.CoroutineScope,
     onDone: (Boolean) -> Unit,
     setActive: (String?) -> Unit,
+    /** 可信目录快照：安装闸门据此按 id 取 minVersion / revokedVersions。 */
+    policyCatalog: List<StoreEntry> = emptyList(),
 ) {
     if (states[entry.id]?.running == true) return
     states[entry.id] = InstallState(running = true, percent = 0, stage = "准备中")
     setActive(entry.id)
     scope.launch {
-        val ok = StoreInstaller.install(context = context, entry = entry, api = api) { percent, stage ->
+        val ok = StoreInstaller.install(
+            context = context, entry = entry, api = api,
+            policyCatalog = policyCatalog,
+        ) { percent, stage ->
             // 进度回调来自 IO 线程，Compose 快照写需切回主线程（照 plugin-distro）。
             withContext(Dispatchers.Main) {
                 states[entry.id] = InstallState(running = true, percent = percent, stage = stage)
@@ -450,18 +468,40 @@ internal fun StoreEntryCard(
 /**
  * 已安装卡片：名称/版本 + 启停玻璃 Switch + 检查更新 / 卸载。
  * [updatable] 为 true（目录版本 != 商店目录版本）时"检查更新"变高亮"更新 vX.Y.Z"。
+ *
+ * [quarantined] 为 true 表示本地已装版本命中撤销名单 / 低于地板，已被
+ * [StoreInstallManager.reconcileInstalled] 真实停用：显示漏洞警示、锁定启停开关、
+ * 只给「强制升级」入口（升级到合规版本后由 [StoreInstallManager.onInstallSucceeded] 自动解隔离）。
  */
 @Composable
 private fun InstalledCard(
     id: String,
     catalogEntry: StoreEntry?,
     enabled: Boolean,
+    quarantined: Boolean,
     updatable: Boolean,
     onToggle: (Boolean) -> Unit,
     onUpdate: () -> Unit,
     onUninstall: () -> Unit,
 ) {
     GlassSurface(Modifier.fillMaxWidth()) {
+        // 隔离态警示条：真实停用 + 强制升级，不是一句可忽略的提示。
+        if (quarantined) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFFF453A).copy(alpha = 0.16f))
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "⚠ 已停用：当前版本存在已知漏洞或过低，必须升级后才能启用",
+                    color = Color(0xFFFF8A80), fontSize = 12.sp,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(36.dp)
@@ -482,17 +522,30 @@ private fun InstalledCard(
                     color = GlassTokens.onGlassDim, fontSize = 11.sp,
                 )
             }
-            // 启停开关（玻璃 Switch：material3 Switch，主题色着色，照 Glass.kt 用法）。
-            Text(if (enabled) "启用" else "禁用", color = GlassTokens.onGlassDim, fontSize = 12.sp)
+            // 隔离中：开关锁定为关闭且不可点（用户不能重新启用漏洞版本）。
+            Text(
+                if (quarantined) "已隔离" else if (enabled) "启用" else "禁用",
+                color = if (quarantined) Color(0xFFFF8A80) else GlassTokens.onGlassDim,
+                fontSize = 12.sp,
+            )
             Spacer(Modifier.width(6.dp))
-            Switch(checked = enabled, onCheckedChange = { onToggle(it) })
+            Switch(
+                checked = enabled && !quarantined,
+                enabled = !quarantined,
+                onCheckedChange = { onToggle(it) },
+            )
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val newVer = catalogEntry?.version
             GlassStoreButton(
-                if (updatable && newVer != null) "更新 $newVer" else "检查更新",
-                filled = updatable,
+                when {
+                    quarantined && newVer != null -> "强制升级到 $newVer"
+                    quarantined -> "强制升级"
+                    updatable && newVer != null -> "更新 $newVer"
+                    else -> "检查更新"
+                },
+                filled = quarantined || updatable,
                 onClick = onUpdate,
             )
             GlassStoreButton("卸载", onClick = onUninstall)

@@ -1,14 +1,9 @@
 package com.moxsh.ui.component
 
 import android.os.Build
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,30 +27,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 
 /**
- * 全应用液态玻璃组件库（ui 模块，包名 com.moxsh.ui）。
+ * 全应用液态玻璃组件库（ui 模块，包名 com.moxsh.ui）——WWDC25 适配层。
  *
- * 设计契约：
- *  - 所有玻璃组件统一复用 [GlassSurface]（半透明 + 高光描边 + 动态取色），
+ * 设计契约（材质单一真源见同包 LiquidGlass.kt）：
+ *  - [GlassSurface] / [GlassBackdrop] 委托到 [LiquidGlassSurface] / [LiquidGlassBackdrop]，
  *    全应用（主界面、设置、插件）视觉一致（见 docs/architecture.md §6）。
- *  - 模糊策略（D8：按设备性能自动）：
- *      · API31+：用 RenderEffect 实时背景模糊
- *      · API28-30：静态半透明回退（无实时模糊，保帧率）
- *  - [GlassBottomBar] 已被改造为真正可向 PTY 发送按键的 ExtraKeys 行。
- *  - 主题色流动：设置页换 accent 后，玻璃描边/染色/背景随之变化
- *    （[LocalGlassAccent] 由 MoxshGlassTheme 提供；未提供时回退中性玻璃）。
- *  - 液态动效：所有可点玻璃组件带按压缩放（[glassPress]），
- *    材质带顶部斜向高光（glassSheen），构成"液态玻璃"的基础手感。
- *  - 真机实感增强（贴近 iOS 液态玻璃）：
- *      · [GlassSurface] 默认开启移动高光（[GlassSpecular] 沿对角线缓慢扫过）
- *      · 顶部高光带（glassTopHighlight）+ 折射内圈（enableRefraction）
- *      · 装饰卡片可开 enableTilt，随指针拖动产生视差倾斜，像真玻璃随视角反光
- *
- * 生产注意：GlassBackdrop 应在实时壁纸/实况层之上做模糊，这里用渐变示意。
+ *  - 玻璃**只用于导航层 / 悬浮控件**；内容层（终端正文）一律用 [ClearContentSurface]
+ *    完全不透明；禁止玻璃叠玻璃（LocalGlassDepth 守卫）；Regular/Clear 不混用。
+ *  - 去 AI 味：**不再有紫色发光渐变、斜向柔光、无限移动扫光**；改为中性白纱
+ *    alpha 0.08~0.13 + 顶部 1px 镜面高光 + 四周菲涅尔内光环 + ≤2px 冷暖色差环 +
+ *    saturate 抬饱和 + blur ≤10px。
+ *  - 无障碍真实降级：降低透明度/高对比 → 不透明 + 高对比描边；减弱动效 →
+ *    弹簧瞬移、禁用视差（rememberGlassA11y 读系统设置 + ContentObserver）。
+ *  - 模糊策略：API31+ 用 RenderEffect 实时模糊（≤10px），API28-30 静态回退；
+ *    性能模式 / 无障碍降级时静默关闭，不崩不掉帧。
+ *  - [GlassBottomBar] 为真正可向 PTY 发送按键的 ExtraKeys 行；可点组件带
+ *    [glassPress] 按压缩放；[GlassFAB] 保留用户 accent 单一强调色（非紫色渐变）。
  */
 object GlassTokens {
     val surfaceTint = Color.White.copy(alpha = 0.10f)
@@ -80,10 +71,14 @@ val LocalGlassAccent = staticCompositionLocalOf { Color.Unspecified }
  * @param enabled 是否开启实时模糊；通常传 `!perfMode`（性能模式关模糊）。
  * @param radiusDp 模糊半径（dp）。
  */
-fun Modifier.glassBlur(enabled: Boolean, radiusDp: Float = 20f): Modifier =
-    if (enabled && Build.VERSION.SDK_INT >= 31) {
-        this.then(Modifier.blur(radiusDp.dp))
+fun Modifier.glassBlur(enabled: Boolean, radiusDp: Float = 20f): Modifier {
+    // WWDC25：blur ≤10px。任何传入半径都封顶到 LiquidGlassTokens.BlurMaxDp，
+    // 低版本（<31）静默 no-op，不崩不掉帧。
+    val capped = radiusDp.coerceAtMost(LiquidGlassTokens.BlurMaxDp)
+    return if (enabled && Build.VERSION.SDK_INT >= 31) {
+        this.then(Modifier.blur(capped.dp))
     } else this
+}
 
 /**
  * 液态按压动效：按住时弹性缩小（默认 0.96），松开回弹。
@@ -130,38 +125,6 @@ private fun glassTopHighlight(): Brush = Brush.verticalGradient(
 )
 
 /**
- * 移动高光（iOS 玻璃质感核心）：一条柔光带沿对角线缓慢扫过玻璃表面，
- * 不依赖交互，纯氛围动效，模拟环境光在玻璃上的流动反光。
- */
-@Composable
-fun GlassSpecular(
-    modifier: Modifier = Modifier,
-    tint: Color = Color.White,
-    durationMs: Int = 4200,
-) {
-    val transition = rememberInfiniteTransition(label = "GlassSpecular")
-    val t by transition.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(durationMs, easing = LinearEasing)),
-        label = "specularT",
-    )
-    Box(
-        modifier.background(
-            Brush.linearGradient(
-                listOf(
-                    Color.Transparent,
-                    tint.copy(alpha = 0.08f),
-                    Color.Transparent,
-                ),
-                start = Offset(t, t),
-                end = Offset(t + 1f, t + 1f),
-            )
-        )
-    )
-}
-
-/**
  * 指针视差倾斜：卡片随指针拖动产生轻微 3D 旋转，像真玻璃会随视角变化反光。
  * 用于装饰型卡片（默认关闭）；与 clickable 抢事件，需留意层级。
  */
@@ -193,43 +156,30 @@ fun Modifier.glassTilt(
         }
 }
 
-/** 全局玻璃背景层：在内容之下铺一层渐变 +（可选）实时模糊；有 accent 时底部微染主题色。 */
+/**
+ * 全局玻璃背景层（WWDC25）：委托 [LiquidGlassBackdrop]——中性深色（**无紫色
+ * 发光渐变**）+ saturate 抬饱和度 + blur ≤10px（API31+）+ 无障碍真实降级。
+ *
+ * 历史实现里的 baseMid 紫 / baseBottom 青绿主题渐变、accent 底部染色已移除：
+ * 彩色发光渐变是「AI 味」，WWDC25 玻璃背后应是中性内容，靠提饱和而非叠色。
+ */
 @Composable
 fun GlassBackdrop(performantBlur: Boolean, modifier: Modifier = Modifier) {
-    val accent = LocalGlassAccent.current
-    val baseTop = Color(0xFF101A33)
-    val baseMid = Color(0xFF2A1538)
-    val baseBottom = Color(0xFF0B2E2C)
-    val gradient = if (accent.isSpecified) {
-        listOf(
-            baseTop,
-            lerp(baseMid, accent, 0.10f),
-            lerp(baseBottom, accent, 0.22f),
-        )
-    } else {
-        listOf(baseTop, baseMid, baseBottom)
-    }
-    Box(
-        modifier
-            .background(Brush.verticalGradient(gradient))
-            .glassBlur(performantBlur, 30f)
-    )
+    LiquidGlassBackdrop(performantBlur, modifier)
 }
 
 /**
- * 玻璃面板：全应用统一的半透明容器（圆角 + 高光渐变描边 + 动态取色）。
- * 其他玻璃组件（TopBar/BottomBar/FAB/Dialog）均以其为基础叠加，保证视觉一致。
+ * 玻璃面板（WWDC25 适配层）：**保留历史签名**以兼容全应用所有调用点，内部委托
+ * [LiquidGlassSurface]——半透明白纱 alpha 0.08~0.13 + 顶部 1px 镜面高光 +
+ * 四周菲涅尔内光环 + ≤2px 冷暖色差环 + blur≤10 + 无障碍真实降级 + 禁止玻璃叠玻璃。
  *
- * 描边为上亮下暗的渐变（真玻璃边缘反光特征）；注入 accent 后描边随主题色流动。
- *
- * 真机实感增强：默认开启 [GlassSpecular] 移动高光 + 顶部亮边（glassTopHighlight）
- * + 折射内圈（enableRefraction）；装饰卡片可开 enableTilt 获得指针视差倾斜。
- *
- * @param tint    玻璃染色；终端面板用 [GlassTokens.termTint]，普通面板用 [GlassTokens.surfaceTint]。
- * @param enableSpecular  是否开启移动高光（默认开）。
- * @param enableRefraction 是否开启顶部亮边 + 折射内圈（默认开）。
- * @param enableTilt 是否随指针视差倾斜（默认关，装饰卡片可开）。
- * @param content 面板内的 Compose 内容（ColumnScope）。
+ * 关键语义迁移（去 AI 味 / 补 a11y 缺口）：
+ *  - 不再绘制 glassSheenBrush 斜向柔光、无限移动扫光、折射内圈叠加层：
+ *    这些是持续动效，且历史实现从不读系统「减弱动效」设置（无障碍不合规）；
+ *  - [tint] == [GlassTokens.termTint]（历史终端内容层深染）→ 走 [ClearContentSurface]
+ *    完全不透明，保证终端正文 100% 清晰可读（内容层禁止玻璃）；
+ *  - [enableSpecular] / [enableRefraction] / [enableTilt] 保留为兼容参数并**真实使用**：
+ *    分别控制顶部高光、菲涅尔/色差环、视差；减弱动效时视差自动禁用。
  */
 @Composable
 fun GlassSurface(
@@ -240,44 +190,22 @@ fun GlassSurface(
     enableTilt: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val accent = LocalGlassAccent.current
-    val strokeTop = if (accent.isSpecified) accent.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.32f)
-    val strokeBottom = if (accent.isSpecified) accent.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.08f)
-    Box(
-        modifier
-            .then(if (enableTilt) Modifier.glassTilt() else Modifier)
-            .clip(RoundedCornerShape(20.dp)),
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(tint, RoundedCornerShape(20.dp))
-                .background(glassSheenBrush(), RoundedCornerShape(20.dp))
-                .border(
-                    1.dp,
-                    Brush.verticalGradient(listOf(strokeTop, strokeBottom)),
-                    RoundedCornerShape(20.dp),
-                )
-                .padding(14.dp),
-            content = content,
-        )
-        // 顶部高光带 + 折射内圈：真玻璃的"亮边"与"内反光"
-        if (enableRefraction) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(glassTopHighlight(), RoundedCornerShape(20.dp)),
-            )
-        }
-        if (enableSpecular) {
-            GlassSpecular(
-                Modifier
-                    .matchParentSize()
-                    .clip(RoundedCornerShape(20.dp)),
-            )
-        }
+    // 内容层（终端正文/输入区）：历史用 termTint 深染标记，一律完全不透明。
+    if (tint == GlassTokens.termTint) {
+        ClearContentSurface(modifier, content = content)
+        return
     }
+    val a11y = rememberGlassA11y()
+    // 减弱动效 / 降低透明度 / 高对比时不叠加视差倾斜（真实降级）。
+    val tilt = enableTilt && !a11y.reduceMotion && a11y.glassEnabled
+    LiquidGlassSurface(
+        modifier = if (tilt) modifier.glassTilt() else modifier,
+        cornerRadius = 20.dp,
+        material = GlassMaterial.REGULAR,
+        specular = enableSpecular,
+        refraction = enableRefraction,
+        content = content,
+    )
 }
 
 @Composable

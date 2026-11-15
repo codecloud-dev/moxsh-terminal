@@ -20,15 +20,24 @@ val localProps = Properties().apply {
 
 android {
     namespace = "com.moxsh"
-    compileSdk = 34
+    // Google Play 自 2025-11-01 强制 targetSdk 35+ 且支持 16KB 页；compileSdk 与
+    // targetSdk 保持一致，避免 AGP「target > compile」告警与 lint NewApi 误报。
+    // （16KB 页兼容的落点在 native 链接参数，见 terminal-core/build.rs 的
+    //  -Wl,-z,max-page-size=16384；AGP 8.5 对 compileSdk 35 的「tested up to 34」
+    //  提示由 gradle.properties 的 android.suppressUnsupportedCompileSdk=35 收口。）
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.moxsh"
         minSdk = 28
-        // 对齐 Termux：降到 28 以避免 Android 10+ 对 app 私有目录可执行文件的 W^X
-        // 限制（SELinux 拒绝 exec），否则 bin 写盘后 setExecutable 在真机 Permission denied
-        // （CI 模拟器不触发 SELinux 故一直绿）。
-        targetSdk = 28
+        // targetSdk 35（Play 16KB 合规要求）。
+        // 注意（功能取舍，如实记录）：原 targetSdk 28 是为规避 Android 10+（API 29+）
+        // 对 app 私有目录写出的可执行文件的 W^X 限制——targeting 29+ 后，BootstrapInstaller
+        // 解到 $PREFIX 的 proot/bash 等不能再直接 exec。这是一次明确的合规升级取舍：
+        // 运行时 bootstrap 需改为「随 APK 打包的 uncompressed/16KB 对齐 native 库、由系统
+        // 从 APK mmap 加载执行」的路径（extractNativeLibs=false），而不是写盘后 exec。
+        // 该运行时改造属独立后续项，不在本次签名/SDK 升级范围内；此处仅如实标注，不隐藏。
+        targetSdk = 35
         versionCode = 64
         versionName = "1.0.1"
 
@@ -47,19 +56,42 @@ android {
     }
 
     signingConfigs {
+        // 统一显式声明全部 APK 签名方案（AGP 8+ DSL）：不依赖各 AGP 版本的默认值，
+        // 避免「某代默认只开 v2、换机器就少签名块导致装不上」。
+        //  - v1：JAR 签名（老设备兜底）
+        //  - v2：APK Signature Scheme v2
+        //  - v3：v3；且 targetSdk≥33 时 apksigner 在 v3 块内产出 v3.1 分块
+        //        （支持签名密钥轮换）——本项目 targetSdk 35 已满足，故 v3/v3.1 全开
+        //  - v4：ADB 增量安装所需的 v4（.idsig），需先有 v2/v3（上面已开）
+        // v4 仅作用于 API 30+ 的 adb incremental install，其余设备自动忽略，不会崩构建。
         create("release") {
-            // CI 注入（workflow 的 KEYSTORE_* 环境变量 + Secrets）；本地不存在时保持空，
-            // release 回退 debug 签名保证任何人 clone 后都能直接出可安装的包。
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+            enableV4Signing = true
+            // CI 注入（workflow 的 KEYSTORE_* + Secrets）。只有「文件存在 + 四项凭据齐全」
+            // 才算一份可用的正式 keystore；任何缺项都保持空配置，由 buildTypes 回退 debug，
+            // 绝不让半配置的 signingConfig 参与签名而把构建/发布打挂。
             val ksPath = System.getenv("KEYSTORE_PATH")
             val ksPass = System.getenv("KEYSTORE_PASSWORD")
             val alias = System.getenv("KEY_ALIAS")
             val keyPass = System.getenv("KEY_PASSWORD")
-            if (!ksPath.isNullOrBlank() && file(ksPath).exists()) {
+            if (!ksPath.isNullOrBlank() && file(ksPath).exists() &&
+                !ksPass.isNullOrBlank() && !alias.isNullOrBlank() && !keyPass.isNullOrBlank()
+            ) {
                 storeFile = file(ksPath)
                 storePassword = ksPass
                 keyAlias = alias
                 keyPassword = keyPass
             }
+        }
+        // debug 兜底签名也开全部方案：本地 clone 直接 assembleRelease / assembleDebug
+        // 都拿到完整签名的可安装包，且不崩构建。
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+            enableV4Signing = true
         }
     }
 
@@ -70,7 +102,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 有正式 keystore（CI）用 release 签名；否则回退 debug 签名
+            // 有完整正式 keystore（CI）用 release 签名；否则优雅回退 debug 签名。
+            // signingConfigs.release 仅在「文件+四项凭据齐全」时才有 storeFile，
+            // 故 storeFile==null 即代表「本地无 keystore」，此时引用 debug 永不崩。
             signingConfig = if (signingConfigs.getByName("release").storeFile != null)
                 signingConfigs.getByName("release")
             else
@@ -90,14 +124,14 @@ android {
     }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.15" }
 
+    // 16KB 页兼容：native .so 的 ELF 段对齐由 terminal-core/build.rs 的链接参数
+    // -Wl,-z,max-page-size=16384 保证；此处保持既有打包策略（与 extractNativeLibs 及
+    // 运行时加载方式相关），不为了 16KB 盲目翻转而引入功能回归。
     packaging { jniLibs.useLegacyPackaging = true }
 
     lint {
-        // targetSdk 28 是功能性硬需求：Android 10+（API 29+）对 targeting 29+ 的应用
-        // 实施 W^X 限制，app 私有目录里的 bootstrap/proot 可执行文件无法 exec
-        // （真机 SELinux 直接拒），降到 28 才能"装上即用"。
-        // 且本应用不走 Google Play 分发（官网 / GitHub Releases 直发 APK），
-        // Play 的 targetSdk 政策（ExpiredTargetSdkVersion）不适用。
+        // targetSdk 已升到 35（Play 16KB 合规），ExpiredTargetSdkVersion 本不会再触发；
+        // 仍显式 disable 一道，防止将来 AGP/元数据把 35 误判为过期而阻断构建。
         // 精准关掉这一个检查，不用 abortOnError=false（那会埋掉真问题）。
         // AGP 8.5 的 Lint DSL 接口只有 disable 属性（Set），没有 vararg 方法
         // （方法仅存在于实现类，Groovy 动态派发才可用）——Kotlin DSL 必须用属性形式。
