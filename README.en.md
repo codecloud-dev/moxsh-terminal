@@ -90,6 +90,7 @@ moxsh is just the first piece of the **MoX tool series** — one visual language
 | Product | Status | One-liner |
 | :---: | :---: | --- |
 | **moxsh** | Released | Android liquid-glass terminal, Termux-compatible |
+| **Fenestra** | Review build · debug | Open everything-is-a-plugin browser modeled on Apple's security model; [Android review build](https://github.com/codecloud-dev/Fenestra/releases/tag/v0.1.0-android-review) installable for review (default-deny / least privilege / egress revalidation) |
 | **mox-site** | Released | The series' official portal ([site](https://codecloud-dev.github.io/mox-site/)) |
 | **moxbox** | Planned · tentative | File manager & system suite in the same glass UI; may or may not happen |
 | **moxcode** | Planned · tentative | Lightweight mobile IDE: terminal + editor + preview; may or may not happen |

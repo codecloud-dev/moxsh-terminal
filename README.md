@@ -76,6 +76,7 @@ moxsh 只是 **MoX 工具系列**的第一块拼图。一套审美，把桌面�
 |      产品      |   状态   | 一句话定位                                                            |
 | :----------: | :----: | ---------------------------------------------------------------- |
 |   **moxsh**  |  已上线 | Android 液态玻璃终端，兼容 Termux 生态                                      |
+| **Fenestra** | 审查版 · debug | 一切皆插件的开源浏览器，对标苹果安全模型；[Android 审查包](https://github.com/codecloud-dev/Fenestra/releases/tag/v0.1.0-android-review)可下载装机核对（默认拒绝 / 最小权限 / 出站重校验） |
 | **mox-site** |  已上线 | 本系列官方门户（[官网](https://codecloud-dev.github.io/mox-site/)）              |
 |  **moxbox**  | 规划中 · 待定 | 文件管理与系统套件，同款玻璃界面；**可能做，也可能不做**                            |
 |  **moxcode** | 规划中 · 待定 | 移动端轻量 IDE：终端 + 编辑器 + 预览一体；**可能做，也可能不做**                      |
