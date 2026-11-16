@@ -67,7 +67,9 @@ jobs:
           # Gitee 偶发连接超时（>300s），自动重试 3 次兜底
           for attempt in 1 2 3; do
             echo "::group::镜像尝试第 $attempt 次"
-            if git push --prune gitee "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"; then
+            # 硬超时兜底：Gitee 连接可能僵死而不返回，git 自身无超时会让 job 永久 in_progress。
+            # 单次给 300s，超时 SIGTERM，30s 后 SIGKILL；失败进入既有 3 次重试。
+            if timeout --signal=TERM --kill-after=30s 300s git push --prune gitee "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"; then
               echo "::endgroup::"
               echo "镜像完成：$(git rev-parse --short HEAD) → gitee.com/${GITEE_REPO}"
               exit 0
