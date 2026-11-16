@@ -18,7 +18,7 @@
 | 邮箱验证码绑定（高级路径） | ⚠️ **仅当配置了 `EMAIL_API_BASE` 才会发请求**；未配置时入口不可用、零网络请求 | 自建 `mox-id` 的 `/auth/email/send-code`、`/auth/email/verify` |
 | AI 助手 | ✅ 已实现，**发往你自己在设置里选的服务商** | DeepSeek / 智谱 / 通义千问 / Kimi / OpenAI 兼容自定义 / 本地 `127.0.0.1` |
 | 插件商店目录与包 | ⚠️ 云源地址为占位（`https://store.moxsh.local/v1`），**当前未部署**；拉取失败静默回退内置目录 | 可配 base 的 `catalog.json` 与 `pkg/<id>.mox`；主仓 `codecloud-dev/moxsh-plugins`（GitHub / Gitee 镜像） |
-| PRoot 引擎二进制下载 | ✅ 已实现 | Gitee `thousand-code-crafts/moxsh-proot` 的 Releases |
+| PRoot 引擎二进制下载 | ✅ 已实现 | Gitee `codecloud-dev/moxsh-proot` 的 Releases |
 | 命令云同步 | ❌ **当前版本未启用**：`AuthConfig.ENABLE_CLOUD_SYNC = false`，`SyncClient.syncNow()` 直接返回「云同步尚未启用」，**不发起任何网络请求** | 无 |
 | 兑换码校验 / Gitee 登录 | ❌ **当前版本 App 内未实现**（这些在 `moxsh-proot` 引擎与 `mox-id` / 官网里） | 无 |
 
@@ -78,7 +78,7 @@
 
 ### 2.6 PRoot 引擎下载（`shared/ProotManager.kt`）
 
-缺二进制时从 Gitee `thousand-code-crafts/moxsh-proot` 的 `releases/download/proot-latest` 拉取引擎文件并标记可执行。这是**纯文件下载**，不携带账号、设备标识或任何用户数据；请求信息由 Gitee 按其日志政策记录。
+缺二进制时从 Gitee `codecloud-dev/moxsh-proot` 的 `releases/download/proot-latest` 拉取引擎文件并标记可执行。这是**纯文件下载**，不携带账号、设备标识或任何用户数据；请求信息由 Gitee 按其日志政策记录。
 
 ### 2.7 权限清单（`AndroidManifest.xml`）
 
@@ -177,7 +177,7 @@
 | Email-code binding (advanced path) | ⚠️ **Only sends requests if `EMAIL_API_BASE` is configured**; otherwise the entry is unavailable and no request is made | Self-hosted `mox-id` `/auth/email/send-code`, `/auth/email/verify` |
 | AI assistant | ✅ Implemented, **sent to the provider you choose in settings** | DeepSeek / Zhipu / Qwen / Kimi / OpenAI-compatible custom / local `127.0.0.1` |
 | Plugin store catalogue and packages | ⚠️ Cloud base is a placeholder (`https://store.moxsh.local/v1`), **not deployed**; fetch failure silently falls back to the built-in catalogue | Configurable `catalog.json` and `pkg/<id>.mox`; canonical repo `codecloud-dev/moxsh-plugins` (GitHub / Gitee mirror) |
-| PRoot engine binary download | ✅ Implemented | Gitee `thousand-code-crafts/moxsh-proot` Releases |
+| PRoot engine binary download | ✅ Implemented | Gitee `codecloud-dev/moxsh-proot` Releases |
 | Command cloud sync | ❌ **Not enabled in the current version**: `AuthConfig.ENABLE_CLOUD_SYNC = false`; `SyncClient.syncNow()` returns "cloud sync not enabled" immediately and **makes no network request** | None |
 | Redeem-code verification / Gitee login | ❌ **Not implemented in the app in the current version** (these live in the moxsh-proot engine and mox-id / the website) | None |
 
@@ -235,7 +235,7 @@ Three paths; **the main path is fully offline**:
 
 ### 2.6 PRoot engine download (`shared/ProotManager.kt`)
 
-When a binary is missing, the app pulls it from Gitee `thousand-code-crafts/moxsh-proot` `releases/download/proot-latest` and marks it executable. This is a **pure file download** carrying no account, device identifier, or user data; request metadata is logged by Gitee under its own policy.
+When a binary is missing, the app pulls it from Gitee `codecloud-dev/moxsh-proot` `releases/download/proot-latest` and marks it executable. This is a **pure file download** carrying no account, device identifier, or user data; request metadata is logged by Gitee under its own policy.
 
 ### 2.7 Permissions (`AndroidManifest.xml`)
 

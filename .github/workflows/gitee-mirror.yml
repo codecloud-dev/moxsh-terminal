@@ -19,7 +19,7 @@ jobs:
       # 用 GITEE_TOKEN 查当前账号数字 ID，生成 Gitee 平台公开的备用邮箱：
       #   {ID}+{username}@user.noreply.gitee.com
       # ⚠️ 只换邮箱，绝不改名字：作者名必须保持 GitHub 原值（codecloud-dev / MoX Agent 等），
-      #    否则 Gitee 页面提交者会被换成 login（thousand-code-crafts），与 GitHub 不一致。
+      #    否则 Gitee 页面提交者会被换成 login（codecloud-dev），与 GitHub 不一致。
       # 只重写这份临时的镜像工作副本，GitHub 主仓历史与 commit sha 完全不动。
       # 重写后 sha 会与 GitHub 不同，这是单向镜像的预期代价。
       - name: 镜像副本只替换提交邮箱为 Gitee 公开别名（保留原作者名，不动 GitHub 主仓）
@@ -55,7 +55,7 @@ jobs:
       - name: 单向镜像到 Gitee
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_REPO: thousand-code-crafts/${{ github.event.repository.name }}
+          GITEE_REPO: codecloud-dev/${{ github.event.repository.name }}
         run: |
           if [ -z "$GITEE_TOKEN" ]; then
             echo "::error::未配置 GITEE_TOKEN secret，跳过镜像（请在仓库 Settings → Secrets 配置）"
@@ -63,7 +63,7 @@ jobs:
           fi
           git remote add gitee "https://gitee.com/${GITEE_REPO}.git"
           git config --local "http.https://gitee.com/.extraheader" \
-            "Authorization: Basic $(printf 'thousand-code-crafts:%s' "$GITEE_TOKEN" | base64 -w0)"
+            "Authorization: Basic $(printf 'codecloud-dev:%s' "$GITEE_TOKEN" | base64 -w0)"
           # Gitee 偶发连接超时（>300s），自动重试 3 次兜底
           for attempt in 1 2 3; do
             echo "::group::镜像尝试第 $attempt 次"

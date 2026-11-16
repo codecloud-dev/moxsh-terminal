@@ -11,7 +11,7 @@ import java.net.URL
  * PRoot 容器管理器（数据层，D12/D13/D14）。
  *
  * 0.4.0 重构：proot 引擎不再打包进 App。运行时按需从官方国内源
- * （Gitee `thousand-code-crafts/moxsh-proot` 的 `proot-latest` 滚动发布）
+ * （Gitee `codecloud-dev/moxsh-proot` 的 `proot-latest` 滚动发布）
  * 下载最新版 `moxsh-proot-distro` + `moxsh-proot` 到 `$filesDir/proot/bin/`，
  * 之后所有操作都 shell out 到下载的 CLI（install/login/remove/backup/restore/list），
  * 用户因此始终拿到官方最新版，而非打包进去的旧版。
@@ -28,7 +28,7 @@ object ProotManager {
     }
 
     // ---- 官方国内源（Gitee，国内直连快、官方、最新）----
-    private const val GITEE_OWNER = "thousand-code-crafts"
+    private const val GITEE_OWNER = "codecloud-dev"
     private const val GITEE_REPO = "moxsh-proot"
     private const val RELEASE_TAG = "proot-latest"
     private val RELEASE_BASE =
