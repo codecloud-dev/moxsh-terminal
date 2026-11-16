@@ -18,9 +18,11 @@ jobs:
       #   Push will publish a hidden email, make email public or abandon related commits
       # 用 GITEE_TOKEN 查当前账号数字 ID，生成 Gitee 平台公开的备用邮箱：
       #   {ID}+{username}@user.noreply.gitee.com
+      # ⚠️ 只换邮箱，绝不改名字：作者名必须保持 GitHub 原值（codecloud-dev / MoX Agent 等），
+      #    否则 Gitee 页面提交者会被换成 login（thousand-code-crafts），与 GitHub 不一致。
       # 只重写这份临时的镜像工作副本，GitHub 主仓历史与 commit sha 完全不动。
       # 重写后 sha 会与 GitHub 不同，这是单向镜像的预期代价。
-      - name: 镜像副本替换提交身份为 Gitee 公开别名（不动 GitHub 主仓）
+      - name: 镜像副本只替换提交邮箱为 Gitee 公开别名（保留原作者名，不动 GitHub 主仓）
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
@@ -30,12 +32,10 @@ jobs:
             echo "::error::无法从 Gitee API 取到公开别名邮箱，拒绝推送"
             exit 1
           fi
-          echo "镜像提交身份: $GITEE_EMAIL"
+          echo "镜像提交邮箱: $GITEE_EMAIL（作者名保留 GitHub 原值）"
           export GITEE_EMAIL
           git filter-branch -f --env-filter '
-            export GIT_AUTHOR_NAME="thousand-code-crafts"
             export GIT_AUTHOR_EMAIL="$GITEE_EMAIL"
-            export GIT_COMMITTER_NAME="thousand-code-crafts"
             export GIT_COMMITTER_EMAIL="$GITEE_EMAIL"
           ' --tag-name-filter cat -- --all >/tmp/mirror-filter-branch.log 2>&1
           # filter-branch 默认留 refs/original 备份；不删的话推送 refspec 会把旧对象也带过去
