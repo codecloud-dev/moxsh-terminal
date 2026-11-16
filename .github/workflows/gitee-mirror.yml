@@ -14,29 +14,38 @@ jobs:
         with:
           fetch-depth: 0    # 全量历史，标签也要同步
 
-      # Gitee hook 会拒绝 users.noreply.github.com 这类隐藏邮箱：
+      # Gitee hook 会拒绝任何未在账号公开的提交邮箱（GitHub noreply / QQ 邮箱都会拒）：
       #   Push will publish a hidden email, make email public or abandon related commits
+      # 用 GITEE_TOKEN 查当前账号数字 ID，生成 Gitee 平台公开的备用邮箱：
+      #   {ID}+{username}@user.noreply.gitee.com
       # 只重写这份临时的镜像工作副本，GitHub 主仓历史与 commit sha 完全不动。
       # 重写后 sha 会与 GitHub 不同，这是单向镜像的预期代价。
-      - name: 镜像副本替换隐藏邮箱（不动 GitHub 主仓）
+      - name: 镜像副本替换提交身份为 Gitee 公开别名（不动 GitHub 主仓）
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
+          GITEE_EMAIL=$(curl -fsS "https://gitee.com/api/v5/user?access_token=${GITEE_TOKEN}" \
+            | jq -r '"\(.id)+\(.login)@user.noreply.gitee.com"')
+          if [ -z "$GITEE_EMAIL" ] || [[ "$GITEE_EMAIL" == null* ]] || [[ "$GITEE_EMAIL" != *"@user.noreply.gitee.com" ]]; then
+            echo "::error::无法从 Gitee API 取到公开别名邮箱，拒绝推送"
+            exit 1
+          fi
+          echo "镜像提交身份: $GITEE_EMAIL"
+          export GITEE_EMAIL
           git filter-branch -f --env-filter '
-            if printf "%s" "$GIT_AUTHOR_EMAIL" | grep -qi "users.noreply.github.com"; then
-              export GIT_AUTHOR_NAME="github-actions[bot]"
-              export GIT_AUTHOR_EMAIL="github-actions-bot@codecloud.dev"
-            fi
-            if printf "%s" "$GIT_COMMITTER_EMAIL" | grep -qi "users.noreply.github.com"; then
-              export GIT_COMMITTER_NAME="github-actions[bot]"
-              export GIT_COMMITTER_EMAIL="github-actions-bot@codecloud.dev"
-            fi
+            export GIT_AUTHOR_NAME="thousand-code-crafts"
+            export GIT_AUTHOR_EMAIL="$GITEE_EMAIL"
+            export GIT_COMMITTER_NAME="thousand-code-crafts"
+            export GIT_COMMITTER_EMAIL="$GITEE_EMAIL"
           ' --tag-name-filter cat -- --all >/tmp/mirror-filter-branch.log 2>&1
           # filter-branch 默认留 refs/original 备份；不删的话推送 refspec 会把旧对象也带过去
           for r in $(git for-each-ref --format='%(refname)' refs/original); do
             git update-ref -d "$r"
           done
           rm -rf .git/refs/original
-          if git for-each-ref --format='%(refname)' | while read r; do git log "$r" --format='%ae %ce'; done | grep -qi 'users.noreply.github.com'; then
-            echo "::error::镜像副本仍含隐藏邮箱，拒绝推送以免被 Gitee hook 拒绝"
+          if git for-each-ref --format='%(refname)' | while read r; do git log "$r" --format='%ae %ce'; done \
+             | tr ' ' '\n' | sort -u | grep -v -x -F "$GITEE_EMAIL" | grep -q .; then
+            echo "::error::镜像副本仍含非公开提交邮箱，拒绝推送以免被 Gitee hook 拒绝"
             exit 1
           fi
 
