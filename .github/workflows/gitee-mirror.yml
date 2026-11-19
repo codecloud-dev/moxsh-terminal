@@ -31,9 +31,11 @@ jobs:
           if [ -s /tmp/mirror-mailmap ]; then
             git filter-repo --force --mailmap /tmp/mirror-mailmap >/tmp/mirror-filter-repo.log 2>&1
           fi
+          # 用 awk 而不是 grep -v：grep -v 在无输出时返回 1，bash -e 会把「已经归干净」误判成失败
           BAD="$(git log --all --format='%an|%ae' | sort -u \
-            | grep -v -x -F "codecloud-dev|$CANON_EMAIL" \
-            | grep -v -x -F 'dependabot[bot]|49699333+dependabot[bot]@users.noreply.github.com')"
+            | awk -v canon="codecloud-dev|$CANON_EMAIL" \
+                  -v bot='dependabot[bot]|49699333+dependabot[bot]@users.noreply.github.com' \
+                  '$0 != canon && $0 != bot')"
           if [ -n "$BAD" ]; then
             echo "::error::镜像副本仍含非 canonical 身份，拒绝推送：$BAD"
             exit 1
