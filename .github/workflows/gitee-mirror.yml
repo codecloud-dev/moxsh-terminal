@@ -14,44 +14,31 @@ jobs:
         with:
           fetch-depth: 0    # 全量历史，标签也要同步
 
-      # Gitee hook 会拒绝任何未在账号公开的提交邮箱（GitHub noreply / QQ 邮箱都会拒）：
-      #   Push will publish a hidden email, make email public or abandon related commits
-      # 用 GITEE_TOKEN 查当前账号数字 ID，生成 Gitee 平台公开的备用邮箱：
-      #   {ID}+{username}@user.noreply.gitee.com
-      # ⚠️ 只换邮箱，绝不改名字：作者名必须保持 GitHub 原值（codecloud-dev / MoX Agent 等），
-      #    否则 Gitee 页面提交者会被换成 login（codecloud-dev），与 GitHub 不一致。
-      # 只重写这份临时的镜像工作副本，GitHub 主仓历史与 commit sha 完全不动。
-      # 重写后 sha 会与 GitHub 不同，这是单向镜像的预期代价。
-      - name: 镜像副本只替换提交邮箱为 Gitee 公开别名（保留原作者名，不动 GitHub 主仓）
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+      # 镜像副本统一身份为 GitHub noreply：Gitee hidden-email hook 只接受可反查的公开邮箱，
+      # 历史里的 QQ / 163 / 旧 noreply / MoX Agent 等身份必须在临时副本里清掉；dependabot 保留。
+      - name: 统一镜像副本历史身份（GitHub noreply）
         run: |
-          GITEE_EMAIL=$(curl -fsS "https://gitee.com/api/v5/user?access_token=${GITEE_TOKEN}" \
-            | jq -r '"\(.id)+\(.login)@user.noreply.gitee.com"')
-          if [ -z "$GITEE_EMAIL" ] || [[ "$GITEE_EMAIL" == null* ]] || [[ "$GITEE_EMAIL" != *"@user.noreply.gitee.com" ]]; then
-            echo "::error::无法从 Gitee API 取到公开别名邮箱，拒绝推送"
-            exit 1
+          python3 -m pip install --quiet git-filter-repo
+          CANON_NAME="codecloud-dev"
+          CANON_EMAIL="177202808+codecloud-dev@users.noreply.github.com"
+          git log --all --format='%an|%ae' | sort -u | while IFS='|' read -r name email; do
+            [ "$email" = "$CANON_EMAIL" ] && continue
+            case "$email" in
+              49699333+dependabot*) continue ;;
+            esac
+            printf '%s <%s> %s <%s>\n' "$CANON_NAME" "$CANON_EMAIL" "$name" "$email"
+          done > /tmp/mirror-mailmap
+          if [ -s /tmp/mirror-mailmap ]; then
+            git filter-repo --force --mailmap /tmp/mirror-mailmap >/tmp/mirror-filter-repo.log 2>&1
           fi
-          echo "镜像提交邮箱: $GITEE_EMAIL（作者名保留 GitHub 原值）"
-          export GITEE_EMAIL
-          git filter-branch -f --env-filter '
-            export GIT_AUTHOR_EMAIL="$GITEE_EMAIL"
-            export GIT_COMMITTER_EMAIL="$GITEE_EMAIL"
-          ' --tag-name-filter cat -- --all >/tmp/mirror-filter-branch.log 2>&1
-          # filter-branch 默认留 refs/original 备份；不删的话推送 refspec 会把旧对象也带过去
-          for r in $(git for-each-ref --format='%(refname)' refs/original); do
-            git update-ref -d "$r"
-          done
-          rm -rf .git/refs/original
-          if git for-each-ref --format='%(refname)' | while read r; do git log "$r" --format='%ae %ce'; done \
-             | tr ' ' '\n' | sort -u | grep -v -x -F "$GITEE_EMAIL" | grep -q .; then
-            echo "::error::镜像副本仍含非公开提交邮箱，拒绝推送以免被 Gitee hook 拒绝"
+          BAD="$(git log --all --format='%an|%ae' | sort -u \
+            | grep -v -x -F "codecloud-dev|$CANON_EMAIL" \
+            | grep -v -x -F 'dependabot[bot]|49699333+dependabot[bot]@users.noreply.github.com')"
+          if [ -n "$BAD" ]; then
+            echo "::error::镜像副本仍含非 canonical 身份，拒绝推送：$BAD"
             exit 1
           fi
 
-      # ⚠️ 不用 --mirror：GitHub 的 refs/pull/* 会被 Gitee 当隐藏引用拒绝
-      #    （deny updating a hidden ref），显式同步 heads+tags。
-      # ⚠️ token 不走 remote URL（防日志泄露），走 http.extraheader。
       - name: 单向镜像到 Gitee
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
