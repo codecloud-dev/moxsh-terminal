@@ -11,6 +11,36 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.2] - 2026-11-19
+
+Rust 内核可靠性深度加固 + 首次引入可复现的真实基准。不改公开 C-ABI、不破坏现有 API。
+
+### 修复（均由真跑 / 回归测试实证，非纸面推演）
+
+- **P0：`moxsh_resize` 尺寸钳制遗漏可致整个 App SIGABRT**。同文件的 `moxsh_open_pty_impl` 明确做了 `cols.clamp(2,500)/rows.clamp(1,200)` 并注释「rows=0 会引发 Screen 内部 rows-1 下溢/除零、负数 as u32 会爆分配」，但 `moxsh_resize_impl` 直接 `cols as u32 / rows as u32`，漏了同一道钳制。真跑回归：向 `moxsh_resize(sess, 80, 0)` 传入 rows=0 → `Screen::resize` 的 `rows - 1` usize 下溢 → 测试进程 **SIGABRT（signal 6）**，而非常规错误码。
+  - 修法：提取 `clamp_dims()` 供 open/resize 两个 C-ABI 入口共用；`Screen::new` / `Screen::resize` 再补 `.max(1)` 纵深防御（pub API 防内部误用）。
+  - 回归：`resize_zero_rows_is_clamped`、`resize_negative_dims_are_clamped`。
+- **残缺 UTF-8 前缀被控制符 / ESC 打断后污染后续字符**。`Parser::ground` 在 utf8 序列未累积完成时遇到 C0 控制符或 ESC 直接切状态，残留前缀与下一个多字节字符首字节拼接 → `utf8_complete` 失败 → 整段被静默丢弃（屏幕出现空白/U+FFFD）。真跑回归：喂 `[E4,B8]` + LF + 完整「中」，`cell.code=0x0`（期望 `0x4e2d`），FAILED。
+  - 修法：遇到非续字节（`!(0x80..0xC0).contains(b)`）时先吐出 U+FFFD 并清空 utf8 缓冲。
+  - 回归：`utf8_prefix_broken_by_c0_does_not_poison_next_char`、`utf8_prefix_broken_by_escape_does_not_poison_next_char`。
+- **`Pty::read` 未处理 EINTR**。同文件的 `write()` 与 `crypto::random_bytes()` 都对 Interrupted 重试，唯独 `read()` 把 EINTR 当致命 IO 错误抛给上层；`moxsh_resize` 向子进程发 SIGWINCH 时读取线程可能被信号打断，导致泵把 EINTR 误判成会话结束。修法：`read()` 改为循环重试 EINTR，EIO→干净 EOF 语义保持不变。
+
+### 性能与真实基准
+
+- 新增 `moxsh/terminal-core/examples/benchmark.rs`：零外部依赖（仅 `std::time::Instant` + `black_box`），真跑六条热路径，可复现命令：`cargo run --release --example benchmark -- 20`。
+- 本机实测（release + LTO；数值随机器负载波动，非固定 SLA；以下为主流程最终复核 `cargo run --release --example benchmark -- 20` 输出）：SHA-256 1 MiB **274.90 MB/s**；HMAC-SHA256 64 KiB **281.16 MB/s**；VT 解析（混合 ASCII/UTF-8/CSI）2 MiB **101.71 MB/s**；wcwidth **245725 K ops/s**；RingBuffer push+get **222157 K ops/s**；OverflowBuffer 写 40 MiB（含首次 spill 与多次 mmap 扩容）**853.85 MB/s**、尾部回读 4096B 用时 20ns。
+
+### 版本对齐
+
+- 本版仓库 tag / Release 统一为 `v1.0.2`：`moxsh/terminal-core/Cargo.toml` 与锁文件从 `1.0.0` 升到 `1.0.2`；Android `versionCode` 64 → 65、`versionName` 1.0.1 → 1.0.2；`SECURITY.md` 当前发布线同步为 1.0.2，避免 tag、Rust crate、APK 三处版本各说各话。
+
+### 测试与验证（退出码均单独取，非管道假绿）
+
+- `cargo test --lib`：**74 passed / 0 failed / EXIT=0**（升级前基线 70 passed，新增 4 条回归测试）。
+- `cargo clippy --all-targets -- -D warnings`：**EXIT=0**（含新 example；修复一处 `manual_range_contains` 提示）。
+- CI 的 7 个 Python 静态自检（Kotlin 词法/配对/SDK 边界/工具链/清单权限/secret 自测与扫描）：**全部 EXIT=0**。
+- `cargo audit`：本机未安装 cargo-audit（AUDIT_EXIT=101，工具缺失，非代码问题）；CI 仍由 `taiki-e/install-action` 独立执行。
+
 ## [1.0.1] - 2026-11-14
 
 维护与文档合规更新（全家桶依赖体检 / 文档与路线图复核）。不含功能性变更。
@@ -140,6 +170,7 @@
 - 项目为 100% clean-room 实现：包层面兼容 Termux 生态，代码层面零复用
 - 与 Termux 的关系详见 [README](README.md#和-termux-是什么关系)
 
-[Unreleased]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=compare/v1.0.1...HEAD
+[Unreleased]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=compare/v1.0.2...HEAD
+[1.0.2]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=releases/tag/v1.0.2
 [1.0.1]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=releases/tag/v1.0.1
 [0.5.0]: https://mox-site.pages.dev/go?r=moxsh-terminal&p=releases/tag/v0.5.0

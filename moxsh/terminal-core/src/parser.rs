@@ -115,6 +115,16 @@ impl Parser {
     }
 
     fn ground(&mut self, screen: &mut Screen, b: u8) {
+        // 可靠性：残缺的 UTF-8 前缀若被"非续字节"打断（C0 控制符 / ESC /
+        // ASCII 可打印字符 / 新的多字节首字节），必须先原地吐出 U+FFFD 并清空
+        // utf8 缓冲。否则残留前缀会污染下一个多字节字符：
+        // 例 [E4,B8] + LF + "中(E4 B8 AD)" → utf8_complete([E4,B8,E4]) 失败，
+        // 整段被静默丢弃，屏幕出现空白（实测见回归测试）。
+        // 续字节区间是 0x80..=0xBF，只有落在该区间的字节才继续累积。
+        if !self.utf8.is_empty() && !(0x80..0xC0).contains(&b) {
+            self.utf8.clear();
+            screen.put_char(0xfffd);
+        }
         if b == 0x7f {
             return; // P3：DEL 不写入格子（0x7f 是删除而非可见字符）
         }
@@ -712,6 +722,38 @@ mod tests {
         let mut p = Parser::new();
         p.feed(&mut s, b"\x1b]52;c;?\x07");
         assert_eq!(p.clipboard, None);
+    }
+
+    /// 可靠性回归：残缺的 UTF-8 前缀被 C0 控制符（如 \n）打断后，
+    /// 后续的多字节字符不应被污染成 U+FFFD。
+    /// 修复前：utf8 缓冲残留 [0xE4,0xB8]，下一个汉字首字节进来后
+    /// utf8_complete 失败，整个序列被丢弃 → 屏幕出现 U+FFFD。
+    #[test]
+    fn utf8_prefix_broken_by_c0_does_not_poison_next_char() {
+        let mut s = Screen::new(20, 3, 8);
+        let mut p = Parser::new();
+        // "中" = E4 B8 AD；先喂前两字节，再用 CRLF 打断（换行并归列），再喂完整 "中"。
+        p.feed(&mut s, &[0xE4, 0xB8]);
+        p.feed(&mut s, b"\r\n");
+        p.feed(&mut s, "中".as_bytes());
+        assert_eq!(
+            s.cell_at(1, 0).code,
+            0x4e2d,
+            "残缺 UTF-8 前缀不应污染后续汉字（实际 code={:#x}）",
+            s.cell_at(1, 0).code
+        );
+    }
+
+    /// 可靠性回归：残缺 UTF-8 前缀被 ESC 序列打断后同样不能污染屏幕。
+    #[test]
+    fn utf8_prefix_broken_by_escape_does_not_poison_next_char() {
+        let mut s = Screen::new(20, 3, 8);
+        let mut p = Parser::new();
+        p.feed(&mut s, &[0xE4]);                 // "中" 首字节
+        p.feed(&mut s, b"\x1b[2J");              // ED2 全屏擦除打断
+        p.feed(&mut s, b"\x1b[1;1H");            // CUP 归位到 (0,0)，让断言坐标确定
+        p.feed(&mut s, "中".as_bytes());
+        assert_eq!(s.cell_at(0, 0).code, 0x4e2d, "ESC 序列打断后汉字应完整显示");
     }
 
 }

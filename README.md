@@ -192,6 +192,19 @@ moxsh 的插件、AI 技能、主题、发行版镜像统一使用 **`.mox`** �
 - [命令体系](docs/commands.md) —— 支持的命令清单
 - [产品路线图](docs/roadmap.md) —— 对外分享的方向，规划类均「待定」
 
+### 内核质量门与真实基准
+
+Rust 内核（`moxsh/terminal-core/`）的质量门与基准均可本地复现（工具链版本跟随 `moxsh/rust-toolchain.toml`）：
+
+```bash
+cd moxsh/terminal-core
+cargo test --lib                                   # 单元测试（含 P0 回归）
+cargo clippy --all-targets -- -D warnings          # 静态检查（零警告）
+cargo run --release --example benchmark -- 20       # 六条热路径真实微基准
+```
+
+基准覆盖 SHA-256 / HMAC-SHA256 / VT 解析 / wcwidth / 回滚环形缓冲 / mmap 溢出缓冲，输出吞吐数字（随机器负载波动，非固定 SLA）。详细变更与实测数据见 [CHANGELOG.md](CHANGELOG.md)。
+
 ---
 
 ## 🤝 参与进来

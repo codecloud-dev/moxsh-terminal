@@ -147,25 +147,34 @@ impl Pty {
     }
 
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        let n = unsafe {
-            libc::read(
-                self.master_fd,
-                buf.as_mut_ptr() as *mut c_void,
-                buf.len(),
-            )
-        };
-        if n < 0 {
-            let e = io::Error::last_os_error();
-            // Linux PTY 语义：子进程退出（slave 全部关闭）后读 master 返回 EIO，
-            // 而不是 0 字节 EOF。在 read 这一层把它折叠为 Ok(0)（干净 EOF），
-            // pump/pump_into/C-ABI 三层因此统一"会话正常结束"语义，
-            // 上层用 poll_exit / exitStatus 区分退出码即可。
-            if e.raw_os_error() == Some(libc::EIO) {
-                return Ok(0);
+        loop {
+            let n = unsafe {
+                libc::read(
+                    self.master_fd,
+                    buf.as_mut_ptr() as *mut c_void,
+                    buf.len(),
+                )
+            };
+            if n < 0 {
+                let e = io::Error::last_os_error();
+                // 信号打断（典型：moxsh_resize 向子进程发 SIGWINCH 时，读取线程
+                // 可能同时收到信号）：与 write()/crypto::random_bytes() 一致重试，
+                // 绝不当致命 IO 错误抛给上层——否则 Kotlin 泵会把 EINTR 误判为
+                // 会话出错而提前结束。
+                if e.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+                // Linux PTY 语义：子进程退出（slave 全部关闭）后读 master 返回 EIO，
+                // 而不是 0 字节 EOF。在 read 这一层把它折叠为 Ok(0)（干净 EOF），
+                // pump/pump_into/C-ABI 三层因此统一"会话正常结束"语义，
+                // 上层用 poll_exit / exitStatus 区分退出码即可。
+                if e.raw_os_error() == Some(libc::EIO) {
+                    return Ok(0);
+                }
+                return Err(e);
             }
-            return Err(e);
+            return Ok(n as usize);
         }
-        Ok(n as usize)
     }
 
     /// 全量写入 `buf`。master 是 O_NONBLOCK（见 [`Pty::open`] 的 P1 注释），

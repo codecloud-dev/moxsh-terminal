@@ -38,8 +38,8 @@ android {
         // 从 APK mmap 加载执行」的路径（extractNativeLibs=false），而不是写盘后 exec。
         // 该运行时改造属独立后续项，不在本次签名/SDK 升级范围内；此处仅如实标注，不隐藏。
         targetSdk = 35
-        versionCode = 64
-        versionName = "1.0.1"
+        versionCode = 65
+        versionName = "1.0.2"
 
         // GitHub 登录 client_id（设备流）：来自 local.properties，公开安全，
         // 不写死、不提交 git。仅此一个值进 APK，且本就可公开。

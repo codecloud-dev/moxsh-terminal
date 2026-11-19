@@ -225,6 +225,11 @@ pub struct Screen {
 
 impl Screen {
     pub fn new(cols: usize, rows: usize, max_history: usize) -> Screen {
+        // 纵深防御：Screen 是 pub API，Rust 内部调用方也可能传 0。
+        // rows=0 → scroll_bottom = rows-1 下溢；cols=0 → move_cursor 里
+        // `self.cols as i32 - 1` 在 clamp(min>max) 时 panic。统一钳到 >=1。
+        let cols = cols.max(1);
+        let rows = rows.max(1);
         Screen {
             cols,
             rows,
@@ -572,6 +577,9 @@ impl Screen {
     }
 
     pub fn resize(&mut self, cols: usize, rows: usize) {
+        // 与 new 同款纵深防御：外部直接调 Rust API 也应拒绝 0 尺寸。
+        let cols = cols.max(1);
+        let rows = rows.max(1);
         let mut new_cells = vec![Cell::default(); cols * rows];
         let copy_r = self.rows.min(rows);
         let copy_c = self.cols.min(cols);

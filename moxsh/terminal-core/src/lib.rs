@@ -52,6 +52,25 @@ fn ffi_guard<F: FnOnce() -> c_int + std::panic::UnwindSafe>(f: F) -> c_int {
     ffi_guard_ex(f, MOXSH_ERR_PANIC)
 }
 
+/// C-ABI 尺寸钳制边界：来自 Kotlin/JNI 的 cols/rows 属外部不可信输入，
+/// 0 / 负数 / 天文数字都必须在入口收敛到 Screen 可安全处理的范围。
+const MIN_COLS: c_int = 2;
+const MAX_COLS: c_int = 500;
+const MIN_ROWS: c_int = 1;
+const MAX_ROWS: c_int = 200;
+
+/// 把 FFI 传入的 cols/rows 钳制到安全范围。所有接收尺寸的 C-ABI 入口
+/// （`moxsh_open_pty` / `moxsh_resize`）必须经此函数，否则：
+/// - rows=0 → `Screen::resize` 的 `rows - 1` usize 下溢（debug panic / release wrap）；
+/// - 负数 `as u32` → 数十亿，`vec![Cell; cols*rows]` OOM abort（catch_unwind 抓不住，
+///   表现为整个 App 闪退，而非错误码）。
+fn clamp_dims(cols: c_int, rows: c_int) -> (u32, u32) {
+    (
+        cols.clamp(MIN_COLS, MAX_COLS) as u32,
+        rows.clamp(MIN_ROWS, MAX_ROWS) as u32,
+    )
+}
+
 /// 读取 C 字符串为 Rust &str（非法 UTF-8 / null 返回 None）。
 ///
 /// # Safety
@@ -112,16 +131,15 @@ unsafe extern "C" fn moxsh_open_pty_impl(
 ) -> *mut TerminalSession {
     // SAFETY：FFI thin wrapper——契约见函数 # Safety 文档；整体即不安全上下文。
     unsafe {
-    // P1 修复：cmd 判空（null 直接 CStr::from_ptr 是 UB）；尺寸钳制——
-    // cols/rows 为 0 会引发 Screen 内部 rows-1 下溢/除零，负数 as u32 会爆分配。
+    // P1 修复：cmd 判空（null 直接 CStr::from_ptr 是 UB）。
     if cmd.is_null() {
         return std::ptr::null_mut();
     }
     let Ok(cmd) = std::ffi::CStr::from_ptr(cmd).to_str() else {
         return std::ptr::null_mut();
     };
-    let cols = cols.clamp(2, 500) as u32;
-    let rows = rows.clamp(1, 200) as u32;
+    // P0 修复：尺寸统一经 clamp_dims（0 → rows-1 下溢；负数 as u32 → OOM abort）。
+    let (cols, rows) = clamp_dims(cols, rows);
     match TerminalSession::spawn(cmd, cols, rows) {
         Ok(s) => Box::into_raw(Box::new(s)),
         Err(_) => std::ptr::null_mut(),
@@ -226,7 +244,11 @@ unsafe extern "C" fn moxsh_resize_impl(
     if sess.is_null() {
         return -1;
     }
-    match (*sess).resize(cols as u32, rows as u32) {
+    // P0 修复：与 moxsh_open_pty 共用 size 钳制。此前 moxsh_resize 直接
+    // `cols as u32 / rows as u32`，rows=0 → Screen::resize 的 rows-1 下溢
+    // （实测 SIGABRT）；负数 → 天文数字分配 OOM。统一收敛到安全范围。
+    let (cols, rows) = clamp_dims(cols, rows);
+    match (*sess).resize(cols, rows) {
         Ok(()) => 0,
         Err(_) => -1,
     }
@@ -576,4 +598,40 @@ unsafe extern "C" fn moxsh_mox_close_impl(handle: *mut moxpkg::MoxPackage) {
         drop(Box::from_raw(handle));
     }
 }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CString;
+
+    /// P0 回归：moxsh_resize 必须像 moxsh_open_pty 一样钳制尺寸。
+    /// rows=0 在 Screen::resize 里触发 `rows - 1` 下溢（debug panic 被 ffi_guard
+    /// 吞成 -99），修复后应钳制到 >=1 并返回 0。
+    #[test]
+    fn resize_zero_rows_is_clamped() {
+        let cmd = CString::new("/usr/bin/true").unwrap();
+        unsafe {
+            let sess = moxsh_open_pty(cmd.as_ptr(), 80, 24);
+            assert!(!sess.is_null(), "spawn 应成功");
+            assert_eq!(moxsh_resize(sess, 80, 0), 0, "rows=0 必须钳制而非 panic");
+            assert!(moxsh_screen_rows(sess) >= 1);
+            assert_eq!(moxsh_screen_cols(sess), 80);
+            moxsh_close(sess);
+        }
+    }
+
+    /// P0 回归：负尺寸经 `as u32` 变天文数字（OOM abort）。修复后钳制到上限。
+    #[test]
+    fn resize_negative_dims_are_clamped() {
+        let cmd = CString::new("/usr/bin/true").unwrap();
+        unsafe {
+            let sess = moxsh_open_pty(cmd.as_ptr(), 80, 24);
+            assert!(!sess.is_null());
+            assert_eq!(moxsh_resize(sess, -1, -1), 0);
+            assert!(moxsh_screen_cols(sess) <= 500);
+            assert!(moxsh_screen_rows(sess) <= 200);
+            moxsh_close(sess);
+        }
+    }
 }
