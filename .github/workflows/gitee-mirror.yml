@@ -3,8 +3,8 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '23 */6 * * *'   # 每 6 小时兜底，防 push 触发的同步失败漏同步
-  workflow_dispatch:        # 允许手动触发补同步
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
 
 jobs:
   mirror:
@@ -12,11 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0    # 全量历史，标签也要同步
+          fetch-depth: 0
 
-      # 镜像副本统一身份为 GitHub noreply：Gitee hidden-email hook 只接受可反查的公开邮箱，
-      # 历史里的 QQ / 163 / 旧 noreply / MoX Agent 等身份必须在临时副本里清掉；dependabot 保留。
-      - name: 统一镜像副本历史身份（GitHub noreply）
+      # 镜像副本统一提交身份，保留机器人提交；仅同步分支与标签。
+      - name: 统一镜像副本历史身份
         run: |
           python3 -m pip install --quiet git-filter-repo
           CANON_NAME="codecloud-dev"
@@ -31,13 +30,13 @@ jobs:
           if [ -s /tmp/mirror-mailmap ]; then
             git filter-repo --force --mailmap /tmp/mirror-mailmap >/tmp/mirror-filter-repo.log 2>&1
           fi
-          # 用 awk 而不是 grep -v：grep -v 在无输出时返回 1，bash -e 会把「已经归干净」误判成失败
+          # 用 awk 避免空结果误判失败。
           BAD="$(git log --all --format='%an|%ae' | sort -u \
             | awk -v canon="codecloud-dev|$CANON_EMAIL" \
                   -v bot='dependabot[bot]|49699333+dependabot[bot]@users.noreply.github.com' \
                   '$0 != canon && $0 != bot')"
           if [ -n "$BAD" ]; then
-            echo "::error::镜像副本仍含非 canonical 身份，拒绝推送：$BAD"
+            echo "::error::镜像副本仍含非统一身份，拒绝推送：$BAD"
             exit 1
           fi
 
@@ -47,17 +46,15 @@ jobs:
           GITEE_REPO: codecloud-dev/${{ github.event.repository.name }}
         run: |
           if [ -z "$GITEE_TOKEN" ]; then
-            echo "::error::未配置 GITEE_TOKEN secret，跳过镜像（请在仓库 Settings → Secrets 配置）"
+            echo "::error::未配置镜像凭据 secret，跳过镜像"
             exit 1
           fi
           git remote add gitee "https://gitee.com/${GITEE_REPO}.git"
           git config --local "http.https://gitee.com/.extraheader" \
             "Authorization: Basic $(printf 'codecloud-dev:%s' "$GITEE_TOKEN" | base64 -w0)"
-          # Gitee 偶发连接超时（>300s），自动重试 3 次兜底
+          # 有限重试；单次硬超时避免任务挂死。
           for attempt in 1 2 3; do
             echo "::group::镜像尝试第 $attempt 次"
-            # 硬超时兜底：Gitee 连接可能僵死而不返回，git 自身无超时会让 job 永久 in_progress。
-            # 单次给 300s，超时 SIGTERM，30s 后 SIGKILL；失败进入既有 3 次重试。
             if timeout --signal=TERM --kill-after=30s 300s git push --prune gitee "+refs/heads/*:refs/heads/*" "+refs/tags/*:refs/tags/*"; then
               echo "::endgroup::"
               echo "镜像完成：$(git rev-parse --short HEAD) → gitee.com/${GITEE_REPO}"
