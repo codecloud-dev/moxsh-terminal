@@ -6,10 +6,9 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 /**
- * 登录用户公开资料的本地加密存储（对应你选的「持久化」）。
+ * 登录用户公开资料的本地加密存储。
  *
- * 说明：username / avatar 属非机密信息，这里仍用加密存储（与 token 同源），
- * 而非引入 Room —— 避免为公开数据增加 Room/KSP 构建复杂度。如坚持用 Room 可再调整。
+ * username / avatar 虽非机密，仍与令牌一起加密保存，避免为少量数据引入 Room/KSP。
  */
 object UserProfileStore {
     private const val FILE = "mox_secure_profile"

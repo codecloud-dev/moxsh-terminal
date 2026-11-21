@@ -4,7 +4,7 @@
 > `GitHubVerifiedEmail.kt` / `EmailAuthClient.kt` / `EmailBindingStore.kt` /
 > `EmailSignUpCard.kt` / `AuthConfig.kt`
 >
-> 对应服务端：`edge/mox-id/`（Cloudflare Workers + D1）
+> 对应服务端：本仓 `edge/` 下的示例 Worker（Cloudflare Workers + D1）
 
 ---
 
@@ -17,7 +17,7 @@
 | 做什么 | 填邮箱 + 设密码即注册 | 一键采用 GitHub 已验证邮箱 | 用另一个邮箱收验证码 |
 | 需要 GitHub 登录吗 | **不需要** | 需要（仅作快捷来源） | 需要（作为归属主体） |
 | 发邮件吗 | **不发** | **不发** | 发 |
-| 需要后端吗 | **不需要** | **不需要** | 需要 mox-id |
+| 需要后端吗 | **不需要** | **不需要** | 需要账号服务 |
 | 装上能用吗 | **能** | **能** | 需先部署 |
 | 密码 | 用户自设（PBKDF2 本地派生） | 免密（GitHub 即身份证明） | 免密（验证码即证明） |
 | 可信度 | 用户自证（本地凭据） | GitHub 出具 verified 证明 | 验证码由后端通道签发 |
@@ -102,14 +102,13 @@ GET https://api.github.com/user/emails
 
 ### 5.1 发信通道：为什么不是 SMTP
 
-> **这一节是对早期方案的更正。** 早期版本打算用 139 邮箱 SMTP 授权码
-> 在 Worker 上发信，**那是行不通的**：
+> **这一节是对早期方案的更正。** 早期版本打算用邮箱 SMTP 授权码在 Worker 上发信，
+> 实际不可行：
 
 1. **Cloudflare Workers 硬性封锁出站 25 端口**。
 2. Worker 的 `send_email` 绑定（Email Routing）**只能发给 Cloudflare 已验证的转发地址**，
    发不到任意用户邮箱。
-3. 即便换用 465/587 端口，139 邮箱 SMTP 也只允许**个人收发**，程序化发验证码必被风控
-   （见2.1）。
+3. 常见个人邮箱 SMTP 对程序化发信限制严格，容易被风控。
 
 因此本服务改用**专业事务邮件服务的 HTTPS API**（默认 Resend）：
 共享 IP 池已预热、送达率高、自带退信与配额管理，专为程序化发信设计。
@@ -198,7 +197,7 @@ Content-Type: application/json
 **健康检查**
 
 ```
-GET {email_api_base}/health → {"ok": true, "service": "mox-id-email", "mail_configured": true}
+GET {email_api_base}/health → {"ok": true, "service": "email-service", "mail_configured": true}
 ```
 
 ### 5.5 服务端安全要求

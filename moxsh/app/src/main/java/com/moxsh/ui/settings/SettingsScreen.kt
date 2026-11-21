@@ -323,7 +323,7 @@ fun SettingsScreen(
                     Column(Modifier.weight(1f)) {
                         Text("命令云同步", color = GlassTokens.onGlass)
                         Text(
-                            "把终端命令历史同步到你的账号（mox-id 后端）。开启后新输入的命令会加密上传；需先登录。",
+                            "把终端命令历史同步到你的账号。开启后新输入的命令会加密上传；需先登录。",
                             color = GlassTokens.onGlassDim,
                         )
                     }

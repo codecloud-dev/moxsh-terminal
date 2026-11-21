@@ -12,21 +12,10 @@ import java.net.URL
  *
  * ## 为什么这是默认路径
  *
- * 用户要的是「邮箱注册，且必须绑定 GitHub」。GitHub 账号本身就带一个
- * **GitHub 已验证（verified）的主邮箱**，可直接取用。于是整条链路变成：
+ * 使用 GitHub 已验证（verified）的主邮箱完成注册绑定：
+ * 登录 GitHub → 读 /user/emails → 取 primary+verified → 绑定完成。
  *
- * ```
- * 登录 GitHub → 读 /user/emails → 取 primary+verified → 绑定完成
- * ```
- *
- * 这个选择解决了三件事：
- *
- * 1. **不发送任何邮件** → 不存在发信限流 / IP 信誉 / 端口限制问题。
- *    （139 邮箱 SMTP 限流、Cloudflare 出口 IP 信誉差等问题在这条路径上完全不存在。）
- * 2. **不需要任何后端** → App 直连 GitHub API，装上即用，不依赖 Worker 部署、
- *    域名、邮件服务配置。真正做到「下载即可用」。
- * 3. **证明强度更高** → 邮箱的真实性由 GitHub 出具证明（verified 标记），
- *    而非由某个自建邮件通道的「验证码存在过」来推断。
+ * 这条路径不发送邮件、不依赖额外后端配置，邮箱真实性由 GitHub 的 verified 标记证明。
  *
  * ## 归属主体不可伪造
  *

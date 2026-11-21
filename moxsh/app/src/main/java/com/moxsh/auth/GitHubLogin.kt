@@ -14,20 +14,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /**
- * GitHub「快捷登录」客户端（设备流 / Device Flow，公开客户端，零 secret）。
- *
- * 为什么用设备流而不是网页流：
- *  - OAuth App 的网页流即使带 PKCE 也强制要求 client_secret，而 secret 绝不能进 APK；
- *  - 设备流（GitHub 给原生 / CLI 应用的无密钥方案，gh CLI 即用此）只需 client_id，
- *    不需要任何 client_secret / private key，完美契合「纯客户端、无后端」的 moxsh。
- *
- * 流程：
- *  1. 本地请求设备码 → 拿到 user_code（展示给用户）+ device_code（轮询用）
- *  2. 用 Custom Tabs 打开 verification_uri，用户在浏览器输入 user_code 并授权
- *  3. 后台轮询 token 端点，直到授权完成 → 拿到 access_token（+ refresh_token）
- *  4. 拉取用户资料，加密存储
- *
- * 安全：app 直连 GitHub，不经过自有后端；不持有、不传输任何 secret。
+ * GitHub 设备流登录客户端：请求设备码 → 用户授权 → 轮询换取令牌 → 拉取资料。
+ * 仅使用可公开的 client_id，不持有也不传输任何 secret。
  */
 object GitHubLogin {
 

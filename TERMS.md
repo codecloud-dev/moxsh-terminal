@@ -45,7 +45,7 @@
   - 绕过邮箱验证码频控、批量伪造注册、冒用 SMTP 发信通道；
   - 反编译/修改客户端以规避 AI 服务商鉴权、盗用他人 apiKey、伪造额度；
   - 绕过或规避第八节的**插件版本安全策略**；
-  - 以任何方式规避本系列（含 moxsh-proot、mox-id、Fenestra）已有的兑换码、设备绑定、商业授权或付费门禁。
+  - 以任何方式规避本系列（含 moxsh-proot、账号服务、Fenestra）已有的兑换码、设备绑定、商业授权或付费门禁。
 - 上述禁止不扩张为「禁止一切逆向」：GPL-3.0 授予的研究、修改、再分发权利完整保留；被禁止的是**用于绕过授权、侵犯他人或规避付费**的具体滥用行为。
 
 ## 五、第三方服务（链接指向，不为其背书）
@@ -57,7 +57,7 @@
 | GitHub | 设备流登录、`/user`、`/user/emails`、主仓库与 Issues | `https://docs.github.com/en/site-policy/github-terms/github-terms-of-service` · `https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement` |
 | Gitee | 国内只读镜像、PRoot 引擎二进制下载 | `https://gitee.com/`（以其站内公布条款为准） |
 | 爱发电 | 赞助 / 兑换相关（见 proot、官网政策） | `https://afdian.com/`（以其站内公布条款为准） |
-| Cloudflare | `mox-id` 运行时（邮箱验证码路径，当前未配置） | `https://www.cloudflare.com/privacypolicy/` |
+| Cloudflare | 账号服务运行时（邮箱验证码路径，当前未配置） | `https://www.cloudflare.com/privacypolicy/` |
 | DeepSeek / 智谱 / 通义千问 / Kimi / 自定义网关 | 你自选的 AI 服务商 | 见各服务商官网公布的条款；你填谁的 Key 受谁约束 |
 
 以各站最新公布条款为准。第三方服务中断、改版、限流、封禁或条款变化，我们不承担责任。
@@ -139,7 +139,7 @@ We reserve the right to deny online entry points (login, store, engine download)
   - Bypassing email-code rate limits, bulk-forging registrations, or abusing the SMTP sending channel;
   - Decompiling/modifying the client to evade AI-provider authentication, steal another person's apiKey, or fake quotas;
   - Bypassing or evading the **plugin version security policy** in §6;
-  - In any way evading existing redeem-code, device-binding, commercial-licensing, or paywall gates of this series (including moxsh-proot, mox-id, Fenestra).
+  - In any way evading existing redeem-code, device-binding, commercial-licensing, or paywall gates of this series (including moxsh-proot, account service, Fenestra).
 - This prohibition does **not** expand into "all reverse engineering is forbidden": the research, modification and redistribution rights granted by GPL-3.0 remain intact; what is prohibited is the specific abusive conduct of bypassing authorisation, infringing others, or evading payment.
 
 ## 5. Third-party services (links only, no endorsement)
@@ -151,7 +151,7 @@ The app connects to these third parties; using them also binds you to their term
 | GitHub | Device Flow login, `/user`, `/user/emails`, canonical repo and Issues | `https://docs.github.com/en/site-policy/github-terms/github-terms-of-service` · `https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement` |
 | Gitee | Mainland-China read-only mirror, PRoot engine binary download | `https://gitee.com/` (see its published terms) |
 | Afdian | Sponsorship / redemption related (see the proot and website policies) | `https://afdian.com/` (see its published terms) |
-| Cloudflare | `mox-id` runtime (email-code path, currently unconfigured) | `https://www.cloudflare.com/privacypolicy/` |
+| Cloudflare | account service runtime (email-code path, currently unconfigured) | `https://www.cloudflare.com/privacypolicy/` |
 | DeepSeek / Zhipu / Qwen / Kimi / custom gateway | The AI provider you choose | See each provider's published terms; whoever's Key you enter, their terms bind you |
 
 The latest published terms govern. We are not responsible for third-party outages, changes, rate limits, bans, or term changes.

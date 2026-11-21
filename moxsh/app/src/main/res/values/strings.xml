@@ -49,7 +49,7 @@
 
     <!-- 其他邮箱收验证码：高级选项（需登录 + 后端已部署） -->
     <string name="mox_email_alt_title">用其他邮箱（收验证码）</string>
-    <string name="mox_email_alt_desc">仅当你想绑定一个与以上都不同的邮箱时才需要：后端发验证码，需先部署 mox-id 服务并已配置</string>
+    <string name="mox_email_alt_desc">仅当你想绑定一个与以上都不同的邮箱时才需要：后端发验证码，需先配置服务端</string>
     <string name="mox_email_not_configured">邮箱验证服务未配置：请在 local.properties 填入 email_api_base 后重新构建</string>
     <string name="mox_email_hint">输入邮箱地址</string>
     <string name="mox_email_code_hint">输入 6 位验证码</string>

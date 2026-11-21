@@ -16,9 +16,8 @@ import android.content.Context
  * ## 语义边界
  *
  *  - [type] / [label] / [isLoggedIn]：账号身份的**展示与判定**，GitHub 与邮箱都算。
- *  - **云同步**等需要后端鉴权的能力仍由 [SessionStore] 的 GitHub token 决定
- *    （[SyncClient]、[MoxshApplication] 直接读 GitHub token，不在此处），
- *    因为 mox-id 后端目前以 GitHub login 作归属主体。邮箱账号是本地身份。
+ *  - **云同步**等需要后端鉴权的能力仍由 [SessionStore] 的登录令牌决定
+ *    （[SyncClient]、[MoxshApplication] 直接读取，不在此处）；邮箱账号是本地身份。
  *  - [logout] 同时清除 GitHub 与邮箱会话；[EmailBindingStore] 的注册凭据保留，
  *    退出后仍可凭密码重新登录。
  */

@@ -53,9 +53,9 @@ import kotlinx.coroutines.launch
  *
  * GitHub 已验证邮箱降级为**可选的免密快捷方式**（仅当已登录时显示）：
  * 一键把 GitHub verified 邮箱填入并标记来源，省去记忆密码，但非必须。
- * 验证码路径（需登录 + 后端已部署）保留为折叠的高级选项。
+ * 验证码路径保留为折叠的高级选项。
  *
- * 因此本组件自身不持有任何邮件授权码（授权码只可能存在于后端 Worker 的环境变量）。
+ * 本组件不持有任何邮件授权码或密钥。
  */
 @Composable
 fun EmailSignUpCard(
@@ -308,7 +308,7 @@ fun EmailSignUpCard(
                 }
             }
 
-            // ============== 路径 B：其他邮箱（仅登录 + 后端已配置，折叠） ==============
+            // ============== 路径 B：其他邮箱（折叠的高级选项） ==============
             if (loggedIn && AuthConfig.EMAIL_IS_CONFIGURED) {
                 TextButtonish(
                     label = stringResource(R.string.mox_email_alt_title),

@@ -10,10 +10,10 @@ import java.net.URL
 import java.net.URLEncoder
 
 /**
- * 云同步客户端（对接 mox-id Worker：POST /sync/push、GET /sync/pull）。
+ * 云同步客户端（POST /sync/push、GET /sync/pull）。
  *
- *  - 鉴权：SessionStore 的 GitHub access token（Bearer）
- *  - 通道：HttpURLConnection（零新依赖），仅 https（预留后端地址，当前未部署）
+ *  - 鉴权：SessionStore 的登录令牌（Bearer）
+ *  - 通道：HttpURLConnection（零新依赖），仅 https
  *  - 冲突：last-write-wins（服务端按 updated_at 裁决），key=捕获时间戳 ms
  *
  * 全部方法为阻塞 IO——调用方必须在协程 Dispatchers.IO / 工作线程调用。
@@ -32,9 +32,9 @@ object SyncClient {
 
     /** 全量同步：先 push 未同步队列，再 pull 增量（合并到本地历史文件）。 */
     fun syncNow(ctx: Context): SyncResult {
-        // 云同步后端（mox-id）暂未部署：默认关闭，仅保留接口，避免无谓网络请求。
+        // 默认关闭，仅保留接口，避免无谓网络请求。
         if (!AuthConfig.ENABLE_CLOUD_SYNC) {
-            return SyncResult.Error("云同步尚未启用（mox-id 后端预留中）")
+            return SyncResult.Error("云同步尚未启用")
         }
         val token = SessionStore.get(ctx)
             ?: return SyncResult.Error("未登录")

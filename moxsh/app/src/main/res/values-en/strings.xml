@@ -49,7 +49,7 @@
 
     <!-- Other email with code: advanced option (needs sign-in + deployed backend) -->
     <string name="mox_email_alt_title">Use another email (verification code)</string>
-    <string name="mox_email_alt_desc">Only if you want an email different from all above: backend sends a code, requires the mox-id service deployed and configured</string>
+    <string name="mox_email_alt_desc">Only if you want an email different from all above: backend sends a code and must be configured first</string>
     <string name="mox_email_not_configured">Email service not configured: fill in email_api_base in local.properties and rebuild</string>
     <string name="mox_email_hint">Enter your email address</string>
     <string name="mox_email_code_hint">Enter the 6-digit code</string>

@@ -15,12 +15,12 @@
 | 功能 | 当前状态 | 联网对象 |
 | --- | --- | --- |
 | GitHub 登录（设备流 / Device Flow） | ✅ 已实现 | `github.com/login/device/code`、`github.com/login/oauth/access_token`、`api.github.com/user`、`api.github.com/user/emails` |
-| 邮箱验证码绑定（高级路径） | ⚠️ **仅当配置了 `EMAIL_API_BASE` 才会发请求**；未配置时入口不可用、零网络请求 | 自建 `mox-id` 的 `/auth/email/send-code`、`/auth/email/verify` |
+| 邮箱验证码绑定（高级路径） | ⚠️ **仅当配置了 `EMAIL_API_BASE` 才会发请求**；未配置时入口不可用、零网络请求 | 自建账号服务的 `/auth/email/send-code`、`/auth/email/verify` |
 | AI 助手 | ✅ 已实现，**发往你自己在设置里选的服务商** | DeepSeek / 智谱 / 通义千问 / Kimi / OpenAI 兼容自定义 / 本地 `127.0.0.1` |
 | 插件商店目录与包 | ⚠️ 云源地址为占位（`https://store.moxsh.local/v1`），**当前未部署**；拉取失败静默回退内置目录 | 可配 base 的 `catalog.json` 与 `pkg/<id>.mox`；主仓 `codecloud-dev/moxsh-plugins`（GitHub / Gitee 镜像） |
 | PRoot 引擎二进制下载 | ✅ 已实现 | Gitee `codecloud-dev/moxsh-proot` 的 Releases |
 | 命令云同步 | ❌ **当前版本未启用**：`AuthConfig.ENABLE_CLOUD_SYNC = false`，`SyncClient.syncNow()` 直接返回「云同步尚未启用」，**不发起任何网络请求** | 无 |
-| 兑换码校验 / Gitee 登录 | ❌ **当前版本 App 内未实现**（这些在 `moxsh-proot` 引擎与 `mox-id` / 官网里） | 无 |
+| 兑换码校验 / Gitee 登录 | ❌ **当前版本 App 内未实现**（这些在 `moxsh-proot` 引擎与账号服务 / 官网里） | 无 |
 
 > 说明：README 把「命令云同步」列为产品方向，但源码里开关是关闭的。本政策以**代码为准**：当前版本命令历史只在本地排队，**不上传**。
 
@@ -49,7 +49,7 @@
 
 **本地存储**：`EmailBindingStore` 用 `mox_secure_email`（同为 EncryptedSharedPreferences）保存 `bound_email`、`bound_at`、`source`（GITHUB/PASSWORD/CODE）、`pw_hash`、`pw_salt`。邮箱账号**独立于 GitHub 会话**，退出 GitHub 登录不会清除邮箱。
 
-> 客户端**绝不**持有邮箱 SMTP 授权码 / 客户端专用密码；该凭据只存在于 `mox-id` 的 Worker 环境变量中（见 `AuthConfig.kt` 安全红线注释）。
+> 客户端**绝不**持有邮箱 SMTP 授权码 / 客户端专用密码；该凭据只存在于服务端环境变量中。
 
 ### 2.3 AI 助手（`plugins/plugin-ai/.../AiClient.kt`）
 
@@ -104,14 +104,14 @@
 | --- | --- | --- |
 | GitHub token / refresh token | 本机 EncryptedSharedPreferences `mox_secure_session` | 退出登录 `SessionStore.clear()`；卸载 App 即删 |
 | 绑定邮箱、密码派生 hash + 盐 | 本机 `mox_secure_email` | `EmailBindingStore.clear()`；退出 GitHub **不清**邮箱；卸载 App 即删 |
-| 邮箱验证码 | 仅当配置了 `EMAIL_API_BASE` 才发往 `mox-id` | 按 `mox-id` 政策；当前未配置则不产生 |
+| 邮箱验证码 | 仅当配置了 `EMAIL_API_BASE` 才发往账号服务 | 按账号服务政策；当前未配置则不产生 |
 | AI apiKey | 本机 `moxsh_ai_config`（AndroidKeyStore 加密） | 在设置里清除；卸载 App 时密钥销毁、密文随之失效 |
 | 对话内容 | **只发给你选的 AI 服务商**，本机不落盘对话历史 | 由该服务商按其条款留存；我们无副本、无法代你删除 |
 | 插件缓存 / 已安装包 / 启停标记 | `cacheDir`、`dataDir/store/installed/`、`moxsh_store` | 商店内卸载插件即删目录与标记；清 App 数据/卸载即清空 |
 | 命令历史队列 | `filesDir/cloud_sync_queue.jsonl`（≤500 条） | 清 App 数据/卸载即删；当前不上传 |
 | 引擎二进制 | 本机 | 清 App 数据/卸载即删 |
 
-**共享方**（各自独立按其条款处理，见第八节）：GitHub（登录与资料）、Gitee（引擎下载镜像、国内只读镜像）、你自选的 AI 服务商（DeepSeek / 智谱 / 通义 / Kimi / 自定义网关 / 本地模型）、`mox-id`（仅邮箱验证码路径，且当前未配置）、Cloudflare（若 `mox-id` 部署于其 Workers）。
+**共享方**（各自独立按其条款处理，见第八节）：GitHub（登录与资料）、Gitee（引擎下载镜像、国内只读镜像）、你自选的 AI 服务商（DeepSeek / 智谱 / 通义 / Kimi / 自定义网关 / 本地模型）、账号服务（仅邮箱验证码路径，且当前未配置）、Cloudflare（若账号服务部署于其 Workers）。
 
 我们**不出售、不出租、不用于广告、不向数据经纪人提供**任何数据。App 直连第三方，不把数据回传 `codecloud-dev` 的自有服务器。
 
@@ -136,7 +136,7 @@
 
 ## 七、跨境
 
-数据主要留在本机。当你主动登录 GitHub、从 Gitee 下载引擎、或使用境外/境内 AI 服务商时，相应数据会发往该服务商，可能跨境，由其按各自条款在其所在地处理。Cloudflare（`mox-id` 部署时）亦可能在全球边缘处理邮箱验证码请求。我们未自建跨境通道，不对第三方留存地作承诺。
+数据主要留在本机。当你主动登录 GitHub、从 Gitee 下载引擎、或使用境外/境内 AI 服务商时，相应数据会发往该服务商，可能跨境，由其按各自条款在其所在地处理。Cloudflare（账号服务部署时）亦可能在全球边缘处理邮箱验证码请求。我们未自建跨境通道，不对第三方留存地作承诺。
 
 ## 八、第三方服务条款入口（不为其背书）
 
@@ -144,7 +144,7 @@
 | --- | --- |
 | GitHub | `https://docs.github.com/en/site-policy/github-terms/github-terms-of-service` · `https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement` |
 | Gitee | `https://gitee.com/`（以其站内公布的条款为准） |
-| Cloudflare（`mox-id` 运行时） | `https://www.cloudflare.com/privacypolicy/` |
+| Cloudflare（账号服务运行时） | `https://www.cloudflare.com/privacypolicy/` |
 | DeepSeek / 智谱 / 通义千问 / Kimi / 自定义网关 | 见各服务商官网公布的条款；你填谁的 Key，就受谁的条款约束 |
 | 爱发电（若涉及赞助/兑换，见 proot / 官网政策） | `https://afdian.com/` |
 
@@ -174,12 +174,12 @@
 | Feature | Current status | Network counterpart |
 | --- | --- | --- |
 | GitHub login (Device Flow) | ✅ Implemented | `github.com/login/device/code`, `github.com/login/oauth/access_token`, `api.github.com/user`, `api.github.com/user/emails` |
-| Email-code binding (advanced path) | ⚠️ **Only sends requests if `EMAIL_API_BASE` is configured**; otherwise the entry is unavailable and no request is made | Self-hosted `mox-id` `/auth/email/send-code`, `/auth/email/verify` |
+| Email-code binding (advanced path) | ⚠️ **Only sends requests if `EMAIL_API_BASE` is configured**; otherwise the entry is unavailable and no request is made | Self-hosted account service `/auth/email/send-code`, `/auth/email/verify` |
 | AI assistant | ✅ Implemented, **sent to the provider you choose in settings** | DeepSeek / Zhipu / Qwen / Kimi / OpenAI-compatible custom / local `127.0.0.1` |
 | Plugin store catalogue and packages | ⚠️ Cloud base is a placeholder (`https://store.moxsh.local/v1`), **not deployed**; fetch failure silently falls back to the built-in catalogue | Configurable `catalog.json` and `pkg/<id>.mox`; canonical repo `codecloud-dev/moxsh-plugins` (GitHub / Gitee mirror) |
 | PRoot engine binary download | ✅ Implemented | Gitee `codecloud-dev/moxsh-proot` Releases |
 | Command cloud sync | ❌ **Not enabled in the current version**: `AuthConfig.ENABLE_CLOUD_SYNC = false`; `SyncClient.syncNow()` returns "cloud sync not enabled" immediately and **makes no network request** | None |
-| Redeem-code verification / Gitee login | ❌ **Not implemented in the app in the current version** (these live in the moxsh-proot engine and mox-id / the website) | None |
+| Redeem-code verification / Gitee login | ❌ **Not implemented in the app in the current version** (these live in the moxsh-proot engine and the account service / website) | None |
 
 > The README lists "command cloud sync" as a product direction, but the source switch is off. This policy follows **the code**: in the current version command history is queued locally only and **is not uploaded**.
 
@@ -206,7 +206,7 @@ Three paths; **the main path is fully offline**:
 
 **Local storage**: `EmailBindingStore` uses `mox_secure_email` (also EncryptedSharedPreferences) for `bound_email`, `bound_at`, `source` (GITHUB/PASSWORD/CODE), `pw_hash`, `pw_salt`. The email account is **independent of the GitHub session**; signing out of GitHub does not clear the email.
 
-> The client **never holds** an SMTP authorisation code or client-specific password; that credential exists only in a `mox-id` Worker environment variable (see the security note in `AuthConfig.kt`).
+> The client **never holds** an SMTP authorisation code or client-specific password; that credential exists only in a server-side environment variable.
 
 ### 2.3 AI assistant (`plugins/plugin-ai/.../AiClient.kt`)
 
@@ -257,14 +257,14 @@ Requested: `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE` (s
 | --- | --- | --- |
 | GitHub token / refresh token | On-device EncryptedSharedPreferences `mox_secure_session` | Sign out via `SessionStore.clear()`; uninstall removes it |
 | Bound email, password hash + salt | On-device `mox_secure_email` | `EmailBindingStore.clear()`; signing out of GitHub does **not** clear the email; uninstall removes it |
-| Email verification code | Sent to `mox-id` only when `EMAIL_API_BASE` is configured | Per the mox-id policy; not produced when unconfigured |
+| Email verification code | Sent to the account service only when `EMAIL_API_BASE` is configured | Per the account service policy; not produced when unconfigured |
 | AI apiKey | On-device `moxsh_ai_config` (AndroidKeyStore-encrypted) | Clear in settings; uninstall destroys the key so any leftover ciphertext is undecryptable |
 | Conversation content | **Only sent to your chosen AI provider**; no on-device chat history | Retained by that provider under its terms; we hold no copy and cannot delete it for you |
 | Plugin cache / installed packages / flags | `cacheDir`, `dataDir/store/installed/`, `moxsh_store` | Uninstalling a plugin removes its directory and flag; clearing app data / uninstall clears all |
 | Command-history queue | `filesDir/cloud_sync_queue.jsonl` (≤500) | Clearing app data / uninstall removes it; not uploaded currently |
 | Engine binary | On-device | Clearing app data / uninstall removes it |
 
-**Recipients** (each acts under its own terms; see §8): GitHub (login and profile), Gitee (engine download mirror, mainland-China read-only mirror), the AI provider you selected (DeepSeek / Zhipu / Qwen / Kimi / custom gateway / local model), `mox-id` (email-code path only, currently unconfigured), Cloudflare (where `mox-id` runs on Workers).
+**Recipients** (each acts under its own terms; see §8): GitHub (login and profile), Gitee (engine download mirror, mainland-China read-only mirror), the AI provider you selected (DeepSeek / Zhipu / Qwen / Kimi / custom gateway / local model), the account service (email-code path only, currently unconfigured), Cloudflare (where the account service runs on Workers).
 
 We **do not sell, rent, use for advertising, or provide to data brokers** any data. The app talks to third parties directly and sends nothing back to a `codecloud-dev` server.
 
@@ -285,7 +285,7 @@ Not directed at children under 14. The current version **has no age verification
 
 ## 7. Cross-border transfers
 
-Data stays mostly on-device. When you actively sign in to GitHub, download the engine from Gitee, or use a domestic/foreign AI provider, the corresponding data goes to that provider and may cross borders, handled under its own terms and in its own location. Cloudflare (where `mox-id` runs) may also process email-code requests at its global edge. We have built no bespoke cross-border channel and make no promise about third-party data locations.
+Data stays mostly on-device. When you actively sign in to GitHub, download the engine from Gitee, or use a domestic/foreign AI provider, the corresponding data goes to that provider and may cross borders, handled under its own terms and in its own location. Cloudflare (where the account service runs) may also process email-code requests at its global edge. We have built no bespoke cross-border channel and make no promise about third-party data locations.
 
 ## 8. Third-party terms (we do not endorse them)
 
@@ -293,7 +293,7 @@ Data stays mostly on-device. When you actively sign in to GitHub, download the e
 | --- | --- |
 | GitHub | `https://docs.github.com/en/site-policy/github-terms/github-terms-of-service` · `https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement` |
 | Gitee | `https://gitee.com/` (see its published terms) |
-| Cloudflare (`mox-id` runtime) | `https://www.cloudflare.com/privacypolicy/` |
+| Cloudflare (account service runtime) | `https://www.cloudflare.com/privacypolicy/` |
 | DeepSeek / Zhipu / Qwen / Kimi / custom gateway | See each provider's published terms; whoever's Key you enter, their terms bind you |
 | Afdian (for sponsorship/redemption, see the proot / website policies) | `https://afdian.com/` |
 
