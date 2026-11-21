@@ -346,6 +346,13 @@ internal fun startInstall(
     policyCatalog: List<StoreEntry> = emptyList(),
 ) {
     if (states[entry.id]?.running == true) return
+    if (!entry.installable) {
+        states[entry.id] = InstallState(
+            running = false, done = false, stage = entry.sizeLabel(),
+        )
+        setActive(entry.id)
+        return
+    }
     states[entry.id] = InstallState(running = true, percent = 0, stage = "准备中")
     setActive(entry.id)
     scope.launch {
@@ -397,7 +404,7 @@ internal fun StoreEntryCard(
                 Column(Modifier.weight(1f)) {
                     Text("${entry.name} ${entry.version}", color = GlassTokens.onGlass)
                     Text(
-                        "${entry.author} · 约 ${entry.sizeBytes / 1024 / 1024 + 1} MB",
+                        "${entry.author} · ${entry.sizeLabel()}",
                         color = GlassTokens.onGlassDim, fontSize = 12.sp,
                     )
                     if (entry.permissions.isNotEmpty()) {
@@ -423,9 +430,13 @@ internal fun StoreEntryCard(
             if (!installed) {
                 // 未安装："一键安装"大按钮（玻璃材质占满整行）+ 卡内四阶段进度。
                 GlassStoreButton(
-                    if (state.running) "安装中…" else "一键安装",
-                    enabled = !state.running,
-                    filled = true,
+                    when {
+                        state.running -> "安装中…"
+                        !entry.installable -> entry.sizeLabel()
+                        else -> "一键安装"
+                    },
+                    enabled = !state.running && entry.installable,
+                    filled = entry.installable,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = onInstall,
                 )

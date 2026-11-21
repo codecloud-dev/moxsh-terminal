@@ -54,6 +54,12 @@ data class StoreEntry(
     val purchased: Boolean,
     val sizeBytes: Long,
     /**
+     * 包体状态：available=可下载安装；planned/yanked=目录占位，点安装应给出
+     * 明确原因而不是让用户等一个永远不会成功的下载。缺省 available 以兼容本地
+     * 上传和旧调用点；云端目录必须显式读取该字段。
+     */
+    val packageStatus: String = "available",
+    /**
      * 安全：该插件允许安装的最低版本（可信目录声明）。低于它一律拒装。
      * 空串表示「来源未声明策略」（如纯本地 .mox 包），此时仍受版本单调约束，
      * 但由安装时从可信 catalog 快照按 id 补齐（见 StoreInstaller.install 的 policyCatalog）。
@@ -61,7 +67,13 @@ data class StoreEntry(
     val minVersion: String = "",
     /** 安全：已确认有漏洞、禁止安装/回滚的版本号列表（可信目录声明）。 */
     val revokedVersions: List<String> = emptyList(),
-)
+) {
+    /** 只有包体真正就绪才展示「一键安装」。 */
+    val installable: Boolean get() = StorePresentation.installable(packageStatus)
+
+    /** 卡片副标题：planned 条目不再伪造体积，直接说明为什么不能装。 */
+    fun sizeLabel(): String = StorePresentation.sizeLabel(packageStatus, sizeBytes)
+}
 
 /** 商店数据源统一契约（D16：目录浏览 + 包下载）。 */
 interface StoreApi {
@@ -143,6 +155,7 @@ class CloudStoreApi(
                 price = o.optDouble("price", 0.0),
                 purchased = o.optBoolean("purchased", false),
                 sizeBytes = o.optLong("sizeBytes", 0L),
+                packageStatus = o.optString("packageStatus", "available"),
                 // 禁止回滚：目录（catalog.json）是策略的可信来源，必须解析这两个字段。
                 minVersion = o.optString("minVersion", ""),
                 revokedVersions = o.optJSONArray("revokedVersions")?.let { a ->
@@ -204,6 +217,7 @@ object BuiltinCatalog {
             type = "plugin", minAppVersion = "0.1.0",
             permissions = listOf("run_command"), price = 0.0, purchased = false,
             sizeBytes = 1_048_576L,
+            packageStatus = "planned",
             minVersion = "1.2.0", revokedVersions = listOf("1.0.0", "1.1.0"),
         ),
         StoreEntry(
@@ -212,6 +226,7 @@ object BuiltinCatalog {
             type = "theme", minAppVersion = "0.1.0",
             permissions = emptyList(), price = 6.0, purchased = false,
             sizeBytes = 262_144L,
+            packageStatus = "planned",
             minVersion = "0.9.1", revokedVersions = listOf("0.9.0"),
         ),
         StoreEntry(
@@ -221,6 +236,7 @@ object BuiltinCatalog {
             permissions = listOf("install_distro", "install_pkg", "run_command"),
             price = 0.0, purchased = false,
             sizeBytes = 524_288L,
+            packageStatus = "planned",
             minVersion = "0.3.0", revokedVersions = listOf("0.2.0"),
         ),
         StoreEntry(
@@ -229,6 +245,7 @@ object BuiltinCatalog {
             type = "plugin", minAppVersion = "0.1.0",
             permissions = listOf("run_command"), price = 0.0, purchased = false,
             sizeBytes = 393_216L,
+            packageStatus = "planned",
             minVersion = "1.0.0", revokedVersions = emptyList(),
         ),
     )

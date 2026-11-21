@@ -11,6 +11,12 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.3] - 2026-11-21
+
+### 修复
+
+- **插件商店不再诱导无效点击**：`planned` / `yanked` 条目直接显示「暂不可安装」并禁用按钮，点击也会给出明确原因；只有 `packageStatus=available` 才展示「一键安装」。
+- **体积显示改为真实量级**：按 MiB 四舍五入，不再一律 `+1 MB` 把 2 MB 包显示成 3 MB。
 ## [1.0.2] - 2026-11-19
 
 Rust 内核可靠性深度加固 + 首次引入可复现的真实基准。不改公开 C-ABI、不破坏现有 API。

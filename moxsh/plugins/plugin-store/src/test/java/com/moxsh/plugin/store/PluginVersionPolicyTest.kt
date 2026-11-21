@@ -128,6 +128,19 @@ fun main() {
         check(!r4.allowed, "已装版本缺失/损坏 → 判定违规需隔离(fail-closed)", vd(r4))
     }
 
+    println("\n=== 商店卡片状态：规划中条目不再假装可安装 ===")
+    run {
+        check(StorePresentation.installable("available"), "available 可安装")
+        check(!StorePresentation.installable("planned"), "planned 不可安装")
+        check(!StorePresentation.installable("yanked"), "yanked 不可安装")
+        check(StorePresentation.sizeLabel("available", 2_097_152L) == "约 2 MB",
+            "available 显示真实量级体积")
+        check(StorePresentation.sizeLabel("planned", 2_097_152L).contains("暂不可安装"),
+            "planned 即使有占位体积也不显示大小")
+        check(StorePresentation.sizeLabel("yanked", 2_097_152L).contains("已下架"),
+            "yanked 明确提示已下架")
+    }
+
     println("\n=== 目录合并 stricterMin（本地/内置源不得拉低可信地板） ===")
     check(PluginVersionPolicy.stricterMin("", "1.0.1") == "1.0.1", "stricterMin(空, 1.0.1) = 1.0.1")
     check(PluginVersionPolicy.stricterMin("1.0.1", "") == "1.0.1", "stricterMin(1.0.1, 空) = 1.0.1")

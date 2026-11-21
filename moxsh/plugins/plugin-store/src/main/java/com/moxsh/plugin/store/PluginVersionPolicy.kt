@@ -237,3 +237,22 @@ object PluginVersionPolicy {
         return if (c >= 0) a else b
     }
 }
+
+/**
+ * 商店卡片的展示决策（纯函数，零 Android 依赖，可与策略类一起用 JVM 自测）。
+ *
+ * 背景：旧版内置目录给每个占位条目都写了假的 sizeBytes，"一键安装"按钮点下去
+ * 才报「包源未配置」。现在只把 packageStatus=available 当作可安装，其余条目
+ * 直接把原因显示在卡片上，减少无效点击。
+ */
+object StorePresentation {
+    fun installable(packageStatus: String): Boolean = packageStatus == "available"
+
+    fun sizeLabel(packageStatus: String, sizeBytes: Long): String = when {
+        installable(packageStatus) ->
+            "约 ${maxOf(1L, (sizeBytes + 524_288L) / 1_048_576L)} MB"
+        packageStatus == "planned" -> "包体规划中 · 暂不可安装"
+        packageStatus == "yanked" -> "已下架 · 暂不可安装"
+        else -> "包源未配置 · 暂不可安装"
+    }
+}
