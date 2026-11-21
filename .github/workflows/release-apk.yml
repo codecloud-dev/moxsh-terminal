@@ -1,8 +1,7 @@
 name: 发布 APK 到 Release
 
-# 一次性辅助 workflow：把 CI 构建产物（moxsh-apk artifact）上传到指定 Release。
-# 用途：本地网络对 uploads.github.com 大文件上传受限时，由 runner 内网直传。
-# 触发：workflow_dispatch，输入 release tag 与构建 run id。
+# 把指定构建 run 的 APK 产物上传到目标 Release（手动触发）。
+# 输入：构建 run id、目标 Release tag。
 on:
   workflow_dispatch:
     inputs:
@@ -32,17 +31,23 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ inputs.run_id }}
 
-      - name: 列出产物
-        run: ls -la
-
       - name: 上传到 Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for f in *.apk; do
-            [ -e "$f" ] || continue
-            # 已有同名资产先删除，保证可重跑
+          # 下载产物可能保留构建时的目录层级，递归查找 APK。
+          mapfile -t apks < <(find . -type f -name '*.apk' -not -path './.git/*')
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo "::error::构建产物里没有 APK，拒绝空上传"
+            exit 1
+          fi
+          uploaded=0
+          for src in "${apks[@]}"; do
+            f=$(basename "$src")
+            cp "$src" "/tmp/$f"
             gh release delete-asset "${{ inputs.tag }}" "$f" --yes 2>/dev/null || true
-            gh release upload "${{ inputs.tag }}" "$f"
+            gh release upload "${{ inputs.tag }}" "/tmp/$f" --clobber || exit 1
+            uploaded=$((uploaded+1))
           done
+          echo "已上传 $uploaded 个 APK"
           gh release view "${{ inputs.tag }}" --json assets --jq '.assets[] | {name, size, state}'
